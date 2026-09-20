@@ -29,17 +29,14 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   would mean giving up the custom gesture navigation and plugin architecture
   entirely — the actual point of this project.
 - **YouTube**: support both a yt-dlp/Invidious-style extraction plugin (gets
-  ad-free playback, but is against YouTube's ToS and can break without
-  warning) and Cast-from-phone as an always-working fallback. User's choice
-  per install.
+  ad-free
 - **Google Cast**: unofficial open-source DIAL + Cast receiver rather than
   registering for the official Google Cast SDK (CAF) — avoids developer
   registration/fees/terms, fits the self-hosted ethos, works today.
 - **Backend runtime**: Node.js/TypeScript throughout — one language across the
   SvelteKit UI, plugin API, and backend services.
 - **Remote control app**: mobile-optimized PWA (SvelteKit), not native iOS/
-  Android — single codebase, no app store distribution overhead. Native is a
-  possible future milestone, not a v1 requirement.
+  Android — single codebase, no app store distribution overhead.
 - **Remote pairing**: TV shows a QR code containing a pairing token +
   local address; phone scans it and connects directly over the LAN — no
   accounts, no cloud relay.
@@ -84,8 +81,7 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
     streaming logic needed on our side)
   - **Immich** — REST API, mostly for browsing/casting photos
   - **Twitch** — Helix API + HLS stream URLs
-  - **YouTube** — dual plugin: Invidious/yt-dlp extraction (ad-free,
-    ToS-risk) + Cast-from-phone fallback
+  - **YouTube** — dual plugin: Invidious/yt-dlp extraction (ad-free) + Cast-from-phone fallback
 
 ### Playback engine
 - libmpv, embedded and controlled from the Node backend over its JSON IPC
