@@ -5,7 +5,9 @@ import type { User, Session } from 'better-auth';
 declare global {
 	namespace App {
 		interface Locals {
-			user?: User;
+			// `username`/`displayUsername` come from better-auth's `username` plugin,
+			// which isn't reflected in the base `User` type.
+			user?: User & { username?: string | null; displayUsername?: string | null };
 			session?: Session;
 		}
 

@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "concurrently \"bun run dev:server\" \"bun run dev:docker\"",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
@@ -16,6 +16,8 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"db:start": "docker compose up",
+		"dev:docker": "docker compose up",
+		"dev:server": "svelte-kit sync && vite --host",
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
@@ -35,6 +37,7 @@
 		"@vitest/browser-playwright": "^4.1.8",
 		"auth": "^1.6.23",
 		"better-auth": "^1.6.23",
+		"concurrently": "^10.0.5",
 		"drizzle-kit": "1.0.0-rc.5-5935859",
 		"drizzle-orm": "1.0.0-rc.5-5935859",
 		"eslint": "^10.4.1",
@@ -62,6 +65,8 @@
 	},
 	"dependencies": {
 		"@m1212e/rumble": "^0.23.21",
-		"graphql": "^17.0.2"
+		"better-call": "^1.4.0",
+		"graphql": "^17.0.2",
+		"qr-code-styling": "^1.9.2"
 	}
 }

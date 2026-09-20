@@ -1,7 +1,7 @@
 import { abilityBuilder, object, query } from '../rumble';
 
-// Any logged-in user may read any user's public profile; only edit themselves.
-abilityBuilder.user.allow('read').when((context) => (context.user ? 'allow' : undefined));
+// Public: the profile switcher lists every account before anyone is logged in.
+abilityBuilder.user.allow('read');
 abilityBuilder.user.allow(['update', 'delete']).when((context) => {
 	if (!context.user) return undefined;
 	return { where: { id: { eq: context.user.id } } };
