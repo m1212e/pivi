@@ -11,9 +11,12 @@
 
 	const label = $derived(data.profile.displayUsername ?? data.profile.username ?? 'Profile');
 
-	function submit() {
-		formEl.requestSubmit();
-	}
+	// Wait for the effect queue (not the oncomplete callback, which fires
+	// before Svelte has flushed `pin` into the hidden input's DOM value) so
+	// requestSubmit() reads the fully-updated 4-digit value.
+	$effect(() => {
+		if (pin.length === 4) formEl.requestSubmit();
+	});
 </script>
 
 <svelte:head><title>{label} — Pivi</title></svelte:head>
@@ -23,7 +26,7 @@
 >
 	<a
 		href="/"
-		class="absolute top-8 left-8 text-sm font-medium text-white/60 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+		class="absolute top-8 left-8 text-sm font-medium text-white/60 transition hover:text-white focus:outline-none"
 	>
 		&larr; Back
 	</a>
@@ -52,6 +55,6 @@
 		}}
 	>
 		<input type="hidden" name="pin" value={pin} />
-		<PinPad bind:value={pin} error={form?.message} oncomplete={submit} />
+		<PinPad bind:value={pin} error={form?.message} />
 	</form>
 </div>

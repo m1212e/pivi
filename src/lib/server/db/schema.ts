@@ -1,13 +1,13 @@
-import { pgTable, serial, integer, text } from 'drizzle-orm/pg-core';
+import { pgTable, text } from 'drizzle-orm/pg-core';
 import { user } from './auth.schema';
 
-export const task = pgTable('task', {
-	id: serial('id').primaryKey(),
-	title: text('title').notNull(),
-	priority: integer('priority').notNull().default(1),
-	userId: text('user_id')
-		.notNull()
-		.references(() => user.id, { onDelete: 'cascade' })
+// Single-row table: the one account currently selected on this device. Pivi
+// runs on one Pi per TV on a trusted local network, so there's no notion of
+// a per-browser session — picking a profile with its PIN sets this globally
+// for every screen (and every paired remote) at once.
+export const activeProfile = pgTable('active_profile', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').references(() => user.id, { onDelete: 'cascade' })
 });
 
 export * from './auth.schema';

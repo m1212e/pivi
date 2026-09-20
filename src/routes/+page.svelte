@@ -1,23 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
 	import type { PageServerData } from './$types';
 
 	let { data }: { data: PageServerData } = $props();
-
-	onMount(() => {
-		const interval = setInterval(async () => {
-			const res = await fetch(`/pair/${data.pairingToken}/status`);
-			const { resolved } = await res.json();
-			if (resolved) {
-				clearInterval(interval);
-				location.href = '/home';
-			}
-		}, 1500);
-
-		return () => clearInterval(interval);
-	});
 </script>
 
 <svelte:head><title>Pivi</title></svelte:head>
@@ -35,7 +21,8 @@
 				class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
 			>
 				<span
-					class="flex size-28 items-center justify-center overflow-hidden rounded-full ring-4 ring-transparent transition group-hover:scale-105 group-hover:ring-white/80 group-focus-visible:scale-105 group-focus-visible:ring-white sm:size-32"
+					data-focus-ring-target
+					class="flex size-28 items-center justify-center overflow-hidden rounded-full transition group-hover:scale-105 sm:size-32"
 					style="background: {profileGradient(profile.username ?? profile.id)}"
 				>
 					{#if profile.image}
@@ -55,7 +42,8 @@
 			class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
 		>
 			<span
-				class="flex size-28 items-center justify-center rounded-full border-2 border-dashed border-white/30 bg-white/5 text-white/50 ring-4 ring-transparent transition group-hover:scale-105 group-hover:border-white/70 group-hover:text-white/80 group-hover:ring-white/40 group-focus-visible:scale-105 group-focus-visible:border-white group-focus-visible:text-white group-focus-visible:ring-white sm:size-32"
+				data-focus-ring-target
+				class="flex size-28 items-center justify-center rounded-full border-2 border-dashed border-white/30 bg-white/5 text-white/50 transition group-hover:scale-105 group-hover:border-white/70 group-hover:text-white/80 sm:size-32"
 			>
 				<svg viewBox="0 0 24 24" fill="none" class="size-12 sm:size-14">
 					<path
@@ -72,10 +60,10 @@
 
 	{#if data.remoteUrl}
 		<div class="flex items-center gap-5 rounded-3xl bg-white/5 px-6 py-5 ring-1 ring-white/10">
-			<PairingQr url={data.remoteUrl} size={104} />
+			<PairingQr url={data.remoteUrl} size={192} />
 			<div class="max-w-56 text-sm text-white/60">
 				<p class="font-medium text-white/90">Scan with your phone</p>
-				<p>Use the Pivi remote to sign in, create a profile, and control playback.</p>
+				<p>Use it as a trackpad, PIN pad, and keyboard to control this screen.</p>
 			</div>
 		</div>
 	{/if}

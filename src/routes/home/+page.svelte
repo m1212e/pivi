@@ -25,7 +25,7 @@
 
 	<form method="post" action="?/signOut" use:enhance>
 		<button
-			class="rounded-full bg-white/10 px-6 py-2 text-sm font-medium text-white/80 ring-1 ring-white/15 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+			class="rounded-full bg-white/10 px-6 py-2 text-sm font-medium text-white/80 ring-1 ring-white/15 transition hover:bg-white/20 focus:outline-none"
 		>
 			Switch profile
 		</button>

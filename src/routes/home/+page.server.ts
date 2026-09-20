@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { auth } from '#lib/server/auth';
+import { clearActiveProfile } from '#lib/server/activeProfile';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = (event) => {
@@ -8,8 +8,8 @@ export const load: PageServerLoad = (event) => {
 };
 
 export const actions: Actions = {
-	signOut: async (event) => {
-		await auth.api.signOut({ headers: event.request.headers });
+	signOut: async () => {
+		await clearActiveProfile();
 		return redirect(302, '/');
 	}
 };

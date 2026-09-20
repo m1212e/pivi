@@ -1,2 +1,19 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/*
+ * The one and only selection indicator on TV screens — applied/removed
+ * directly by RemoteBridge on every focus change (remote swipe, direct tap,
+ * Tab key), rather than `:focus-visible`. Chromium suppresses
+ * `:focus-visible` for a programmatic `.focus()` call that follows a touch
+ * event (what a phone swipe produces), so components must NOT also use
+ * `focus-visible:ring-*` utilities — that produced the doubled borders users
+ * saw, one from this outline and one from the native ring intermittently
+ * also firing. Modern browsers already curve the outline to match the
+ * target's own border-radius, so no extra rule is needed for circular
+ * avatars.
+ */
+.pivi-remote-focus {
+	outline: 3px solid white;
+	outline-offset: 3px;
+}

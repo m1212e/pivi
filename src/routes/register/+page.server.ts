@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { registerWithPin, InvalidPinError } from '#lib/server/auth-pin';
+import { setActiveProfile } from '#lib/server/activeProfile';
 import { APIError } from 'better-auth/api';
 import type { Actions } from './$types';
 
@@ -12,7 +13,8 @@ export const actions: Actions = {
 		if (!username) return fail(400, { message: 'Pick a username' });
 
 		try {
-			await registerWithPin(username, pin);
+			const result = await registerWithPin(username, pin);
+			await setActiveProfile(result.user.id);
 		} catch (err) {
 			if (err instanceof InvalidPinError) return fail(400, { message: err.message });
 			if (err instanceof APIError)

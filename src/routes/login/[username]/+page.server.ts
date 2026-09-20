@@ -1,15 +1,14 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
 import { db } from '#lib/server/db';
-import { user } from '#lib/server/db/schema';
 import { loginWithPin, InvalidPinError } from '#lib/server/auth-pin';
+import { setActiveProfile } from '#lib/server/activeProfile';
 import { APIError } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
 	const profile = await db.query.user.findFirst({
 		columns: { id: true, username: true, displayUsername: true, image: true },
-		where: eq(user.username, params.username)
+		where: { username: params.username }
 	});
 
 	if (!profile) error(404, 'Profile not found');
@@ -23,7 +22,8 @@ export const actions: Actions = {
 		const pin = formData.get('pin')?.toString() ?? '';
 
 		try {
-			await loginWithPin(event.params.username, pin);
+			const result = await loginWithPin(event.params.username, pin);
+			await setActiveProfile(result.user.id);
 		} catch (err) {
 			if (err instanceof InvalidPinError) return fail(400, { message: err.message });
 			if (err instanceof APIError) return fail(400, { message: 'Wrong PIN' });
