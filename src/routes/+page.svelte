@@ -1,9 +1,16 @@
 <script lang="ts">
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
-	import type { PageServerData } from './$types';
+	import { client } from '#lib/api/rumbleClient/client';
+	import { getPairing } from '#lib/state/pairing.svelte';
 
-	let { data }: { data: PageServerData } = $props();
+	const profiles = await client.query.profiles({
+		id: true,
+		username: true,
+		displayUsername: true,
+		image: true
+	});
+	const pairing = await getPairing();
 </script>
 
 <svelte:head><title>Pivi</title></svelte:head>
@@ -14,7 +21,7 @@
 	<h1 class="text-4xl font-semibold tracking-tight text-white/95 sm:text-5xl">Who's watching?</h1>
 
 	<div class="flex flex-wrap items-start justify-center gap-x-12 gap-y-10">
-		{#each data.profiles as profile (profile.id)}
+		{#each profiles as profile (profile.id)}
 			{@const label = profile.displayUsername ?? profile.username ?? 'Profile'}
 			<a
 				href="/login/{profile.username}"
@@ -58,9 +65,9 @@
 		</a>
 	</div>
 
-	{#if data.remoteUrl}
+	{#if pairing.remoteUrl}
 		<div class="flex items-center gap-5 rounded-3xl bg-white/5 px-6 py-5 ring-1 ring-white/10">
-			<PairingQr url={data.remoteUrl} size={192} />
+			<PairingQr url={pairing.remoteUrl} size={192} />
 			<div class="max-w-56 text-sm text-white/60">
 				<p class="font-medium text-white/90">Scan with your phone</p>
 				<p>Use it as a trackpad, PIN pad, and keyboard to control this screen.</p>

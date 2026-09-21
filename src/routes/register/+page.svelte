@@ -1,17 +1,16 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import { usernameError } from '#lib/username';
-	import type { ActionData } from './$types';
-
-	let { form }: { form: ActionData } = $props();
+	import { client } from '#lib/api/rumbleClient/client';
+	import { graphQLErrorMessage } from '#lib/api/errors';
 
 	let step = $state<'name' | 'pin'>('name');
 	let username = $state('');
 	let usernameTouched = $state(false);
 	let pin = $state('');
+	let message = $state<string>();
 	let usernameInput: HTMLInputElement | undefined = $state();
-	let formEl: HTMLFormElement;
 
 	const trimmedUsername = $derived(username.trim());
 	const nameError = $derived(usernameError(trimmedUsername));
@@ -27,11 +26,19 @@
 		pin = '';
 	}
 
-	// Wait for the effect queue (not an oncomplete callback, which fires
-	// before Svelte has flushed `pin` into the hidden input's DOM value) so
-	// requestSubmit() reads the fully-updated 4-digit value.
+	async function submit() {
+		try {
+			await client.mutate.register({ __args: { username: trimmedUsername, pin } });
+			await goto('/home');
+		} catch (err) {
+			message = graphQLErrorMessage(err, 'Could not create profile');
+			pin = '';
+		}
+	}
+
+	// Wait for the effect queue so the fully-updated 4-digit value is read.
 	$effect(() => {
-		if (step === 'pin' && pin.length === 4) formEl.requestSubmit();
+		if (step === 'pin' && pin.length === 4) submit();
 	});
 
 	$effect(() => {
@@ -57,20 +64,7 @@
 		&larr; Back
 	</a>
 
-	<form
-		bind:this={formEl}
-		method="post"
-		use:enhance={() => {
-			return async ({ result, update }) => {
-				if (result.type === 'failure') pin = '';
-				await update();
-			};
-		}}
-		class="flex flex-col items-center gap-8"
-	>
-		<input type="hidden" name="username" value={username} />
-		<input type="hidden" name="pin" value={pin} />
-
+	<div class="flex flex-col items-center gap-8">
 		{#if step === 'name'}
 			<h1 class="text-2xl font-semibold text-white/95">Choose a username</h1>
 			<input
@@ -100,7 +94,7 @@
 			</button>
 		{:else}
 			<h1 class="text-2xl font-semibold text-white/95">Set a 4-digit PIN</h1>
-			<PinPad bind:value={pin} error={form?.message} />
+			<PinPad bind:value={pin} error={message} />
 		{/if}
-	</form>
+	</div>
 </div>

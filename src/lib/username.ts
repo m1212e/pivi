@@ -1,6 +1,5 @@
-// Mirrors better-auth's username plugin defaults (#lib/server/auth.ts uses no
-// custom validator/min/max, so these are its built-in rules) so the register
-// form can reject an invalid username before ever hitting the server.
+// Shared with #api/auth-pin, which re-checks this server-side, so the
+// register form's client-side rejection can't be the only enforcement.
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 30;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.]+$/;

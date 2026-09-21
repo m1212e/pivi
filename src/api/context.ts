@@ -3,6 +3,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 
 export function context(event: RequestEvent) {
 	return {
+		event,
 		...event.locals,
 		mustBeLoggedIn: () => {
 			if (!event.locals.user) {

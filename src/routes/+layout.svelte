@@ -6,16 +6,18 @@
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
-	import type { LayoutData } from './$types';
+	import { getPairing } from '#lib/state/pairing.svelte';
 
-	let { children, data }: { children: () => unknown; data: LayoutData } = $props();
+	let { children }: { children: () => unknown } = $props();
+
+	const pairing = await getPairing();
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {#if !page.url.pathname.startsWith('/remote/')}
 	<!-- The phone itself renders /remote/[token] and drives the TV through it;
 	     it shouldn't also join the WS room as if it were the TV. -->
-	<RemoteBridge token={data.pairingToken} />
+	<RemoteBridge token={pairing.pairingToken} />
 {/if}
 {@render children()}
 

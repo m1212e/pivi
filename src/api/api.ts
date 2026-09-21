@@ -1,5 +1,5 @@
 import { schemaBuilder, createYoga } from './rumble';
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
 schemaBuilder.queryType({});
 schemaBuilder.mutationType({});

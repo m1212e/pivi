@@ -1,12 +1,14 @@
+import { redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';
-import { auth } from '#lib/server/auth';
-import { getActiveProfileUser } from '#lib/server/activeProfile';
-import { startPairingRelay } from '#lib/server/ws/relay';
-import { svelteKitHandler } from 'better-auth/svelte-kit';
-import type { Handle } from '@sveltejs/kit';
+import { getActiveProfileUser } from '#api/handlers/activeProfile';
+import { getLanAddress } from '#api/lan';
+import { createPairingToken } from '#api/pairing';
+import { startPairingRelay } from '#api/ws/relay';
 import { getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
+
+const PAIRING_COOKIE = 'pairing_token';
 
 if (!building) startPairingRelay();
 
@@ -28,7 +30,31 @@ const handleActiveProfile: Handle = async ({ event, resolve }) => {
 	const user = await getActiveProfileUser();
 	if (user) event.locals.user = user;
 
-	return svelteKitHandler({ event, resolve, auth, building });
+	// Pages no longer gate themselves with a `load` function, so /home's
+	// "must have an active profile" check lives here instead.
+	if (!user && event.url.pathname === '/home') redirect(302, '/');
+
+	return resolve(event);
 };
 
-export const handle: Handle = sequence(handleParaglide, handleActiveProfile);
+// GraphQL query resolvers (see #api/handlers/pairing) can't set cookies —
+// SvelteKit only allows that from a `command`/form action or, as here, a
+// hook — so the pairing token is minted once per request up front and just
+// read back by the `pairing` query.
+const handlePairing: Handle = ({ event, resolve }) => {
+	let pairingToken = event.cookies.get(PAIRING_COOKIE);
+	if (!pairingToken) {
+		pairingToken = createPairingToken();
+		event.cookies.set(PAIRING_COOKIE, pairingToken, { path: '/', httpOnly: true, sameSite: 'lax' });
+	}
+
+	const lanAddress = getLanAddress();
+	event.locals.pairingToken = pairingToken;
+	event.locals.remoteUrl = lanAddress
+		? `http://${lanAddress}:${event.url.port}/remote/${pairingToken}`
+		: null;
+
+	return resolve(event);
+};
+
+export const handle: Handle = sequence(handleParaglide, handlePairing, handleActiveProfile);

@@ -1,21 +1,38 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PinPad from '#lib/components/PinPad.svelte';
-	import type { ActionData, PageServerData } from './$types';
+	import { client } from '#lib/api/rumbleClient/client';
+	import { graphQLErrorMessage } from '#lib/api/errors';
 
-	let { data, form }: { data: PageServerData; form: ActionData } = $props();
+	const username = page.params.username!;
+	const profile = await client.query.profileByUsername({
+		__args: { username },
+		id: true,
+		username: true,
+		displayUsername: true,
+		image: true
+	});
 
 	let pin = $state('');
-	let formEl: HTMLFormElement;
+	let message = $state<string>();
 
-	const label = $derived(data.profile.displayUsername ?? data.profile.username ?? 'Profile');
+	const label = $derived(profile?.displayUsername ?? profile?.username ?? 'Profile');
 
-	// Wait for the effect queue (not the oncomplete callback, which fires
-	// before Svelte has flushed `pin` into the hidden input's DOM value) so
-	// requestSubmit() reads the fully-updated 4-digit value.
+	async function submit() {
+		try {
+			await client.mutate.login({ __args: { username, pin } });
+			await goto('/home');
+		} catch (err) {
+			message = graphQLErrorMessage(err, 'Wrong PIN');
+			pin = '';
+		}
+	}
+
+	// Wait for the effect queue so the fully-updated 4-digit value is read.
 	$effect(() => {
-		if (pin.length === 4) formEl.requestSubmit();
+		if (pin.length === 4) submit();
 	});
 </script>
 
@@ -31,30 +48,22 @@
 		&larr; Back
 	</a>
 
-	<span
-		class="flex size-24 items-center justify-center overflow-hidden rounded-full"
-		style="background: {profileGradient(data.profile.username ?? data.profile.id)}"
-	>
-		{#if data.profile.image}
-			<img src={data.profile.image} alt="" class="size-full object-cover" />
-		{:else}
-			<span class="text-3xl font-semibold text-white/90 uppercase">{label.slice(0, 1)}</span>
-		{/if}
-	</span>
+	{#if !profile}
+		<h1 class="text-2xl font-semibold text-white/95">Profile not found</h1>
+	{:else}
+		<span
+			class="flex size-24 items-center justify-center overflow-hidden rounded-full"
+			style="background: {profileGradient(profile.username ?? profile.id)}"
+		>
+			{#if profile.image}
+				<img src={profile.image} alt="" class="size-full object-cover" />
+			{:else}
+				<span class="text-3xl font-semibold text-white/90 uppercase">{label.slice(0, 1)}</span>
+			{/if}
+		</span>
 
-	<h1 class="text-2xl font-semibold text-white/95">Enter PIN for {label}</h1>
+		<h1 class="text-2xl font-semibold text-white/95">Enter PIN for {label}</h1>
 
-	<form
-		bind:this={formEl}
-		method="post"
-		use:enhance={() => {
-			return async ({ result, update }) => {
-				if (result.type === 'failure') pin = '';
-				await update();
-			};
-		}}
-	>
-		<input type="hidden" name="pin" value={pin} />
-		<PinPad bind:value={pin} error={form?.message} />
-	</form>
+		<PinPad bind:value={pin} error={message} />
+	{/if}
 </div>

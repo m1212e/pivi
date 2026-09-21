@@ -1,6 +1,6 @@
 import { rumble } from '@m1212e/rumble';
-import { db } from '#lib/server/db';
-import * as schema from '#lib/server/db/schema';
+import { db } from './db';
+import * as schema from './db/schema';
 import { context } from './context';
 
 export const {
@@ -11,7 +11,8 @@ export const {
 	query,
 	pubsub,
 	createYoga,
-	enum_
+	enum_,
+	clientCreator
 } = rumble({
 	db,
 	schema,

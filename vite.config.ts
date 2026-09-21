@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
@@ -6,6 +7,20 @@ import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
+	// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
+	// dependency doesn't load under Vite's SSR module runner.
+	resolve: {
+		alias: {
+			'lib-address': fileURLToPath(new URL('./src/api/lib-address-shim.ts', import.meta.url))
+		}
+	},
+	// clientCreator (see src/api/handlers/register.ts) rewrites the generated
+	// rumble client on every dev-server request that touches the GraphQL
+	// schema. Since that output lives inside the watched src/ tree, an
+	// unignored watcher treats its own write as a source change mid-request
+	// and triggers a full SSR reload — which re-registers Pothos plugins onto
+	// a schema builder that already has them, crashing.
+	server: { watch: { ignored: ['**/src/lib/api/rumbleClient/**'] } },
 	plugins: [
 		tailwindcss(),
 		sveltekit({

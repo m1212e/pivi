@@ -1,5 +1,5 @@
-import { db } from '#lib/server/db';
-import { activeProfile } from '#lib/server/db/schema';
+import { db } from '../db';
+import { activeProfile } from '../db/schema';
 
 const SINGLETON_ID = 'singleton';
 

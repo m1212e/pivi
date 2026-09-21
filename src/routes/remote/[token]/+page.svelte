@@ -85,6 +85,8 @@
 		event.preventDefault();
 		send({ type: 'enter' });
 		navigator.vibrate?.(10);
+		text = '';
+		onTextInput();
 	}
 
 	onMount(() => {
@@ -152,7 +154,7 @@
 		{:else if tab === 'pin'}
 			<PinPad bind:value={pin} onkey={onPinKey} oncomplete={onPinComplete} />
 		{:else}
-			<form onsubmit={onTextSubmit} class="w-full max-w-sm">
+			<form onsubmit={onTextSubmit} class="flex w-full max-w-sm flex-col items-center gap-3">
 				<input
 					bind:this={textInput}
 					bind:value={text}
@@ -161,6 +163,13 @@
 					placeholder="Type here…"
 					class="w-full rounded-full bg-white/10 px-6 py-4 text-center text-lg text-white placeholder-white/40 ring-1 ring-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 				/>
+				<button
+					type="submit"
+					aria-label="Enter"
+					class="w-full rounded-full bg-white px-6 py-4 text-lg font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+				>
+					Enter
+				</button>
 			</form>
 		{/if}
 	</main>
