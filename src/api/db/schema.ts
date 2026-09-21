@@ -22,3 +22,17 @@ export const user = snakeCase.table('user', {
 	pinHash: text().notNull(),
 	image: text()
 });
+
+export const pairedDevice = snakeCase.table('paired_device', {
+	...defaultIdAndTimestamps,
+	publicKey: text().notNull(),
+	name: text(),
+	lastSeenAt: timestamp({ mode: 'date' })
+});
+
+export const tvIdentity = snakeCase.table('tv_identity', {
+	id: text().primaryKey().notNull().default('singleton'),
+	publicKey: text().notNull(),
+	secretKey: text().notNull(),
+	...defaultTimestamps
+});

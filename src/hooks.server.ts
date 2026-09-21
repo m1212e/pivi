@@ -1,7 +1,8 @@
 import { redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';
-import { getActiveProfileUser } from '#api/handlers/activeProfile';
+import { getActiveProfileUser } from '#api/activeProfile';
+import { startDeviceCleanupSchedule } from '#api/deviceCleanup';
 import { getLanAddress } from '#api/lan';
 import { createPairingToken } from '#api/pairing';
 import { startPairingRelay } from '#api/ws/relay';
@@ -10,7 +11,10 @@ import { paraglideMiddleware } from '#lib/paraglide/server';
 
 const PAIRING_COOKIE = 'pairing_token';
 
-if (!building) startPairingRelay();
+if (!building) {
+	startPairingRelay();
+	startDeviceCleanupSchedule();
+}
 
 const handleParaglide: Handle = ({ event, resolve }) =>
 	paraglideMiddleware(event.request, ({ request, locale }) => {

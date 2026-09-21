@@ -204,12 +204,6 @@ export type JSONWhereInputArgument = {
 
 export type Locale = unknown;
 
-export type Mutation = {
-	login: (p: { pin: String; username: String }) => Boolean;
-	register: (p: { pin: String; username: String }) => Boolean;
-	signOut: Boolean;
-};
-
 export type Pairing = {
 	pairingToken: String;
 	remoteUrl: String | null;
@@ -220,10 +214,7 @@ export type PersonName = unknown;
 export type PhoneNumber = unknown;
 
 export type Query = {
-	me: () => User | null;
 	pairing: () => Pairing;
-	profileByUsername: (p: { username: String }) => User | null;
-	profiles: () => User[];
 	user: (p: { id: ID }) => User;
 	users: (p?: {
 		limit?: Int | null | undefined;
@@ -272,18 +263,18 @@ export type Subscription = {
 
 export type User = {
 	createdAt: DateTime;
-	displayUsername: String;
 	id: ID;
 	image: String | null;
+	pinHash: String;
 	updatedAt: DateTime | null;
 	username: String;
 };
 
 export type UserOrderInputArgument = {
 	createdAt?: SortingParameter | null | undefined;
-	displayUsername?: SortingParameter | null | undefined;
 	id?: SortingParameter | null | undefined;
 	image?: SortingParameter | null | undefined;
+	pinHash?: SortingParameter | null | undefined;
 	updatedAt?: SortingParameter | null | undefined;
 	username?: SortingParameter | null | undefined;
 };
@@ -293,9 +284,9 @@ export type UserWhereInputArgument = {
 	NOT?: UserWhereInputArgument | null | undefined;
 	OR?: UserWhereInputArgument[] | undefined;
 	createdAt?: DateTimeWhereInputArgument | null | undefined;
-	displayUsername?: StringWhereInputArgument | null | undefined;
 	id?: IDWhereInputArgument | null | undefined;
 	image?: StringWhereInputArgument | null | undefined;
+	pinHash?: StringWhereInputArgument | null | undefined;
 	updatedAt?: DateTimeWhereInputArgument | null | undefined;
 	username?: StringWhereInputArgument | null | undefined;
 };

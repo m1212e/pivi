@@ -28,5 +28,8 @@
 	"swipe_hint": "Swipe to move, tap to select",
 	"type_here_placeholder": "Type here…",
 	"enter": "Enter",
-	"backspace": "Backspace"
+	"backspace": "Backspace",
+	"not_paired_title": "Not paired",
+	"not_paired_description": "Ask the TV to show its pairing QR code, then scan it with this phone.",
+	"pairing_error_title": "Couldn't connect"
 }

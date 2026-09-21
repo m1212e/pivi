@@ -28,5 +28,8 @@
 	"swipe_hint": "Wischen zum Bewegen, Tippen zum Auswählen",
 	"type_here_placeholder": "Hier eingeben…",
 	"enter": "Eingabe",
-	"backspace": "Löschen"
+	"backspace": "Löschen",
+	"not_paired_title": "Nicht gekoppelt",
+	"not_paired_description": "Lass dir auf dem Fernseher den Kopplungs-QR-Code anzeigen und scanne ihn mit diesem Handy.",
+	"pairing_error_title": "Verbindung fehlgeschlagen"
 }

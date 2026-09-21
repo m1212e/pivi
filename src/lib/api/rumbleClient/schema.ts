@@ -8,7 +8,7 @@ import type { IntrospectionQuery } from 'graphql';
 export const schema = {
 	__schema: {
 		queryType: { name: 'Query', kind: 'OBJECT', __proto__: null },
-		mutationType: { name: 'Mutation', kind: 'OBJECT', __proto__: null },
+		mutationType: null,
 		subscriptionType: { name: 'Subscription', kind: 'OBJECT', __proto__: null },
 		types: [
 			{
@@ -1253,67 +1253,6 @@ export const schema = {
 			{ kind: 'SCALAR', name: 'Locale' },
 			{
 				kind: 'OBJECT',
-				name: 'Mutation',
-				fields: [
-					{
-						name: 'login',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: [
-							{
-								name: 'pin',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							},
-							{
-								name: 'username',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							}
-						]
-					},
-					{
-						name: 'register',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: [
-							{
-								name: 'pin',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							},
-							{
-								name: 'username',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							}
-						]
-					},
-					{
-						name: 'signOut',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					}
-				],
-				interfaces: []
-			},
-			{
-				kind: 'OBJECT',
 				name: 'Pairing',
 				fields: [
 					{
@@ -1339,42 +1278,10 @@ export const schema = {
 				name: 'Query',
 				fields: [
 					{
-						name: 'me',
-						type: { kind: 'OBJECT', name: 'User', ofType: null, __proto__: null },
-						args: []
-					},
-					{
 						name: 'pairing',
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'Pairing', kind: 'OBJECT', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'profileByUsername',
-						type: { kind: 'OBJECT', name: 'User', ofType: null, __proto__: null },
-						args: [
-							{
-								name: 'username',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							}
-						]
-					},
-					{
-						name: 'profiles',
-						type: {
-							kind: 'NON_NULL',
-							ofType: {
-								kind: 'LIST',
-								ofType: {
-									kind: 'NON_NULL',
-									ofType: { name: 'User', kind: 'OBJECT', ofType: null, __proto__: null }
-								}
-							}
 						},
 						args: []
 					},
@@ -1681,14 +1588,6 @@ export const schema = {
 						args: []
 					},
 					{
-						name: 'displayUsername',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
 						name: 'id',
 						type: {
 							kind: 'NON_NULL',
@@ -1699,6 +1598,14 @@ export const schema = {
 					{
 						name: 'image',
 						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'pinHash',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
 						args: []
 					},
 					{
@@ -1728,17 +1635,17 @@ export const schema = {
 						defaultValue: void 0
 					},
 					{
-						name: 'displayUsername',
-						type: { kind: 'ENUM', name: 'SortingParameter', ofType: null, __proto__: null },
-						defaultValue: void 0
-					},
-					{
 						name: 'id',
 						type: { kind: 'ENUM', name: 'SortingParameter', ofType: null, __proto__: null },
 						defaultValue: void 0
 					},
 					{
 						name: 'image',
+						type: { kind: 'ENUM', name: 'SortingParameter', ofType: null, __proto__: null },
+						defaultValue: void 0
+					},
+					{
+						name: 'pinHash',
 						type: { kind: 'ENUM', name: 'SortingParameter', ofType: null, __proto__: null },
 						defaultValue: void 0
 					},
@@ -1812,16 +1719,6 @@ export const schema = {
 						defaultValue: void 0
 					},
 					{
-						name: 'displayUsername',
-						type: {
-							kind: 'INPUT_OBJECT',
-							name: 'StringWhereInputArgument',
-							ofType: null,
-							__proto__: null
-						},
-						defaultValue: void 0
-					},
-					{
 						name: 'id',
 						type: {
 							kind: 'INPUT_OBJECT',
@@ -1833,6 +1730,16 @@ export const schema = {
 					},
 					{
 						name: 'image',
+						type: {
+							kind: 'INPUT_OBJECT',
+							name: 'StringWhereInputArgument',
+							ofType: null,
+							__proto__: null
+						},
+						defaultValue: void 0
+					},
+					{
+						name: 'pinHash',
 						type: {
 							kind: 'INPUT_OBJECT',
 							name: 'StringWhereInputArgument',

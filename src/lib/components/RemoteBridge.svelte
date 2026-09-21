@@ -165,7 +165,12 @@
 		observer.observe(document.body, { childList: true, subtree: true });
 
 		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
-		socket.onopen = sendState;
+		socket.onopen = () => {
+			// Only accepted from the relay's loopback check — this tab and the
+			// relay run on the same device. See src/api/ws/relay.ts.
+			send({ type: 'tvHello' });
+			sendState();
+		};
 
 		socket.onmessage = (event) => {
 			let message: Record<string, unknown>;
