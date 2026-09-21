@@ -80,7 +80,7 @@
 				}}
 				placeholder={m.username_placeholder()}
 				autocomplete="username"
-				class="w-64 rounded-full bg-white/10 px-6 py-3 text-center text-lg text-white placeholder-white/40 ring-1 ring-white/15 focus:outline-none"
+				class="w-64 rounded-full bg-white/12 px-6 py-3 text-center text-lg text-white placeholder-white/40 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
 			/>
 			{#if usernameTouched && trimmedUsername.length > 0 && nameError}
 				<p class="-mt-4 text-sm font-medium text-rose-400">{nameError}</p>

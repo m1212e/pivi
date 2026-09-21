@@ -62,7 +62,7 @@
 		>
 			<span
 				data-focus-ring-target
-				class="flex size-28 items-center justify-center rounded-full border-2 border-dashed border-white/30 bg-white/5 text-white/50 transition group-hover:scale-105 group-hover:border-white/70 group-hover:text-white/80 sm:size-32"
+				class="flex size-28 items-center justify-center rounded-full border-2 border-dashed border-white/30 bg-white/12 text-white/50 backdrop-blur-2xl backdrop-saturate-150 transition group-hover:scale-105 group-hover:border-white/70 group-hover:text-white/80 sm:size-32"
 			>
 				<svg viewBox="0 0 24 24" fill="none" class="size-12 sm:size-14">
 					<path
@@ -78,7 +78,9 @@
 	</div>
 
 	{#if pairing.remoteUrl}
-		<div class="flex items-center gap-5 rounded-3xl bg-white/5 px-6 py-5 ring-1 ring-white/10">
+		<div
+			class="flex items-center gap-5 rounded-3xl bg-white/12 px-6 py-5 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
+		>
 			<PairingQr url={pairing.remoteUrl} size={192} />
 			<div class="max-w-56 text-sm text-white/60">
 				<p class="font-medium text-white/90">{m.scan_with_phone()}</p>

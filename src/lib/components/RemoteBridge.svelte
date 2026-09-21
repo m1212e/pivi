@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { Smartphone, Unplug } from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 	import { afterNavigate } from '$app/navigation';
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
+	import * as m from '#lib/paraglide/messages';
 
 	let socket: WebSocket | undefined;
 	let currentEl: HTMLElement | null = null;
@@ -123,7 +126,67 @@
 			}
 		}
 
-		best?.focus();
+		if (!best) return;
+		// Focus alone can jump instantly on some browsers regardless of the
+		// container's `scroll-behavior` (Safari in particular), so scroll it
+		// into view ourselves first and let focus land without re-scrolling.
+		scrollFocusedIntoView(best, els);
+		best.focus({ preventScroll: true });
+	}
+
+	// `scrollIntoView({block/inline: 'nearest'})` only scrolls as far as
+	// making the *focused card* visible, which reads as "stuck" rather than
+	// "arrived" in a couple of spots: it's satisfied the instant a shelf's
+	// title (now much larger while active) is still scrolled just off the
+	// top of the viewport, and it stops short of a shelf's actual scroll
+	// limit for its first/last card. So instead: vertically, center whichever
+	// row (title included) or the top bar holds focus, and let the browser's
+	// own scroll clamping stop that short of the top/bottom of the page —
+	// which is exactly "center it, except near an end".
+	function scrollFocusedIntoView(el: HTMLElement, focusable: HTMLElement[]) {
+		const verticalTarget = el.closest<HTMLElement>('[data-pivi-row], [data-pivi-top-bar]') ?? el;
+		const rect = verticalTarget.getBoundingClientRect();
+		const elementCenter = rect.top + rect.height / 2;
+		const viewportCenter = window.innerHeight / 2;
+		window.scrollTo({ top: window.scrollY + elementCenter - viewportCenter, behavior: 'smooth' });
+
+		const shelf = el.closest<HTMLElement>('[data-pivi-hscroll]');
+		if (!shelf) return;
+		const itemsInShelf = focusable.filter((candidate) => shelf.contains(candidate));
+		if (el === itemsInShelf[0]) {
+			shelf.scrollTo({ left: 0, behavior: 'smooth' });
+		} else if (el === itemsInShelf[itemsInShelf.length - 1]) {
+			shelf.scrollTo({ left: shelf.scrollWidth, behavior: 'smooth' });
+		} else {
+			// Any other card moving out of frame just needs the shelf nudged
+			// enough to bring it back in. Done by hand (not
+			// `el.scrollIntoView({block: 'nearest', ...})`) because that also
+			// re-scrolls the window for the block axis — undoing the vertical
+			// centering above, since both target the same window scroll.
+			const shelfRect = shelf.getBoundingClientRect();
+			const elRect = el.getBoundingClientRect();
+			if (elRect.left < shelfRect.left) {
+				shelf.scrollBy({ left: elRect.left - shelfRect.left, behavior: 'smooth' });
+			} else if (elRect.right > shelfRect.right) {
+				shelf.scrollBy({ left: elRect.right - shelfRect.right, behavior: 'smooth' });
+			}
+		}
+	}
+
+	// Plays the `.pivi-press` scale animation on whatever was just clicked —
+	// a real tap, a mouse click, or the remote's synthetic `select` click all
+	// go through the same DOM `click` event, so one listener covers them all.
+	function onClick(event: MouseEvent) {
+		if (!(event.target instanceof HTMLElement)) return;
+		const target = event.target.closest<HTMLElement>(
+			'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+		);
+		if (!target) return;
+		target.classList.remove('pivi-press');
+		// Force a reflow so re-adding the class restarts the animation even if
+		// it's clicked again before the previous run finished.
+		void target.offsetWidth;
+		target.classList.add('pivi-press');
 	}
 
 	function pressPinKey(key: string) {
@@ -160,6 +223,7 @@
 
 	onMount(() => {
 		document.addEventListener('focusin', onFocusChange);
+		document.addEventListener('click', onClick);
 
 		const observer = new MutationObserver(scheduleFocusRecheck);
 		observer.observe(document.body, { childList: true, subtree: true });
@@ -202,11 +266,18 @@
 				case 'requestState':
 					sendState();
 					break;
+				case 'remoteConnected':
+					toast.success(m.remote_connected_toast(), { icon: Smartphone });
+					break;
+				case 'remoteDisconnected':
+					toast(m.remote_disconnected_toast(), { icon: Unplug });
+					break;
 			}
 		};
 
 		return () => {
 			document.removeEventListener('focusin', onFocusChange);
+			document.removeEventListener('click', onClick);
 			observer.disconnect();
 			socket?.close();
 		};
@@ -217,6 +288,11 @@
 	// The previously-focused element is gone either way, so drop the ring
 	// eagerly instead of waiting on a stray focusin that may never come.
 	afterNavigate(() => {
+		// If the focused element lives in the root layout (e.g. the profile
+		// chip) rather than the page that just got swapped out, it survives
+		// navigation — so its ring has to be removed explicitly, not just
+		// dropped by nulling `currentEl`, or it's stuck there indefinitely.
+		currentEl?.classList.remove('pivi-remote-focus');
 		currentEl = null;
 		queueMicrotask(sendState);
 	});

@@ -181,6 +181,15 @@ async function handleChallengeResponse(
 		.where(eq(pairedDevice.id, state.deviceId));
 
 	send(socket, { type: 'ready' } satisfies Ready);
+
+	// Tells whatever TV(s) are listening that a phone just finished
+	// connecting, so RemoteBridge can surface a toast — sent directly rather
+	// than through relayFromPhone, since that path only forwards the phone's
+	// own encrypted app-level messages (move/select/etc), not relay-originated
+	// status events.
+	for (const tv of tvSockets()) {
+		send(tv, { type: 'remoteConnected' });
+	}
 }
 
 function startHandshakeTimeout(socket: WebSocket) {
@@ -211,7 +220,16 @@ export function startPairingRelay() {
 		socket.on('message', (data: RawData) => onMessage(socket, remoteAddress, data));
 		socket.on('close', () => {
 			clearHandshakeTimeout(socket);
+			const state = connections.get(socket);
 			connections.delete(socket);
+
+			// Only a fully-connected phone leaving is noteworthy — not every
+			// dropped socket (e.g. one that never finished the handshake).
+			if (state?.role === 'phone') {
+				for (const tv of tvSockets()) {
+					send(tv, { type: 'remoteDisconnected' });
+				}
+			}
 		});
 	});
 }

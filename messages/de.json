@@ -35,5 +35,7 @@
 	"backspace": "Löschen",
 	"not_paired_title": "Nicht gekoppelt",
 	"not_paired_description": "Lass dir auf dem Fernseher den Kopplungs-QR-Code anzeigen und scanne ihn mit diesem Handy.",
-	"pairing_error_title": "Verbindung fehlgeschlagen"
+	"pairing_error_title": "Verbindung fehlgeschlagen",
+	"remote_connected_toast": "Handy verbunden",
+	"remote_disconnected_toast": "Handy getrennt"
 }

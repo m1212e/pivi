@@ -3,6 +3,7 @@
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { Toaster } from 'svelte-sonner';
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import './layout.css';
@@ -15,6 +16,7 @@
 	<!-- The phone itself renders /remote and drives the TV through it; it
 	     shouldn't also join the WS room as if it were the TV. -->
 	<RemoteBridge />
+	<Toaster theme="dark" position="top-right" richColors />
 {/if}
 {@render children()}
 

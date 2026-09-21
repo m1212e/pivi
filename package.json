@@ -63,6 +63,7 @@
 		"#api/*": "./src/api/*"
 	},
 	"dependencies": {
+		"@lucide/svelte": "^1.47.0",
 		"@m1212e/rumble": "^0.23.21",
 		"@noble/ciphers": "^2.4.0",
 		"@noble/curves": "^2.4.0",
@@ -75,6 +76,7 @@
 		"node-cron": "^4.6.0",
 		"pg": "^8.23.0",
 		"qr-code-styling": "^1.9.2",
+		"svelte-sonner": "^1.2.1",
 		"wonka": "^6.3.6",
 		"ws": "^8.21.3",
 		"zod": "^4.5.4"

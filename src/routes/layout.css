@@ -11,9 +11,150 @@
  * saw, one from this outline and one from the native ring intermittently
  * also firing. Modern browsers already curve the outline to match the
  * target's own border-radius, so no extra rule is needed for circular
- * avatars.
+ * avatars. Pulses slowly so the current selection stays noticeable at a
+ * glance from across the room, without being distracting up close.
  */
+@keyframes pivi-select-pulse {
+	0%,
+	100% {
+		outline-color: rgb(255 255 255 / 100%);
+	}
+	50% {
+		outline-color: rgb(255 255 255 / 35%);
+	}
+}
 .pivi-remote-focus {
 	outline: 3px solid white;
 	outline-offset: 3px;
+	animation: pivi-select-pulse 2.4s ease-in-out infinite;
+}
+
+/*
+ * Gives mouse users the exact same selection indicator as `.pivi-remote-focus`
+ * on plain hover, so the app reads as one consistent design regardless of
+ * input method — instead of each component inventing its own hover treatment.
+ * Scoped to links/buttons/tabbables (not plain inputs — hovering a text field
+ * without interacting with it isn't a "selection" the way hovering a button
+ * or card is). Mirrors RemoteBridge's own focusable-element selector and its
+ * `data-focus-ring-target` opt-in for a descendant (e.g. a circular avatar
+ * inside a wider link) to carry the ring instead of the element itself.
+ */
+:where(a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])):not(
+		:has([data-focus-ring-target])
+	):hover {
+	outline: 3px solid white;
+	outline-offset: 3px;
+	animation: pivi-select-pulse 2.4s ease-in-out infinite;
+}
+
+:where(a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])):hover
+	[data-focus-ring-target] {
+	outline: 3px solid white;
+	outline-offset: 3px;
+	animation: pivi-select-pulse 2.4s ease-in-out infinite;
+}
+
+/*
+ * Brief press feedback on selection — added/removed by RemoteBridge's global
+ * click listener (see there) rather than `:active`, since a remote's
+ * "select" message clicks the element programmatically with no real
+ * pointerdown to trigger `:active`. Covers real taps/clicks too, so mouse
+ * and remote users get the same feedback.
+ */
+@keyframes pivi-press {
+	40% {
+		transform: scale(0.94);
+	}
+}
+.pivi-press {
+	animation: pivi-press 200ms ease-out;
+}
+
+/*
+ * Grows a shelf's title while any of its cards holds focus, so the currently
+ * selected section reads clearly on a TV even before the eye finds the
+ * individual card's ring. Plain `:focus-within` rather than a JS-toggled
+ * class (unlike `.pivi-remote-focus`) — it isn't affected by Chromium
+ * suppressing `:focus-visible` after a programmatic `.focus()`, since it
+ * only checks where focus actually is.
+ */
+.pivi-row-title {
+	transition: font-size 200ms ease;
+}
+[data-pivi-row]:focus-within .pivi-row-title {
+	font-size: 2.5rem;
+}
+
+/*
+ * A soft glow, in the card's own colors (`--pivi-glow`, set per-card as
+ * either its poster image or its gradient), spilling onto the background
+ * right behind the selected card — an "ambient light" touch rather than a
+ * bigger/harder ring. `z-index: -1` keeps it behind every element in normal
+ * flow (so an opaque neighboring card simply covers it, never the other way
+ * round). No mask here on purpose: a radial-gradient mask draws an ellipse,
+ * which only reaches the middle of each side and leaves the corners bare —
+ * `blur()` alone softens the glow's own rectangular (rounded) edge evenly on
+ * every side and corner, which is what makes it wrap the whole box. `inset`
+ * is kept within the row's `gap`/`py` (see ContentRow) so the glow fades out
+ * before it would be clipped or reach a neighboring card. Lives on a wrapper
+ * around just the image (or, for an app tile with no separate image, the
+ * icon itself) rather than the whole card, so the title/subtitle text below
+ * never glows.
+ */
+.pivi-card {
+	position: relative;
+}
+.pivi-card::before {
+	content: '';
+	position: absolute;
+	inset: -0.5rem;
+	z-index: -1;
+	border-radius: inherit;
+	background: var(--pivi-glow);
+	background-size: cover;
+	background-position: center;
+	filter: blur(20px) saturate(1.6);
+	opacity: 0;
+	transition: opacity 250ms ease;
+	pointer-events: none;
+}
+/* `.pivi-card.pivi-remote-focus` covers the app tile, where the same element
+   is both — `:has()` only matches a descendant, never the element itself. */
+.pivi-card:hover::before,
+.pivi-card:has(.pivi-remote-focus)::before,
+.pivi-card.pivi-remote-focus::before {
+	opacity: 0.55;
+}
+
+/* Dashboard shelves scroll horizontally but the scrollbar itself is never
+   the point of interaction on a TV (remote/keyboard focus drives scrolling
+   into view instead), so hide it across browsers. */
+.scrollbar-none {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	scroll-behavior: smooth;
+}
+.scrollbar-none::-webkit-scrollbar {
+	display: none;
+}
+
+/* A card sitting right at a shelf's edge is deliberately only partly
+   visible — it's the "there's more, keep scrolling" affordance every TV/
+   streaming UI uses. Without this it just looks like it's been chopped off
+   by the viewport, so fade it out instead of hard-clipping it. */
+.pivi-row-fade {
+	mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		black 2rem,
+		black calc(100% - 2rem),
+		transparent 100%
+	);
+	-webkit-mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		black 2rem,
+		black calc(100% - 2rem),
+		transparent 100%
+	);
 }

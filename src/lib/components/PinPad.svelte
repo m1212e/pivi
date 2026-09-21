@@ -65,7 +65,7 @@
 					type="button"
 					data-key={key}
 					onclick={() => press(key)}
-					class="flex size-16 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+					class="flex size-16 items-center justify-center rounded-full bg-white/12 text-2xl font-semibold text-white shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 				>
 					{key}
 				</button>
