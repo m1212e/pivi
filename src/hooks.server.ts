@@ -1,24 +1,18 @@
-import { redirect, type Handle } from '@sveltejs/kit';
-import { sequence } from '@sveltejs/kit/hooks';
-import { building } from '$app/env';
+import { redirect } from '@sveltejs/kit';
+import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { getActiveProfileUser } from '#api/activeProfile';
-import { startDeviceCleanupSchedule } from '#api/deviceCleanup';
 import { getLanAddress } from '#api/lan';
-import { createPairingToken } from '#api/pairing';
-import { startPairingRelay } from '#api/ws/relay';
+import { createPairingToken, isPairingTokenValid, PAIRING_TOKEN_TTL_MS } from '#api/pairing';
 import { getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
 
 const PAIRING_COOKIE = 'pairing_token';
 
-if (!building) {
-	startPairingRelay();
-	startDeviceCleanupSchedule();
-}
-
 const handleParaglide: Handle = ({ event, resolve }) =>
 	paraglideMiddleware(event.request, ({ request, locale }) => {
-		event.request = request;
+		// `event.request` is read-only in the type system, but paraglide needs
+		// the de-localized request swapped in before `resolve` runs downstream.
+		(event as { request: Request }).request = request;
 
 		return resolve(event, {
 			transformPageChunk: ({ html }) =>
@@ -47,9 +41,17 @@ const handleActiveProfile: Handle = async ({ event, resolve }) => {
 // read back by the `pairing` query.
 const handlePairing: Handle = ({ event, resolve }) => {
 	let pairingToken = event.cookies.get(PAIRING_COOKIE);
-	if (!pairingToken) {
+	// The cookie can outlive the token's server-side TTL (idle screen, dev
+	// server restart wiping the in-memory token map, etc.) — re-mint rather
+	// than keep handing out a token the server no longer recognizes.
+	if (!pairingToken || !isPairingTokenValid(pairingToken)) {
 		pairingToken = createPairingToken();
-		event.cookies.set(PAIRING_COOKIE, pairingToken, { path: '/', httpOnly: true, sameSite: 'lax' });
+		event.cookies.set(PAIRING_COOKIE, pairingToken, {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'lax',
+			maxAge: PAIRING_TOKEN_TTL_MS / 1000
+		});
 	}
 
 	const lanAddress = getLanAddress();

@@ -204,6 +204,12 @@ export type JSONWhereInputArgument = {
 
 export type Locale = unknown;
 
+export type Mutation = {
+	login: (p: { pin: String; username: String }) => Boolean;
+	register: (p: { pin: String; username: String }) => Boolean;
+	signOut: Boolean;
+};
+
 export type Pairing = {
 	pairingToken: String;
 	remoteUrl: String | null;

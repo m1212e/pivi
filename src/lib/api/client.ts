@@ -59,5 +59,9 @@ exchanges.push(cacheExchange, fetchExchange);
 export const urqlClient = new Client({
 	url: '/api/graphql',
 	exchanges,
-	fetchOptions: { credentials: 'include' }
+	fetchOptions: { credentials: 'include' },
+	// graphql-yoga serves subscriptions over SSE on the same endpoint, and
+	// fetchExchange only picks up "subscription" operations (as used by
+	// liveQuery) when this is set — otherwise they're left unhandled.
+	fetchSubscriptions: true
 });

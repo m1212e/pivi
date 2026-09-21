@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -6,7 +7,7 @@
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
-	let { children }: { children: () => unknown } = $props();
+	let { children }: { children: Snippet } = $props();
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>

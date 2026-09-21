@@ -1,4 +1,4 @@
-import { abilityBuilder, object, query } from '../rumble';
+import { abilityBuilder, object, pubsub, query } from '../rumble';
 
 abilityBuilder.user.allow('read').when({
 	where: {},
@@ -19,3 +19,4 @@ abilityBuilder.user.allow(['update', 'delete']).when((context) => {
 
 export const userRef = object({ table: 'user' });
 query({ table: 'user' });
+export const userPubsub = pubsub({ table: 'user' });

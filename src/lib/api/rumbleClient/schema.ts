@@ -8,7 +8,7 @@ import type { IntrospectionQuery } from 'graphql';
 export const schema = {
 	__schema: {
 		queryType: { name: 'Query', kind: 'OBJECT', __proto__: null },
-		mutationType: null,
+		mutationType: { name: 'Mutation', kind: 'OBJECT', __proto__: null },
 		subscriptionType: { name: 'Subscription', kind: 'OBJECT', __proto__: null },
 		types: [
 			{
@@ -1251,6 +1251,67 @@ export const schema = {
 				]
 			},
 			{ kind: 'SCALAR', name: 'Locale' },
+			{
+				kind: 'OBJECT',
+				name: 'Mutation',
+				fields: [
+					{
+						name: 'login',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pin',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'username',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'register',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pin',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'username',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'signOut',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
 			{
 				kind: 'OBJECT',
 				name: 'Pairing',

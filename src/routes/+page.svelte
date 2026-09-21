@@ -5,13 +5,22 @@
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import * as m from '#lib/paraglide/messages';
 
-	const profiles = await client.query.profiles({
+	const profiles = await client.liveQuery.users({
 		id: true,
 		username: true,
-		displayUsername: true,
 		image: true
 	});
-	const pairing = await getPairing();
+
+	// The QR code embeds a short-lived pairing token, so if this idle screen
+	// sits open long enough for it to expire, refresh it before that happens
+	// rather than leaving a dead code on screen.
+	let pairing = $state(await getPairing());
+	$effect(() => {
+		const interval = setInterval(async () => {
+			pairing = await getPairing();
+		}, 60_000);
+		return () => clearInterval(interval);
+	});
 </script>
 
 <svelte:head><title>Pivi</title></svelte:head>
@@ -25,9 +34,9 @@
 
 	<div class="flex flex-wrap items-start justify-center gap-x-12 gap-y-10">
 		{#each profiles as profile (profile.id)}
-			{@const label = profile.displayUsername ?? profile.username ?? m.unknown_profile()}
+			{@const label = profile.username}
 			<a
-				href="/login/{profile.username}"
+				href="/login/{profile.id}"
 				class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
 			>
 				<span

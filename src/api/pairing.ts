@@ -8,7 +8,7 @@ import {
 import { db } from './db';
 import { tvIdentity } from './db/schema';
 
-const PAIRING_TOKEN_TTL_MS = 5 * 60 * 1000;
+export const PAIRING_TOKEN_TTL_MS = 5 * 60 * 1000;
 const pendingTokens = new Map<string, number>();
 
 function pruneExpiredTokens() {
@@ -25,8 +25,12 @@ export function createPairingToken(): string {
 	return token;
 }
 
-// Single-use: a valid token is removed as soon as it's checked, regardless
-// of whether the caller goes on to complete pairing.
+export function isPairingTokenValid(token: string): boolean {
+	pruneExpiredTokens();
+	return pendingTokens.has(token);
+}
+
+// Single-use: call only once pairing has actually succeeded.
 export function consumePairingToken(token: string): boolean {
 	pruneExpiredTokens();
 	return pendingTokens.delete(token);

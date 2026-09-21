@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
 	import * as m from '#lib/paraglide/messages';
 
-	const me = await client.query.me({ id: true, username: true, displayUsername: true });
-	const label = me?.displayUsername ?? me?.username;
+	const me = await client.liveQuery.user({
+		__args: { id: page.data.userId },
+		id: true,
+		username: true
+	});
+	const label = me?.username;
 
 	async function signOut() {
 		await client.mutate.signOut();

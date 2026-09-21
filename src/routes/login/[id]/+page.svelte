@@ -7,23 +7,22 @@
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import * as m from '#lib/paraglide/messages';
 
-	const username = page.params.username!;
-	const profile = await client.query.profileByUsername({
-		__args: { username },
+	const id = page.params.id!;
+	const [profile] = await client.liveQuery.users({
+		__args: { where: { id: { eq: id } }, limit: 1 },
 		id: true,
 		username: true,
-		displayUsername: true,
 		image: true
 	});
 
 	let pin = $state('');
 	let message = $state<string>();
 
-	const label = $derived(profile?.displayUsername ?? profile?.username ?? m.unknown_profile());
+	const label = $derived(profile?.username ?? m.unknown_profile());
 
 	async function submit() {
 		try {
-			await client.mutate.login({ __args: { username, pin } });
+			await client.mutate.login({ __args: { username: profile!.username, pin } });
 			await goto('/home');
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.wrong_pin());

@@ -25,7 +25,7 @@ import type {
 } from '#lib/pairing/protocol';
 import { db } from '../db';
 import { pairedDevice } from '../db/schema';
-import { consumePairingToken, getOrCreateTvIdentity } from '../pairing';
+import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from '../pairing';
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
@@ -78,7 +78,7 @@ async function handlePairRequest(
 		return;
 	}
 
-	if (!consumePairingToken(token)) {
+	if (!isPairingTokenValid(token)) {
 		fail(socket, {
 			type: 'pairError',
 			message: 'Pairing code expired or already used'
@@ -88,6 +88,11 @@ async function handlePairRequest(
 
 	const tvIdentity = await getOrCreateTvIdentity();
 	const [row] = await db.insert(pairedDevice).values({ publicKey: devicePublicKey }).returning();
+
+	// Only burn the token once pairing has actually succeeded, so a
+	// transient failure above doesn't permanently invalidate the still
+	// displayed QR code.
+	consumePairingToken(token);
 
 	clearHandshakeTimeout(socket);
 	connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket) });

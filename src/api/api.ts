@@ -9,5 +9,5 @@ import './handlers/register';
 export const yogaInstance = createYoga({
 	graphqlEndpoint: '/api/graphql',
 	maskedErrors: !dev,
-	fetchAPI: { Response }
+	fetchAPI: { Response, ReadableStream }
 });

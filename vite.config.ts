@@ -7,6 +7,11 @@ import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
+	// Works around a bug in the current @sveltejs/kit "next" prerelease: its
+	// verbose build logger calls Node's `styleText('grey', ...)`, but Node
+	// only recognizes the American spelling 'gray', which crashes `vite build`
+	// (see @sveltejs/kit's `log.minor`, only wired up when logLevel is 'info').
+	logLevel: 'warn',
 	// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
 	// dependency doesn't load under Vite's SSR module runner.
 	resolve: {
