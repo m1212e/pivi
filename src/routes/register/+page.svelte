@@ -4,6 +4,7 @@
 	import { usernameError } from '#lib/username';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { graphQLErrorMessage } from '#lib/api/errors';
+	import * as m from '#lib/paraglide/messages';
 
 	let step = $state<'name' | 'pin'>('name');
 	let username = $state('');
@@ -31,7 +32,7 @@
 			await client.mutate.register({ __args: { username: trimmedUsername, pin } });
 			await goto('/home');
 		} catch (err) {
-			message = graphQLErrorMessage(err, 'Could not create profile');
+			message = graphQLErrorMessage(err, m.could_not_create_profile());
 			pin = '';
 		}
 	}
@@ -46,7 +47,7 @@
 	});
 </script>
 
-<svelte:head><title>New Profile — Pivi</title></svelte:head>
+<svelte:head><title>{m.new_profile_title()}</title></svelte:head>
 
 <div
 	class="relative flex min-h-screen flex-col items-center justify-center gap-8 bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 px-8 py-16 text-white"
@@ -61,12 +62,12 @@
 		}}
 		class="absolute top-8 left-8 text-sm font-medium text-white/60 transition hover:text-white focus:outline-none"
 	>
-		&larr; Back
+		&larr; {m.back()}
 	</a>
 
 	<div class="flex flex-col items-center gap-8">
 		{#if step === 'name'}
-			<h1 class="text-2xl font-semibold text-white/95">Choose a username</h1>
+			<h1 class="text-2xl font-semibold text-white/95">{m.choose_username()}</h1>
 			<input
 				bind:this={usernameInput}
 				bind:value={username}
@@ -77,7 +78,7 @@
 						goToPin();
 					}
 				}}
-				placeholder="Username"
+				placeholder={m.username_placeholder()}
 				autocomplete="username"
 				class="w-64 rounded-full bg-white/10 px-6 py-3 text-center text-lg text-white placeholder-white/40 ring-1 ring-white/15 focus:outline-none"
 			/>
@@ -90,10 +91,10 @@
 				disabled={!trimmedUsername || !!nameError}
 				class="rounded-full bg-white px-8 py-3 text-base font-semibold text-indigo-950 transition focus:outline-none enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-30"
 			>
-				Next
+				{m.next()}
 			</button>
 		{:else}
-			<h1 class="text-2xl font-semibold text-white/95">Set a 4-digit PIN</h1>
+			<h1 class="text-2xl font-semibold text-white/95">{m.set_pin()}</h1>
 			<PinPad bind:value={pin} error={message} />
 		{/if}
 	</div>

@@ -3,7 +3,6 @@
 	import { afterNavigate } from '$app/navigation';
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
 
-	let { token }: { token: string } = $props();
 	let socket: WebSocket | undefined;
 	let currentEl: HTMLElement | null = null;
 
@@ -165,7 +164,7 @@
 		const observer = new MutationObserver(scheduleFocusRecheck);
 		observer.observe(document.body, { childList: true, subtree: true });
 
-		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}/${token}`);
+		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
 		socket.onopen = sendState;
 
 		socket.onmessage = (event) => {

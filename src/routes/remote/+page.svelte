@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
 	import PinPad from '#lib/components/PinPad.svelte';
-
-	const token = page.params.token;
+	import * as m from '#lib/paraglide/messages';
 
 	let connected = $state(false);
 	let socket: WebSocket | undefined;
@@ -90,7 +88,7 @@
 	}
 
 	onMount(() => {
-		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}/${token}`);
+		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
 
 		socket.onopen = () => {
 			connected = true;
@@ -117,7 +115,7 @@
 	});
 </script>
 
-<svelte:head><title>Pivi Remote</title></svelte:head>
+<svelte:head><title>{m.remote_title()}</title></svelte:head>
 
 <div
 	class="flex h-dvh flex-col bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 text-white"
@@ -128,14 +126,14 @@
 				onclick={goBack}
 				class="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 			>
-				&larr; Back
+				&larr; {m.back()}
 			</button>
 		{:else}
 			<span></span>
 		{/if}
 		<span class="flex items-center gap-2 text-xs text-white/50">
 			<span class="size-2 rounded-full {connected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
-			{connected ? 'Connected' : 'Connecting…'}
+			{connected ? m.connected() : m.connecting()}
 		</span>
 	</header>
 
@@ -143,13 +141,13 @@
 		{#if tab === 'trackpad'}
 			<div
 				role="application"
-				aria-label="Trackpad"
+				aria-label={m.trackpad_label()}
 				ontouchstart={onTouchStart}
 				ontouchmove={onTouchMove}
 				ontouchend={onTouchEnd}
 				class="flex size-full max-h-96 w-full max-w-sm touch-none items-center justify-center rounded-3xl bg-white/5 ring-1 ring-white/10 select-none"
 			>
-				<p class="px-8 text-center text-sm text-white/40">Swipe to move, tap to select</p>
+				<p class="px-8 text-center text-sm text-white/40">{m.swipe_hint()}</p>
 			</div>
 		{:else if tab === 'pin'}
 			<PinPad bind:value={pin} onkey={onPinKey} oncomplete={onPinComplete} />
@@ -160,15 +158,15 @@
 					bind:value={text}
 					oninput={onTextInput}
 					enterkeyhint="go"
-					placeholder="Type here…"
+					placeholder={m.type_here_placeholder()}
 					class="w-full rounded-full bg-white/10 px-6 py-4 text-center text-lg text-white placeholder-white/40 ring-1 ring-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 				/>
 				<button
 					type="submit"
-					aria-label="Enter"
+					aria-label={m.enter()}
 					class="w-full rounded-full bg-white px-6 py-4 text-lg font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 				>
-					Enter
+					{m.enter()}
 				</button>
 			</form>
 		{/if}

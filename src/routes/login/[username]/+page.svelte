@@ -5,6 +5,7 @@
 	import PinPad from '#lib/components/PinPad.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { graphQLErrorMessage } from '#lib/api/errors';
+	import * as m from '#lib/paraglide/messages';
 
 	const username = page.params.username!;
 	const profile = await client.query.profileByUsername({
@@ -18,14 +19,14 @@
 	let pin = $state('');
 	let message = $state<string>();
 
-	const label = $derived(profile?.displayUsername ?? profile?.username ?? 'Profile');
+	const label = $derived(profile?.displayUsername ?? profile?.username ?? m.unknown_profile());
 
 	async function submit() {
 		try {
 			await client.mutate.login({ __args: { username, pin } });
 			await goto('/home');
 		} catch (err) {
-			message = graphQLErrorMessage(err, 'Wrong PIN');
+			message = graphQLErrorMessage(err, m.wrong_pin());
 			pin = '';
 		}
 	}
@@ -36,7 +37,7 @@
 	});
 </script>
 
-<svelte:head><title>{label} — Pivi</title></svelte:head>
+<svelte:head><title>{m.profile_title({ name: label })}</title></svelte:head>
 
 <div
 	class="flex min-h-screen flex-col items-center justify-center gap-8 bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 px-8 py-16 text-white"
@@ -45,11 +46,11 @@
 		href="/"
 		class="absolute top-8 left-8 text-sm font-medium text-white/60 transition hover:text-white focus:outline-none"
 	>
-		&larr; Back
+		&larr; {m.back()}
 	</a>
 
 	{#if !profile}
-		<h1 class="text-2xl font-semibold text-white/95">Profile not found</h1>
+		<h1 class="text-2xl font-semibold text-white/95">{m.profile_not_found()}</h1>
 	{:else}
 		<span
 			class="flex size-24 items-center justify-center overflow-hidden rounded-full"
@@ -62,7 +63,7 @@
 			{/if}
 		</span>
 
-		<h1 class="text-2xl font-semibold text-white/95">Enter PIN for {label}</h1>
+		<h1 class="text-2xl font-semibold text-white/95">{m.enter_pin_for({ name: label })}</h1>
 
 		<PinPad bind:value={pin} error={message} />
 	{/if}

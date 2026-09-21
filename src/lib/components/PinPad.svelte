@@ -1,4 +1,6 @@
 <script lang="ts">
+	import * as m from '#lib/paraglide/messages';
+
 	let {
 		length = 4,
 		value = $bindable(''),
@@ -53,7 +55,7 @@
 					type="button"
 					data-key="backspace"
 					onclick={backspace}
-					aria-label="Backspace"
+					aria-label={m.backspace()}
 					class="flex size-16 items-center justify-center rounded-full text-xl font-medium text-white/70 transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 				>
 					⌫

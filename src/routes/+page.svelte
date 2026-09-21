@@ -3,6 +3,7 @@
 	import PairingQr from '#lib/components/PairingQr.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { getPairing } from '#lib/state/pairing.svelte';
+	import * as m from '#lib/paraglide/messages';
 
 	const profiles = await client.query.profiles({
 		id: true,
@@ -18,11 +19,13 @@
 <div
 	class="flex min-h-screen flex-col items-center justify-center gap-16 bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 px-8 py-16 text-white"
 >
-	<h1 class="text-4xl font-semibold tracking-tight text-white/95 sm:text-5xl">Who's watching?</h1>
+	<h1 class="text-4xl font-semibold tracking-tight text-white/95 sm:text-5xl">
+		{m.who_is_watching()}
+	</h1>
 
 	<div class="flex flex-wrap items-start justify-center gap-x-12 gap-y-10">
 		{#each profiles as profile (profile.id)}
-			{@const label = profile.displayUsername ?? profile.username ?? 'Profile'}
+			{@const label = profile.displayUsername ?? profile.username ?? m.unknown_profile()}
 			<a
 				href="/login/{profile.username}"
 				class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
@@ -61,7 +64,7 @@
 					/>
 				</svg>
 			</span>
-			<span class="text-lg font-medium text-white/70">New Profile</span>
+			<span class="text-lg font-medium text-white/70">{m.new_profile()}</span>
 		</a>
 	</div>
 
@@ -69,8 +72,8 @@
 		<div class="flex items-center gap-5 rounded-3xl bg-white/5 px-6 py-5 ring-1 ring-white/10">
 			<PairingQr url={pairing.remoteUrl} size={192} />
 			<div class="max-w-56 text-sm text-white/60">
-				<p class="font-medium text-white/90">Scan with your phone</p>
-				<p>Use it as a trackpad, PIN pad, and keyboard to control this screen.</p>
+				<p class="font-medium text-white/90">{m.scan_with_phone()}</p>
+				<p>{m.remote_description()}</p>
 			</div>
 		</div>
 	{/if}
