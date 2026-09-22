@@ -111,8 +111,9 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
 - **OS/base image**: deferred. Leaning toward NixOS for declarative, minimal
   config, but Raspberry Pi OS Lite is the fallback if Pi GPU/media driver
   support in Nix proves too immature. The app itself should stay OS-agnostic
-  (a systemd unit + a documented runtime dependency list) so this stays a
-  packaging decision, not an architecture one.
+  (a systemd unit + a documented runtime dependency list — see
+  RUNTIME_DEPENDENCIES.md) so this stays a packaging decision, not an
+  architecture one.
 
 ## Proposed tech stack
 
@@ -156,6 +157,29 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   - **Immich** — REST API, mostly for browsing/casting photos
   - **Twitch** — Helix API + HLS stream URLs
   - **YouTube** — dual plugin: Invidious/yt-dlp extraction (ad-free) + Cast-from-phone fallback
+    - Built as a prototype (`plugins/youtube/`) to validate the plugin
+      contracts; ended up a genuine two-source browsing design, not the
+      single "Invidious/yt-dlp" line above:
+      - **Signed out / generic**: a self-hosted Invidious instance as a
+        sidecar (`docker-compose.yaml`, see `RUNTIME_DEPENDENCIES.md`),
+        called over its plain REST API (`plugins/youtube/invidious.ts`) for
+        trending/search. Landed here after direct authenticated InnerTube
+        calls (`youtubei.js`) reliably 400ed on the WEB client (OAuth-only
+        auth, no cookie) — Invidious already does that reverse-engineering
+        itself, no reason to redo it for the generic case.
+      - **Signed in**: this account's actual personalized YouTube home feed
+        (`plugins/youtube/tvHomeFeed.ts`), via the TV InnerTube client — the
+        one client OAuth2 is documented to work with. `youtubei.js`'s own
+        typed WEB-oriented parser classes (`HomeFeed`/`Search`) can't read
+        TV's response shape, but the raw TV JSON turned out to be plain and
+        readable (unobfuscated field names), so this walks it directly with
+        a small recursive tile-finder instead of needing typed parser
+        classes — cheaper than it looked at first. A PO token (BotGuard
+        attestation, via `bgutils-js`) was tried and ruled out along the way
+        as unrelated to the WEB-client 400s.
+      - Sign-in itself (`plugins/youtube/auth.ts`) goes through `youtubei.js`
+        directly either way — device-code OAuth2, no registered Google
+        client needed.
 
 ### Playback engine
 

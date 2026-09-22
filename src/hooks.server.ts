@@ -28,9 +28,11 @@ const handleActiveProfile: Handle = async ({ event, resolve }) => {
 	const user = await getActiveProfileUser();
 	if (user) event.locals.user = user;
 
-	// Pages no longer gate themselves with a `load` function, so /home's
-	// "must have an active profile" check lives here instead.
-	if (!user && event.url.pathname === '/home') redirect(302, '/');
+	// Pages no longer gate themselves with a `load` function, so /home's (and
+	// any app page's) "must have an active profile" check lives here instead.
+	if (!user && (event.url.pathname === '/home' || event.url.pathname.startsWith('/apps/'))) {
+		redirect(302, '/');
+	}
 
 	return resolve(event);
 };

@@ -5,6 +5,8 @@ import { startPairingRelay } from '../ws/relay';
 import './user';
 import './pairing';
 import './auth';
+import './youtube';
+import './remote';
 
 if (!building) {
 	startPairingRelay();

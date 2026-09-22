@@ -36,3 +36,16 @@ export const tvIdentity = snakeCase.table('tv_identity', {
 	secretKey: text().notNull(),
 	...defaultTimestamps
 });
+
+// One opaque, encrypted blob per (user, plugin) — see
+// src/api/plugins/credentials.ts. The blob's shape is up to the plugin; the
+// host never reads it, only stores and returns it.
+export const pluginCredential = snakeCase.table('plugin_credential', {
+	...defaultIdAndTimestamps,
+	userId: text()
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	pluginId: text().notNull(),
+	nonce: text().notNull(),
+	ciphertext: text().notNull()
+});

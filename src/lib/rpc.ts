@@ -1,7 +1,7 @@
 // Thin layer over vscode-jsonrpc's MessageConnection: the library owns
 // framing, request/response correlation, and transport (stdio, a Node IPC
 // channel, a WebSocket, or the push-based pairing transport in
-// pairing/rpcTransport.ts), which is exactly what any of pivi's process/
+// rpcTransport.ts), which is exactly what any of pivi's process/
 // device boundaries need and is deliberately not reinvented per boundary.
 // It doesn't validate payloads on its own, though, so every send/handle
 // still goes through the matching zod schema — that's the actual runtime

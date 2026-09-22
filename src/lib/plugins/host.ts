@@ -8,7 +8,7 @@
 // back to its request) is handled by the library instead of by us — no more
 // manually-paired httpRequest/httpResponse messages with a requestId to
 // track by hand.
-import { NotificationType, NotificationType0, RequestType } from 'vscode-jsonrpc';
+import { NotificationType, NotificationType0, RequestType, RequestType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
 import { pluginManifestSchema } from './manifest';
 import { dashboardContributionSchema } from './dashboard';
@@ -76,6 +76,37 @@ export const logParamsSchema = z.object({
 
 export const logNotification = new NotificationType<z.infer<typeof logParamsSchema>>('plugin/log');
 
+// Opaque to the host — a plugin-defined JSON blob (an OAuth refresh token,
+// for the YouTube plugin). The host stamps the requesting plugin's id and
+// the currently active profile's user id onto the storage key itself; a
+// plugin has no way to name a different plugin or user, so it can only ever
+// reach its own credential for whoever is signed in right now.
+export const credentialSetParamsSchema = z.object({ value: z.string() });
+
+export const credentialSetRequest = new RequestType<
+	z.infer<typeof credentialSetParamsSchema>,
+	void,
+	void
+>('plugin/credentialSet');
+
+export const credentialGetResultSchema = z.object({ value: z.string().nullable() });
+
+export const credentialGetRequest = new RequestType0<
+	z.infer<typeof credentialGetResultSchema>,
+	void
+>('plugin/credentialGet');
+
+// A plugin building a PhoneAuthHandoff's redirect_uri needs to know a base
+// URL the phone can actually reach (a LAN address, not localhost) — only
+// the host knows that. Generic on purpose: any plugin doing a redirect-based
+// login needs this, not just one that happens to be OAuth.
+export const publicOriginResultSchema = z.object({ origin: z.string() });
+
+export const getPublicOriginRequest = new RequestType0<
+	z.infer<typeof publicOriginResultSchema>,
+	void
+>('plugin/getPublicOrigin');
+
 // Host -> plugin
 
 export const activateNotification = new NotificationType0('host/activate');
@@ -86,6 +117,15 @@ export const uiEventNotification = new NotificationType<z.infer<typeof uiEventSc
 
 export const sessionEndedNotification = new NotificationType<z.infer<typeof sessionEndedSchema>>(
 	'host/sessionEnded'
+);
+
+// Delivered once the phone completes a PhoneAuthHandoff and Google (or
+// whatever the plugin's login provider is) redirects back to pivi's own
+// server — see src/routes/oauth/callback and src/api/plugins/pendingAuth.ts.
+export const oauthCodeParamsSchema = z.object({ code: z.string(), state: z.string() });
+
+export const oauthCodeNotification = new NotificationType<z.infer<typeof oauthCodeParamsSchema>>(
+	'host/oauthCode'
 );
 
 export const shutdownNotification = new NotificationType0('host/shutdown');

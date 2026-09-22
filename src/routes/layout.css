@@ -2,6 +2,19 @@
 @plugin '@tailwindcss/typography';
 
 /*
+ * Every page in this app is dark, but html/body themselves are never given a
+ * background - during the zoom view transition below, the old/new page
+ * snapshots are scaled down (to <100%), which exposes whatever's behind them
+ * for that fraction of a second. Without this it's the browser's own default
+ * white, flashing through the gap on every navigation.
+ */
+html,
+body {
+	background-color: var(--color-slate-950);
+	color-scheme: dark;
+}
+
+/*
  * The one and only selection indicator on TV screens — applied/removed
  * directly by RemoteBridge on every focus change (remote swipe, direct tap,
  * Tab key), rather than `:focus-visible`. Chromium suppresses
@@ -136,6 +149,52 @@
 }
 .scrollbar-none::-webkit-scrollbar {
 	display: none;
+}
+
+/*
+ * Page-to-page zoom, driven by the View Transitions API (see +layout.svelte's
+ * onNavigate). `::view-transition-old/new(root)` are pseudo-elements Chrome
+ * creates for the whole-page snapshot on either side of a transition — they
+ * can only be targeted from global CSS, never a component's scoped styles,
+ * which is why this lives here rather than next to the pages themselves.
+ * Browsers without support (there's no support outside Chromium engines yet)
+ * just skip straight to the new DOM, no fallback needed.
+ */
+@keyframes pivi-zoom-out-old {
+	to {
+		transform: scale(1.08);
+		opacity: 0;
+	}
+}
+@keyframes pivi-zoom-out-new {
+	from {
+		transform: scale(0.92);
+		opacity: 0;
+	}
+}
+@keyframes pivi-zoom-in-old {
+	to {
+		transform: scale(0.92);
+		opacity: 0;
+	}
+}
+@keyframes pivi-zoom-in-new {
+	from {
+		transform: scale(1.08);
+		opacity: 0;
+	}
+}
+html[data-view-transition='zoom-out']::view-transition-old(root) {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both pivi-zoom-out-old;
+}
+html[data-view-transition='zoom-out']::view-transition-new(root) {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both pivi-zoom-out-new;
+}
+html[data-view-transition='zoom-in']::view-transition-old(root) {
+	animation: 380ms cubic-bezier(0.4, 0, 0.2, 1) both pivi-zoom-in-old;
+}
+html[data-view-transition='zoom-in']::view-transition-new(root) {
+	animation: 380ms cubic-bezier(0.4, 0, 0.2, 1) both pivi-zoom-in-new;
 }
 
 /* A card sitting right at a shelf's edge is deliberately only partly

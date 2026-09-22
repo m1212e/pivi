@@ -2,13 +2,21 @@
 	import { onMount } from 'svelte';
 	import { Smartphone, Unplug } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
+	// The bare package, not a /node or /browser subpath — see rpcRal.ts for
+	// why (Vite can't consistently resolve those conditional-only exports
+	// for a component that's reachable from both a server and browser
+	// build). ensureRal() below installs the RAL createMessageConnection
+	// needs, which those subpaths would otherwise have done as a side
+	// effect of importing them.
 	import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
 	import type { TvHello } from '#lib/pairing/protocol';
-	import { PushMessageReader, SinkMessageWriter } from '#lib/pairing/rpcTransport';
+	import { ensureRal } from '#lib/rpcRal';
+	import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
 	import {
 		backNotification,
+		goHomeNotification,
 		enterNotification,
 		keyNotification,
 		keyParamsSchema,
@@ -89,7 +97,11 @@
 		sendNotification(connection, stateNotification, stateParamsSchema, {
 			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
 			hasTextInput: !!focusedTextInput(),
-			canGoBack: location.pathname !== '/'
+			canGoBack: location.pathname !== '/',
+			// Mirrors hooks.server.ts's own definition of "has an active
+			// profile" (the routes it guards), rather than adding a separate
+			// auth query just for this.
+			isLoggedIn: location.pathname === '/home' || location.pathname.startsWith('/apps/')
 		});
 	}
 
@@ -252,6 +264,7 @@
 		const observer = new MutationObserver(scheduleFocusRecheck);
 		observer.observe(document.body, { childList: true, subtree: true });
 
+		ensureRal();
 		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
 
 		const reader = new PushMessageReader();
@@ -268,6 +281,7 @@
 			if (document.activeElement instanceof HTMLElement) document.activeElement.click();
 		});
 		connection.onNotification(backNotification, () => history.back());
+		connection.onNotification(goHomeNotification, () => goto('/home'));
 		onNotification(connection, keyNotification, keyParamsSchema, ({ value }) => pressPinKey(value));
 		onNotification(connection, textNotification, textParamsSchema, ({ value }) =>
 			setFocusedText(value)

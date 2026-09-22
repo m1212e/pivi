@@ -11,7 +11,17 @@ import { z } from 'zod';
 export const sessionRequestSchema = z.object({
 	pluginId: z.string(),
 	sessionId: z.string(),
-	needs: z.array(z.enum(['display-exclusive', 'input-gamepad']))
+	needs: z.array(z.enum(['display-exclusive', 'input-gamepad'])),
+	// Present for a playback session (the first real consumer, the YouTube
+	// plugin): the resolved, directly playable stream URL. `audioUrl` is
+	// separate rather than assumed-muxed-into `url` — most modern YouTube
+	// formats are video-only + audio-only rather than one combined file, so
+	// the player needs to open both. A future session kind that isn't "play
+	// this URL" (game streaming, say) would need its own optional field
+	// alongside this one rather than overloading it.
+	media: z
+		.object({ url: z.string(), audioUrl: z.string().optional(), title: z.string().optional() })
+		.optional()
 });
 
 export type SessionRequest = z.infer<typeof sessionRequestSchema>;

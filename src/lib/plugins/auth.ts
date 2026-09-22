@@ -17,14 +17,19 @@ export const deviceCodeAuthSchema = z.object({
 
 export type DeviceCodeAuth = z.infer<typeof deviceCodeAuthSchema>;
 
-// For services without a device-flow grant: hand the actual login webview
-// to the paired phone (real keyboard, password manager, 2FA autofill)
-// rather than rendering a form on the TV, reusing the same pairing
-// mechanism as src/lib/pairing.
+// The default login mechanism: a normal OAuth redirect flow, completed on
+// the paired phone (real keyboard, password manager, 2FA autofill) rather
+// than a per-plugin login screen on the TV. `state` is the plugin's own
+// CSRF nonce (round-tripped through the redirect so it can verify the
+// callback matches the flow it started); the host also uses it to route
+// the resulting code back to the right plugin (see
+// src/api/plugins/pendingAuth.ts) so it's namespaced with the plugin id.
 export const phoneAuthHandoffSchema = z.object({
 	pluginId: z.string(),
 	loginUrl: z.string(),
-	redirectUrl: z.string()
+	redirectUrl: z.string(),
+	state: z.string(),
+	status: z.enum(['pending', 'complete', 'error'])
 });
 
 export type PhoneAuthHandoff = z.infer<typeof phoneAuthHandoffSchema>;

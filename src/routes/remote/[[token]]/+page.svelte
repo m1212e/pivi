@@ -1,16 +1,22 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	// The bare package, not a /node or /browser subpath — see rpcRal.ts for
+	// why. ensureRal() below installs the RAL createMessageConnection needs.
 	import { createMessageConnection, type Message, type MessageConnection } from 'vscode-jsonrpc';
 	import { page } from '$app/state';
 	import { connectRemoteSession, type RemoteSession } from '#lib/pairing/session';
-	import { PushMessageReader, SinkMessageWriter } from '#lib/pairing/rpcTransport';
+	import { ensureRal } from '#lib/rpcRal';
+	import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
 	import {
 		backNotification,
 		enterNotification,
+		goHomeNotification,
 		keyNotification,
 		keyParamsSchema,
 		moveNotification,
 		moveParamsSchema,
+		openUrlNotification,
+		openUrlParamsSchema,
 		requestStateNotification,
 		selectNotification,
 		stateNotification,
@@ -34,6 +40,7 @@
 	let hasPinPad = $state(false);
 	let hasTextInput = $state(false);
 	let canGoBack = $state(false);
+	let isLoggedIn = $state(false);
 
 	const tab = $derived(hasPinPad ? 'pin' : hasTextInput ? 'keyboard' : 'trackpad');
 
@@ -95,6 +102,11 @@
 		navigator.vibrate?.(8);
 	}
 
+	function goHome() {
+		connection?.sendNotification(goHomeNotification);
+		navigator.vibrate?.(8);
+	}
+
 	function onPinKey(key: string) {
 		if (!connection) return;
 		sendNotification(connection, keyNotification, keyParamsSchema, { value: key });
@@ -124,6 +136,13 @@
 		window.visualViewport?.addEventListener('resize', updateKeyboardState);
 		updateKeyboardState();
 
+		// Registered only from this route (not the root layout) so installing
+		// "Pivi Remote" to the home screen doesn't put a service worker in
+		// front of the rest of the app.
+		navigator.serviceWorker?.register('/remote/sw.js', { scope: '/remote/' }).catch(() => {});
+
+		ensureRal();
+
 		// The reader/writer are wired up before `session` exists — the writer
 		// sends through whatever `session` holds at call time, and nothing
 		// sends anything until the `.then()` below assigns it, so there's no
@@ -137,13 +156,23 @@
 			hasPinPad = state.hasPinPad;
 			hasTextInput = state.hasTextInput;
 			canGoBack = state.canGoBack;
+			isLoggedIn = state.isLoggedIn;
+		});
+		// Sent directly by the host (not the TV) when a plugin hands off a
+		// login — see relay.ts's sendToPhones and SKETCH.md's "Login"
+		// decision. A full navigation, not a popup: Google's login page
+		// refuses to load in an iframe/embedded context anyway, and this is a
+		// real page belonging to a different origin, not something we render
+		// ourselves.
+		onNotification(connection, openUrlNotification, openUrlParamsSchema, ({ url }) => {
+			window.location.href = url;
 		});
 		connection.listen();
 
 		connectRemoteSession(page.params.token ?? null, {
-			// session.ts's callback type is a plain object — cast to vscode-
-			// jsonrpc's Message, since every message on this channel is now
-			// always a real JSON-RPC frame the TV's connection produced.
+			// session.ts's callback type is a plain object — cast to
+			// vscode-jsonrpc's Message, since every message on this channel is
+			// now always a real JSON-RPC frame the TV's connection produced.
 			onMessage: (message) => reader.push(message as unknown as Message),
 			onClose: () => (connected = false)
 		})
@@ -173,25 +202,55 @@
 	});
 </script>
 
-<svelte:head><title>{m.remote_title()}</title></svelte:head>
+<svelte:head>
+	<title>{m.remote_title()}</title>
+	<link rel="manifest" href="/remote/manifest.webmanifest" />
+	<meta name="theme-color" content="#020617" />
+	<link rel="apple-touch-icon" href="/remote/apple-touch-icon.png" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+	<meta name="apple-mobile-web-app-title" content={m.remote_title()} />
+</svelte:head>
 
 <div
 	class="flex h-dvh flex-col bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 text-white"
 >
 	{#if phase === 'ready'}
-		<header class="flex items-center justify-between px-4 pt-4 pb-2">
-			{#if canGoBack}
+		<header class="grid grid-cols-3 items-center px-4 pt-4 pb-2">
+			<div class="justify-self-start">
+				{#if canGoBack}
+					<button
+						type="button"
+						onclick={goBack}
+						class="rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+					>
+						&larr; {m.back()}
+					</button>
+				{/if}
+			</div>
+			{#if isLoggedIn}
 				<button
 					type="button"
-					onclick={goBack}
-					class="rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+					onclick={goHome}
+					aria-label={m.home()}
+					class="justify-self-center rounded-full bg-white/12 p-3 text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
 				>
-					&larr; {m.back()}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="size-5"
+					>
+						<path d="M3 10.5 12 3l9 7.5" />
+						<path d="M5.5 9.5V20a1 1 0 0 0 1 1h4v-6h3v6h4a1 1 0 0 0 1-1V9.5" />
+					</svg>
 				</button>
-			{:else}
-				<span></span>
 			{/if}
-			<span class="flex items-center gap-2 text-xs text-white/50">
+			<span class="flex items-center gap-2 justify-self-end text-xs text-white/50">
 				<span class="size-2 rounded-full {connected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
 				{connected ? m.connected() : m.connecting()}
 			</span>

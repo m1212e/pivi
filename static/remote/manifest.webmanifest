@@ -1,0 +1,31 @@
+{
+	"name": "Pivi Remote",
+	"short_name": "Pivi Remote",
+	"description": "Control your Pivi TV screen from your phone.",
+	"start_url": "/remote",
+	"scope": "/remote/",
+	"display": "standalone",
+	"orientation": "portrait",
+	"background_color": "#020617",
+	"theme_color": "#020617",
+	"icons": [
+		{
+			"src": "/remote/icon-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/remote/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/remote/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}

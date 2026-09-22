@@ -64,7 +64,7 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^1.47.0",
-		"@m1212e/rumble": "^0.23.21",
+		"@m1212e/rumble": "^0.23.22",
 		"@noble/ciphers": "^2.4.0",
 		"@noble/curves": "^2.4.0",
 		"@noble/hashes": "^2.4.0",
@@ -76,10 +76,13 @@
 		"node-cron": "^4.6.0",
 		"pg": "^8.23.0",
 		"qr-code-styling": "^1.9.2",
+		"svelte-inview": "^4.0.4",
 		"svelte-sonner": "^1.2.1",
 		"vscode-jsonrpc": "^9.0.2",
 		"wonka": "^6.3.6",
 		"ws": "^8.21.3",
+		"youtubei.js": "^18.0.0",
+		"yt-dlp-wrap": "^2.3.12",
 		"zod": "^4.5.4"
 	}
 }

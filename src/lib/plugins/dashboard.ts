@@ -59,3 +59,16 @@ export const dashboardContributionSchema = z.object({
 });
 
 export type DashboardContribution = z.infer<typeof dashboardContributionSchema>;
+
+// Turns a card's action into a URL for the app it belongs to, generic over
+// whichever plugin the card came from — a dashboard card and the app's own
+// UI reaching the same place go through the same query param convention
+// (the app's +page.svelte reads `deepLink` back out and forwards it to the
+// plugin as a UI event) rather than the host needing to know what a
+// `deepLink` target string means for any particular plugin.
+export function pluginActionHref(appHref: string, action: PluginAction): string {
+	if (action.type === 'deepLink') {
+		return `${appHref}?deepLink=${encodeURIComponent(action.target)}`;
+	}
+	return appHref;
+}

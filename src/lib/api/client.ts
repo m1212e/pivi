@@ -63,5 +63,14 @@ export const urqlClient = new Client({
 	// graphql-yoga serves subscriptions over SSE on the same endpoint, and
 	// fetchExchange only picks up "subscription" operations (as used by
 	// liveQuery) when this is set — otherwise they're left unhandled.
-	fetchSubscriptions: true
+	fetchSubscriptions: true,
+	// Several pages poll a liveQuery on a plain setInterval instead of a real
+	// subscription (anything not backed by a DB table rumble can push
+	// updates for — the YouTube plugin's auth/screen/dashboard fields, the
+	// pairing QR refresh): urql's default 'cache-first' policy serves those
+	// repeat identical queries straight from cache and never re-fetches, so
+	// the UI silently never sees the change on the server (e.g. a device
+	// code appearing after "Sign in" is clicked). 'cache-and-network' keeps
+	// the fast cached response but always revalidates over the network too.
+	requestPolicy: 'cache-and-network'
 });

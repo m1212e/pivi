@@ -12,10 +12,10 @@ export default defineConfig({
 	// only recognizes the American spelling 'gray', which crashes `vite build`
 	// (see @sveltejs/kit's `log.minor`, only wired up when logLevel is 'info').
 	logLevel: 'warn',
-	// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
-	// dependency doesn't load under Vite's SSR module runner.
 	resolve: {
 		alias: {
+			// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
+			// dependency doesn't load under Vite's SSR module runner.
 			'lib-address': fileURLToPath(new URL('./src/api/lib-address-shim.ts', import.meta.url))
 		}
 	},

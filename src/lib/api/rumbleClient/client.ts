@@ -206,8 +206,10 @@ export type Locale = unknown;
 
 export type Mutation = {
 	login: (p: { pin: String; username: String }) => Boolean;
+	openUrlOnPhone: (p: { url: String }) => Boolean;
 	register: (p: { pin: String; username: String }) => Boolean;
 	signOut: Boolean;
+	youtubeUiEvent: (p: { eventId: String; value?: String | null | undefined }) => Boolean;
 };
 
 export type Pairing = {
@@ -228,6 +230,9 @@ export type Query = {
 		orderBy?: UserOrderInputArgument | null | undefined;
 		where?: UserWhereInputArgument | null | undefined;
 	}) => User[];
+	youtubeAuth: () => YoutubeAuth | null;
+	youtubeDashboard: () => YoutubeCard[];
+	youtubeScreen: () => YoutubeScreen;
 };
 
 export type SortingParameter = 'asc' | 'desc';
@@ -265,6 +270,9 @@ export type Subscription = {
 		orderBy?: UserOrderInputArgument | null | undefined;
 		where?: UserWhereInputArgument | null | undefined;
 	}) => User[];
+	youtubeAuth: () => YoutubeAuth | null;
+	youtubeDashboard: () => YoutubeCard[];
+	youtubeScreen: () => YoutubeScreen;
 };
 
 export type User = {
@@ -297,6 +305,25 @@ export type UserWhereInputArgument = {
 	username?: StringWhereInputArgument | null | undefined;
 };
 
+export type YoutubeAuth = {
+	status: String;
+	userCode: String;
+	verificationUrl: String;
+};
+
+export type YoutubeCard = {
+	actionJson: String;
+	appName: String;
+	id: String;
+	image: String;
+	subtitle: String;
+	title: String;
+};
+
+export type YoutubeScreen = {
+	json: String | null;
+};
+
 export const defaultOptions: ConstructorParameters<Client>[0] = {
 	url: '/api/graphql',
 	fetchSubscriptions: true,
@@ -318,7 +345,13 @@ export const client = {
 	 */
 	liveQuery: makeLiveQuery<Query>({
 		urqlClient,
-		availableSubscriptions: new Set(['user', 'users']),
+		availableSubscriptions: new Set([
+			'user',
+			'users',
+			'youtubeAuth',
+			'youtubeDashboard',
+			'youtubeScreen'
+		]),
 		schema
 	}),
 	/**

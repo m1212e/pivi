@@ -337,3 +337,21 @@ function relayFromPhone(
 		if (tv.readyState === WebSocket.OPEN) tv.send(plaintext);
 	}
 }
+
+// Lets server-side code outside this module (the plugin host, for a
+// PhoneAuthHandoff — see plugins/runtime.ts) push a JSON-RPC notification
+// straight to whatever phone is currently paired, without going through the
+// TV at all. `message` must already be a valid JSON-RPC notification frame
+// (`{jsonrpc: '2.0', method, params}`) — construct it from the relevant
+// NotificationType's `.method`, the same way the two calls in this file do.
+export function sendToPhones(message: { jsonrpc: string; method: string; params?: unknown }) {
+	const raw = JSON.stringify(message);
+	for (const [socket, state] of phoneSocketsWithKeys()) {
+		const { nonce, ciphertext } = encrypt(state.s2cKey, utf8ToBytes(raw));
+		send(socket, {
+			type: 'enc',
+			nonce: toBase64Url(nonce),
+			ciphertext: toBase64Url(ciphertext)
+		} satisfies Encrypted);
+	}
+}

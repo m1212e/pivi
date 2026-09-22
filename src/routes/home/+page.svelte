@@ -1,15 +1,25 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
-	import HeroBanner from '#lib/components/HeroBanner.svelte';
+	import { pluginActionSchema, pluginActionHref } from '#lib/plugins/dashboard';
 	import PairingQr from '#lib/components/PairingQr.svelte';
-	import ContinueWatchingRow from '#lib/components/ContinueWatchingRow.svelte';
-	import PosterRow from '#lib/components/PosterRow.svelte';
+	import HeroBanner from '#lib/components/HeroBanner.svelte';
+	import HeroBannerSkeleton from '#lib/components/HeroBannerSkeleton.svelte';
+	import VideoRow from '#lib/components/VideoRow.svelte';
+	import VideoRowSkeleton from '#lib/components/VideoRowSkeleton.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import * as m from '#lib/paraglide/messages';
+
+	// The one real installed plugin — see plugins/youtube/manifest.ts. A
+	// generic plugin registry (listing whatever's actually installed) is the
+	// eventual real source for this; hardcoded here since there's exactly
+	// one plugin to hardcode.
+	const apps = [{ id: 'youtube', name: 'YouTube', href: '/apps/youtube' }];
 
 	const me = await client.liveQuery.user({
 		__args: { id: page.data.userId },
@@ -17,6 +27,73 @@
 		username: true
 	});
 	const label = me?.username;
+
+	// Real plugin-sourced data (see src/api/handlers/youtube.ts), alongside
+	// the placeholder rows below — proves the Tier 1 dashboard contract
+	// (src/lib/plugins/dashboard.ts) actually reaches the real UI. The
+	// initial value comes from this top-level await (so SSR still renders
+	// real content, not a loading flash); a real push subscription — not a
+	// polling setInterval — keeps it live afterward, since urql's
+	// cache-first default otherwise hides the fact a plain repeated query
+	// never actually sees server-side changes.
+	type YoutubeCard = {
+		id: string;
+		title: string;
+		subtitle: string;
+		image: string;
+		appName: string;
+		actionJson: string;
+	};
+	const YOUTUBE_CARD_FIELDS = {
+		id: true,
+		title: true,
+		subtitle: true,
+		image: true,
+		appName: true,
+		actionJson: true
+	} as const;
+
+	// Where a card's own app lives — the same "which app this card is from"
+	// question the source badge already answers, so this doesn't need
+	// generalizing further until a second plugin's cards show up alongside it.
+	const YOUTUBE_APP_HREF = '/apps/youtube';
+	function cardHref(card: YoutubeCard): string {
+		return pluginActionHref(
+			YOUTUBE_APP_HREF,
+			pluginActionSchema.parse(JSON.parse(card.actionJson))
+		);
+	}
+	// Copied into a plain array rather than assigned directly: what
+	// liveQuery resolves to (and what .subscribe()'s callback hands back) is
+	// a memoized Proxy over rumble's own internal, mutable "current data"
+	// slot — the SAME object reference on every emission for a given call.
+	// Reassigning $state to a reference-equal value is a no-op for Svelte's
+	// reactivity, so later pushes through that proxy could silently fail to
+	// invalidate $derived state depending on it (observed: the hero staying
+	// stuck on its very first value while the shelf below kept updating).
+	// Spreading into a fresh array each time guarantees a new reference.
+	let youtubeCards = $state<YoutubeCard[]>([
+		...(await client.liveQuery.youtubeDashboard(YOUTUBE_CARD_FIELDS))
+	]);
+	onMount(() => {
+		// .subscribe() returns an ES Observable Subscription object
+		// (.unsubscribe()), not a plain unsubscribe function — returning it
+		// directly as onMount's cleanup throws "not a function" the moment
+		// Svelte actually calls it (client-side navigation away from /home).
+		const subscription = client.liveQuery
+			.youtubeDashboard(YOUTUBE_CARD_FIELDS)
+			.subscribe((value) => {
+				youtubeCards = value ? [...value] : [];
+			});
+		return () => subscription.unsubscribe();
+	});
+
+	// Whatever the dashboard's top-ranked card happens to be becomes the hero
+	// — generic over whichever plugin's cards these are, so this doesn't
+	// need touching as more plugins start contributing cards. Pulled out of
+	// its row so it isn't shown twice.
+	const heroCard = $derived(youtubeCards[0]);
+	const shelfCards = $derived(youtubeCards.slice(1));
 
 	async function signOut() {
 		await client.mutate.signOut();
@@ -56,103 +133,6 @@
 			for (const event of activityEvents) document.removeEventListener(event, scrollToTopWhenIdle);
 		};
 	});
-
-	// Placeholder content until a real media/apps backend exists — shaped the
-	// way that data will eventually arrive (a featured item, a "continue"
-	// list with progress, a flat app list) so the rows below only need their
-	// data source swapped later, not their layout.
-	// picsum.photos serves real (if unrelated) stock photos rather than solid
-	// color blocks — a seeded URL keeps each card's image stable across
-	// reloads without needing actual licensed poster art.
-	function placeholderImage(seed: string, width: number, height: number) {
-		return `https://picsum.photos/seed/${seed}/${width}/${height}`;
-	}
-
-	const featured = {
-		title: 'Breaking Bad',
-		badge: 'Continue the story',
-		description:
-			'A high school chemistry teacher diagnosed with terminal cancer turns to manufacturing methamphetamine to secure his family’s future.',
-		image: placeholderImage('breaking-bad', 1600, 900)
-	};
-
-	const continueWatching = [
-		{ id: 'c1', title: 'Ozymandias', subtitle: 'Breaking Bad · S5E14', progress: 0.65 },
-		{
-			id: 'c2',
-			title: 'Chapter Eight: The Battle of Starcourt',
-			subtitle: 'Stranger Things · S3E8',
-			progress: 0.3
-		},
-		{ id: 'c3', title: 'Winter Is Coming', subtitle: 'Game of Thrones · S1E1', progress: 0.1 },
-		{ id: 'c4', title: 'Fly', subtitle: 'Better Call Saul · S3E10', progress: 0.85 },
-		{ id: 'c5', title: 'Pilot', subtitle: 'The Office · S1E1', progress: 0.2 },
-		{
-			id: 'c6',
-			title: 'Chapter One: The Vanishing of Will Byers',
-			subtitle: 'Stranger Things · S1E1',
-			progress: 0.5
-		},
-		{
-			id: 'c7',
-			title: 'The Rains of Castamere',
-			subtitle: 'Game of Thrones · S3E9',
-			progress: 0.4
-		},
-		{ id: 'c8', title: 'Tokyo', subtitle: 'Money Heist · S1E1', progress: 0.75 }
-	].map((item) => ({ ...item, image: placeholderImage(item.id, 400, 225) }));
-
-	const apps = [
-		{ id: 'a1', name: 'Movies' },
-		{ id: 'a2', name: 'Shows' },
-		{ id: 'a3', name: 'Live TV' },
-		{ id: 'a4', name: 'Music' },
-		{ id: 'a5', name: 'Settings' },
-		{ id: 'a6', name: 'Photos' },
-		{ id: 'a7', name: 'Sports' },
-		{ id: 'a8', name: 'Kids' },
-		{ id: 'a9', name: 'Podcasts' },
-		{ id: 'a10', name: 'News' }
-	];
-
-	// Poster-shaped rows (2:3, no progress bar) — a different shape than
-	// "Continue watching" so the dashboard doesn't read as one repeated row.
-	function posterRow(entries: { id: string; title: string; meta: string }[]) {
-		return entries.map((item) => ({ ...item, image: placeholderImage(item.id, 400, 600) }));
-	}
-
-	const trending = posterRow([
-		{ id: 't1', title: 'The Bear', meta: '2024 · Comedy-Drama' },
-		{ id: 't2', title: 'Slow Horses', meta: '2024 · Spy Thriller' },
-		{ id: 't3', title: 'Shōgun', meta: '2024 · Drama' },
-		{ id: 't4', title: 'The Last of Us', meta: '2023 · Drama' },
-		{ id: 't5', title: 'Fallout', meta: '2024 · Sci-Fi' },
-		{ id: 't6', title: 'True Detective', meta: '2024 · Crime' },
-		{ id: 't7', title: 'Severance', meta: '2022 · Sci-Fi' },
-		{ id: 't8', title: 'The Diplomat', meta: '2023 · Thriller' }
-	]);
-
-	const becauseYouWatched = posterRow([
-		{ id: 'b1', title: 'Better Call Saul', meta: '2015 · Crime Drama' },
-		{ id: 'b2', title: 'Ozark', meta: '2017 · Crime Drama' },
-		{ id: 'b3', title: 'El Camino', meta: '2019 · Movie' },
-		{ id: 'b4', title: 'Narcos', meta: '2015 · Crime Drama' },
-		{ id: 'b5', title: 'Peaky Blinders', meta: '2013 · Crime Drama' },
-		{ id: 'b6', title: 'Fargo', meta: '2014 · Crime Anthology' },
-		{ id: 'b7', title: 'Mindhunter', meta: '2017 · Crime Drama' },
-		{ id: 'b8', title: 'The Wire', meta: '2002 · Crime Drama' }
-	]);
-
-	const newReleases = posterRow([
-		{ id: 'n1', title: 'Dune: Part Two', meta: '2024 · Sci-Fi' },
-		{ id: 'n2', title: 'Ripley', meta: '2024 · Thriller' },
-		{ id: 'n3', title: 'Baby Reindeer', meta: '2024 · Drama' },
-		{ id: 'n4', title: '3 Body Problem', meta: '2024 · Sci-Fi' },
-		{ id: 'n5', title: 'Griselda', meta: '2024 · Crime Drama' },
-		{ id: 'n6', title: 'Masters of the Air', meta: '2024 · War Drama' },
-		{ id: 'n7', title: 'Constellation', meta: '2024 · Sci-Fi' },
-		{ id: 'n8', title: 'Monsieur Spade', meta: '2024 · Mystery' }
-	]);
 </script>
 
 <svelte:head><title>Pivi</title></svelte:head>
@@ -160,11 +140,26 @@
 {#if me}
 	<div class="flex min-h-screen flex-col gap-10 bg-slate-950 pb-16 text-white">
 		<div class="relative">
-			<!-- Floats directly over the hero artwork instead of a separate solid
-			     bar, so the image reads as the top of the page. -->
+			{#if heroCard}
+				<HeroBanner
+					title={heroCard.title}
+					description={heroCard.subtitle}
+					image={heroCard.image}
+					badge="Featured"
+					source={heroCard.appName}
+					href={cardHref(heroCard)}
+				/>
+			{:else}
+				<!-- The youtube plugin always eventually falls back to trending
+				     even when signed out, so no heroCard yet just means the
+				     plugin is still activating/fetching. -->
+				<HeroBannerSkeleton />
+			{/if}
+
 			<div
 				data-pivi-top-bar
-				class="absolute inset-x-0 top-0 z-10 flex items-start justify-between px-8 pt-6 sm:px-12"
+				class="absolute inset-x-0 top-0 flex items-start justify-between px-8 pt-6 sm:px-12"
+				transition:fade={{ duration: 400, delay: 150 }}
 			>
 				<button
 					type="button"
@@ -184,14 +179,6 @@
 				</button>
 
 				<div class="flex flex-col items-end gap-4">
-					<button
-						type="button"
-						onclick={signOut}
-						class="rounded-full bg-white/12 px-5 py-2 text-sm font-medium text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
-					>
-						{m.switch_profile()}
-					</button>
-
 					{#if pairing.remoteUrl}
 						<div
 							class="rounded-3xl bg-white/12 p-3 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
@@ -201,21 +188,53 @@
 					{/if}
 				</div>
 			</div>
-
-			<HeroBanner
-				title={featured.title}
-				description={featured.description}
-				badge={featured.badge}
-				image={featured.image}
-			/>
 		</div>
 
 		<div class="flex flex-col gap-10">
-			<ContinueWatchingRow title="Continue watching" items={continueWatching} />
-			<PosterRow title="Trending now" items={trending} />
-			<PosterRow title="Because you watched Breaking Bad" items={becauseYouWatched} />
-			<PosterRow title="New releases" items={newReleases} />
 			<AppsRow title="Apps" items={apps} />
+			{#if youtubeCards.length === 0}
+				<!-- The youtube plugin always eventually falls back to trending
+				     even when signed out, so an empty result here means the
+				     plugin is still activating/fetching, not "nothing to show". -->
+				<VideoRowSkeleton title="Suggested on YouTube" />
+			{:else if shelfCards.length > 0}
+				<VideoRow
+					title="Suggested on YouTube"
+					items={shelfCards.map((c) => ({
+						id: c.id,
+						title: c.title,
+						meta: c.subtitle,
+						image: c.image,
+						href: cardHref(c)
+					}))}
+				/>
+				<!-- Temporary: same cards reshuffled into extra rows so there's
+				     enough below the fold to actually see the scroll-triggered
+				     unfold animation. Remove once there's real second/third rows
+				     of plugin-sourced content. -->
+				<VideoRow
+					title="More like this"
+					items={[...shelfCards].reverse().map((c) => ({
+						id: `more-${c.id}`,
+						title: c.title,
+						meta: c.subtitle,
+						image: c.image,
+						href: cardHref(c)
+					}))}
+				/>
+				<VideoRow
+					title="Because you watched YouTube"
+					items={shelfCards
+						.map((c, i, arr) => arr[(i + 1) % arr.length])
+						.map((c) => ({
+							id: `because-${c.id}`,
+							title: c.title,
+							meta: c.subtitle,
+							image: c.image,
+							href: cardHref(c)
+						}))}
+				/>
+			{/if}
 		</div>
 	</div>
 {/if}

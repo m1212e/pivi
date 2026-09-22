@@ -1,3 +1,10 @@
+// A push-based MessageReader/MessageWriter pair for vscode-jsonrpc, for
+// transports that hand you messages via a callback rather than exposing a
+// readable/writable stream: a WebSocket's `onmessage` (RemoteBridge.svelte,
+// the phone remote page), or the pairing session's already-decrypted
+// `onMessage` callback (session.ts). Nothing here is specific to any one of
+// those — it's the same seam the plugin host (api/plugins/runtime.ts) uses
+// for its child-process IPC channel.
 import {
 	AbstractMessageReader,
 	AbstractMessageWriter,
