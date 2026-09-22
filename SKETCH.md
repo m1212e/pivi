@@ -45,6 +45,61 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   because navigation/gestures must be consistent across apps.
 - **Plugin distribution**: local sideload / git-based install for now (like
   Homebridge or HACS). A real hosted store/registry is a later milestone.
+- **Plugin UI composition — three tiers, shell always renders.** Plugins
+  never hand the shell raw markup or CSS. Tier 1: typed dashboard data (home
+  cards, continue-watching items) rendered by the shell's existing
+  component set. Tier 2: a declarative UI tree (list/form/button/toggle/
+  text-input primitives) for full custom screens — settings, browsing —
+  still rendered and focus-managed by the shell, the same idea as Slack's
+  Block Kit or Android Auto/CarPlay's app templates. Tier 3: a sandboxed
+  webview, reserved for services with no API and no workable Tier 2
+  mapping — visually second-class, isolated by the iframe boundary, still
+  reports back through the same typed contract for anything it needs on
+  the shared dashboard.
+- **Plugin theming — design tokens, not raw CSS.** A plugin sets a small
+  fixed set of CSS custom properties (accent color, logo, corner radius),
+  scoped inside a per-plugin Shadow DOM boundary. That gives brand identity
+  without a plugin's styling being able to escape its own subtree, override
+  focus-visible styling, or exfiltrate data via `url()`. Free-form CSS
+  stays out of scope until a concrete plugin needs it, and would need
+  sanitization, not blind trust, even then.
+- **Plugin sandboxing — one child process per plugin, RPC boundary,
+  capability manifest.** Plugins run as separate Node/Deno child processes
+  talking to the trusted host over RPC (the VS Code extension-host model),
+  not in-process (`vm`/`vm2`-style sandboxes are too weak — `vm2`
+  specifically has unresolved CVEs). Each plugin declares required
+  capabilities in its manifest (network domains, credential storage,
+  exclusive display/input); the host grants only what's declared. No
+  filesystem capability exists at all — a plugin has no legitimate need to
+  read/write arbitrary paths, so it's not offered as an option to grant.
+  This model also gives crash isolation for free — a broken plugin can't
+  take down the shell or other plugins.
+- **Exclusive/passthrough sessions — a fourth capability, not a UI tier.**
+  Some plugins need direct hardware access instead of shell-mediated
+  rendering/input: game streaming (Moonlight/Sunshine) and playback itself.
+  These get their own display plane (the same pattern as libmpv "rendering
+  to its own layer under/behind the kiosk UI") and, for game streaming,
+  direct passthrough of a gamepad's input device node to the plugin
+  process, bypassing the focus/nav layer entirely for the session's
+  duration. Granted only while a session declaring that need is active,
+  reclaimed by the shell the moment it ends.
+- **Login — OAuth device authorization grant first, phone handoff
+  second.** TV platforms solve on-screen login the same way industry-wide
+  (YouTube, Netflix, Spotify): show a code/QR, the user completes it on
+  another device, the TV polls for a token. That's expressible entirely
+  with Tier 1 components — no custom login UI needed. For the minority of
+  services without device-flow support, hand the login webview to the
+  paired phone (real keyboard, password manager, 2FA autofill) instead of
+  rendering a form on the TV, reusing the same QR-pairing mechanism already
+  built for remote pairing.
+- **Reuse strategy for plugins.** Reuse existing implementations at the
+  API/logic layer — official or community SDKs (Jellyfin, Spotify Web API,
+  Immich's OpenAPI client, Twitch Helix) — and via subprocess for headless
+  native tools (yt-dlp, moonlight-embedded) rather than reimplementing
+  protocols. Android app virtualization (Waydroid/Anbox) is ruled out: too
+  heavy for Pi 4/5, no Widevine L1 for DRM content anyway, and it would
+  throw away the shared navigation model that's the actual point of this
+  project.
 - **Video player**: libmpv embedded in the shell, controlled from the Node
   backend over its JSON IPC socket. Hardware-accelerated decode via
   V4L2/VAAPI. One playback code path shared by every plugin and the Cast
@@ -62,6 +117,7 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
 ## Proposed tech stack
 
 ### On-device shell & UI
+
 - SvelteKit, compiled to a static SPA, rendered full-screen in a minimal
   Chromium/WebKit kiosk view (a rendering host for the custom UI, not a
   general browser for third-party sites)
@@ -71,8 +127,26 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   manager, not iframes
 
 ### Plugin runtime
+
 - Node.js/TypeScript host process, loading plugins as local packages
   (git-clone/npm-link style install, versioned via package.json)
+- Each plugin runs in its own child process (Node or Deno), talking to the
+  host over an RPC channel — see the sandboxing decision above. Contract
+  types for that channel live in `src/lib/plugins/`:
+  - `manifest.ts` — `PluginManifest`/`PluginCapability`, read at install
+    time to decide what a plugin's process is allowed to touch
+  - `dashboard.ts` — Tier 1 `HomeCard`/`DashboardContribution`, shaped to
+    match the existing `ContinueWatchingRow`/`PosterRow`/`AppsRow`
+    components
+  - `ui.ts` — Tier 2 `UiNode`/`PluginScreen`/`UiEvent`, the declarative
+    component-tree language for full custom screens
+  - `session.ts` — Tier 3 `SessionRequest`/`SessionEnded`/`WebviewScreen`,
+    exclusive display/input handoff and the webview fallback
+  - `auth.ts` — `DeviceCodeAuth`/`PhoneAuthHandoff`, the device-flow-first
+    login model
+  - `theme.ts` — `PluginTheme`, the fixed design-token set for branding
+  - `host.ts` — `PluginToHost`/`HostToPlugin`, the actual RPC envelope
+    tying all of the above together
 - Plugin API surface: navigation/focus events, HTTP client, credential/token
   storage, and a playback handoff API (`player.play(url, {headers, drm?})`)
 - Reference plugins to build first:
@@ -84,6 +158,7 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   - **YouTube** — dual plugin: Invidious/yt-dlp extraction (ad-free) + Cast-from-phone fallback
 
 ### Playback engine
+
 - libmpv, embedded and controlled from the Node backend over its JSON IPC
   socket, rendering to its own layer under/behind the kiosk UI
 - Hardware-accelerated decode via V4L2/VAAPI
@@ -91,23 +166,27 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   for every source
 
 ### Remote control app
+
 - SvelteKit PWA, mobile-first
 - Pairing: QR code on the TV (pairing token + local address) scanned by the
   phone, opens a direct WebSocket connection — no cloud relay, no login
 - Transport: WebSocket for low-latency directional/gesture events
 
 ### Cast receiver
+
 - Unofficial DIAL + Cast v2 protocol implementation (Node service), advertised
   via mDNS
 - Hands off to the same libmpv playback path
 
 ### Backend/system services (all Node/TS)
+
 - One long-running daemon (systemd service) hosting: plugin runtime,
   WebSocket remote server, Cast receiver, mpv IPC bridge
 - Local SQLite for plugin config, pairing tokens, watch state/resume positions
 - mDNS (Bonjour) advertisement for discovery
 
 ### OS/deployment
+
 - Deferred. Scaffold the app OS-agnostically (systemd unit + documented
   runtime dependencies) so Raspberry Pi OS Lite vs NixOS stays a packaging
   decision. If NixOS: check `nixos-raspberrypi`/`nixos-hardware` Pi 4/5 board
@@ -117,11 +196,15 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
 
 1. libmpv playback service + minimal SvelteKit shell with hardcoded focus
    navigation (prove the core feel before anything else)
-2. Jellyfin plugin (best-documented API, immediately useful)
-3. PWA remote + QR pairing + WebSocket gesture protocol
-4. Spotify Connect plugin, then Immich
-5. Cast receiver
-6. Twitch, then YouTube (both plugin variants)
+2. Plugin SDK contracts + host process/RPC skeleton (`src/lib/plugins/`,
+   see above) — build once, before the first real plugin depends on it
+3. Jellyfin plugin (best-documented API, immediately useful)
+4. PWA remote + QR pairing + WebSocket gesture protocol
+5. Spotify Connect plugin, then Immich
+6. Cast receiver
+7. Twitch, then YouTube (both plugin variants)
+8. Moonlight/Sunshine game-streaming plugin (exclusive/passthrough session
+   tier, reusing moonlight-embedded)
 
 ## Open questions for later
 
@@ -129,3 +212,9 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
 - Whether/how to build a real hosted plugin store and registry
 - Native remote app (iOS/Android) vs staying PWA long-term
 - Final OS base image decision (NixOS vs Raspberry Pi OS Lite)
+- Exact design-token set exposed for plugin theming, and whether a
+  sanitized-CSS escape hatch is ever worth adding once Tier 2 proves
+  insufficient for some real plugin
+- How exclusive-session capability grants (display/input passthrough) get
+  surfaced to and audited by the user at plugin-install time, given they're
+  a materially bigger trust decision than a plain network capability

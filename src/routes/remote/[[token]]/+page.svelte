@@ -1,7 +1,24 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { createMessageConnection, type Message, type MessageConnection } from 'vscode-jsonrpc';
 	import { page } from '$app/state';
 	import { connectRemoteSession, type RemoteSession } from '#lib/pairing/session';
+	import { PushMessageReader, SinkMessageWriter } from '#lib/pairing/rpcTransport';
+	import {
+		backNotification,
+		enterNotification,
+		keyNotification,
+		keyParamsSchema,
+		moveNotification,
+		moveParamsSchema,
+		requestStateNotification,
+		selectNotification,
+		stateNotification,
+		stateParamsSchema,
+		textNotification,
+		textParamsSchema
+	} from '#lib/pairing/remoteProtocol';
+	import { onNotification, sendNotification } from '#lib/rpc';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import * as m from '#lib/paraglide/messages';
 
@@ -9,6 +26,7 @@
 	let errorMessage = $state('');
 	let connected = $state(false);
 	let session: RemoteSession | undefined;
+	let connection: MessageConnection | undefined;
 
 	// What the TV is actually showing right now — reported by RemoteBridge on
 	// the TV side, so the phone surfaces exactly the input method the TV
@@ -39,10 +57,6 @@
 		if (tab === 'keyboard') textInput?.focus();
 	});
 
-	function send(message: Record<string, unknown>) {
-		session?.send(message);
-	}
-
 	let touchOrigin: { x: number; y: number } | null = null;
 	let touchMoved = false;
 	const MOVE_THRESHOLD = 48;
@@ -54,13 +68,13 @@
 	}
 
 	function onTouchMove(event: TouchEvent) {
-		if (!touchOrigin) return;
+		if (!touchOrigin || !connection) return;
 		const t = event.touches[0];
 		const dx = t.clientX - touchOrigin.x;
 		const dy = t.clientY - touchOrigin.y;
 
 		if (Math.abs(dx) > MOVE_THRESHOLD || Math.abs(dy) > MOVE_THRESHOLD) {
-			send({ type: 'move', dx, dy });
+			sendNotification(connection, moveNotification, moveParamsSchema, { dx, dy });
 			navigator.vibrate?.(3);
 			touchOrigin = { x: t.clientX, y: t.clientY };
 			touchMoved = true;
@@ -69,7 +83,7 @@
 
 	function onTouchEnd() {
 		if (!touchMoved) {
-			send({ type: 'select' });
+			connection?.sendNotification(selectNotification);
 			navigator.vibrate?.(10);
 		}
 		touchOrigin = null;
@@ -77,12 +91,13 @@
 	}
 
 	function goBack() {
-		send({ type: 'back' });
+		connection?.sendNotification(backNotification);
 		navigator.vibrate?.(8);
 	}
 
 	function onPinKey(key: string) {
-		send({ type: 'key', value: key });
+		if (!connection) return;
+		sendNotification(connection, keyNotification, keyParamsSchema, { value: key });
 		navigator.vibrate?.(6);
 	}
 
@@ -91,12 +106,13 @@
 	}
 
 	function onTextInput() {
-		send({ type: 'text', value: text });
+		if (!connection) return;
+		sendNotification(connection, textNotification, textParamsSchema, { value: text });
 	}
 
 	function onTextSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		send({ type: 'enter' });
+		connection?.sendNotification(enterNotification);
 		navigator.vibrate?.(10);
 		text = '';
 		onTextInput();
@@ -108,14 +124,27 @@
 		window.visualViewport?.addEventListener('resize', updateKeyboardState);
 		updateKeyboardState();
 
+		// The reader/writer are wired up before `session` exists — the writer
+		// sends through whatever `session` holds at call time, and nothing
+		// sends anything until the `.then()` below assigns it, so there's no
+		// race with messages the TV might push right after the handshake
+		// completes.
+		const reader = new PushMessageReader();
+		const writer = new SinkMessageWriter((msg) => session?.send(msg as Record<string, unknown>));
+		connection = createMessageConnection(reader, writer);
+
+		onNotification(connection, stateNotification, stateParamsSchema, (state) => {
+			hasPinPad = state.hasPinPad;
+			hasTextInput = state.hasTextInput;
+			canGoBack = state.canGoBack;
+		});
+		connection.listen();
+
 		connectRemoteSession(page.params.token ?? null, {
-			onMessage: (message) => {
-				if (message.type === 'state') {
-					hasPinPad = !!message.hasPinPad;
-					hasTextInput = !!message.hasTextInput;
-					canGoBack = !!message.canGoBack;
-				}
-			},
+			// session.ts's callback type is a plain object — cast to vscode-
+			// jsonrpc's Message, since every message on this channel is now
+			// always a real JSON-RPC frame the TV's connection produced.
+			onMessage: (message) => reader.push(message as unknown as Message),
 			onClose: () => (connected = false)
 		})
 			.then((result) => {
@@ -127,7 +156,7 @@
 				session = result;
 				connected = true;
 				phase = 'ready';
-				send({ type: 'requestState' });
+				connection?.sendNotification(requestStateNotification);
 			})
 			.catch((err: unknown) => {
 				if (cancelled) return;
@@ -137,6 +166,7 @@
 
 		return () => {
 			cancelled = true;
+			connection?.dispose();
 			session?.close();
 			window.visualViewport?.removeEventListener('resize', updateKeyboardState);
 		};

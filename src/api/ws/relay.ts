@@ -23,6 +23,10 @@ import type {
 	PairSuccess,
 	Ready
 } from '#lib/pairing/protocol';
+import {
+	remoteConnectedNotification,
+	remoteDisconnectedNotification
+} from '#lib/pairing/remoteProtocol';
 import { db } from '../db';
 import { pairedDevice } from '../db/schema';
 import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from '../pairing';
@@ -186,9 +190,11 @@ async function handleChallengeResponse(
 	// connecting, so RemoteBridge can surface a toast — sent directly rather
 	// than through relayFromPhone, since that path only forwards the phone's
 	// own encrypted app-level messages (move/select/etc), not relay-originated
-	// status events.
+	// status events. Framed as a JSON-RPC notification (see
+	// pairing/remoteProtocol.ts) like every other message on this channel,
+	// even though the relay itself has no stake in the RPC connection.
 	for (const tv of tvSockets()) {
-		send(tv, { type: 'remoteConnected' });
+		send(tv, { jsonrpc: '2.0', method: remoteConnectedNotification.method });
 	}
 }
 
@@ -227,7 +233,7 @@ export function startPairingRelay() {
 			// dropped socket (e.g. one that never finished the handshake).
 			if (state?.role === 'phone') {
 				for (const tv of tvSockets()) {
-					send(tv, { type: 'remoteDisconnected' });
+					send(tv, { jsonrpc: '2.0', method: remoteDisconnectedNotification.method });
 				}
 			}
 		});

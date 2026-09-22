@@ -2,11 +2,32 @@
 	import { onMount } from 'svelte';
 	import { Smartphone, Unplug } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
+	import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 	import { afterNavigate } from '$app/navigation';
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
+	import type { TvHello } from '#lib/pairing/protocol';
+	import { PushMessageReader, SinkMessageWriter } from '#lib/pairing/rpcTransport';
+	import {
+		backNotification,
+		enterNotification,
+		keyNotification,
+		keyParamsSchema,
+		moveNotification,
+		moveParamsSchema,
+		remoteConnectedNotification,
+		remoteDisconnectedNotification,
+		requestStateNotification,
+		selectNotification,
+		stateNotification,
+		stateParamsSchema,
+		textNotification,
+		textParamsSchema
+	} from '#lib/pairing/remoteProtocol';
+	import { onNotification, sendNotification } from '#lib/rpc';
 	import * as m from '#lib/paraglide/messages';
 
 	let socket: WebSocket | undefined;
+	let connection: MessageConnection | undefined;
 	let currentEl: HTMLElement | null = null;
 
 	const TEXTUAL_INPUT_TYPES = new Set(['text', 'search', 'email', 'tel', 'url', 'password']);
@@ -49,10 +70,6 @@
 		});
 	}
 
-	function send(message: Record<string, unknown>) {
-		if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
-	}
-
 	function focusedTextInput() {
 		const active = document.activeElement;
 		if (!(active instanceof HTMLInputElement) && !(active instanceof HTMLTextAreaElement))
@@ -68,8 +85,8 @@
 	// a bespoke marker attribute, so any future page with a normal <input>
 	// gets remote-keyboard support with no extra wiring.
 	function sendState() {
-		send({
-			type: 'state',
+		if (!connection) return;
+		sendNotification(connection, stateNotification, stateParamsSchema, {
 			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
 			hasTextInput: !!focusedTextInput(),
 			canGoBack: location.pathname !== '/'
@@ -236,49 +253,50 @@
 		observer.observe(document.body, { childList: true, subtree: true });
 
 		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
+
+		const reader = new PushMessageReader();
+		const writer = new SinkMessageWriter((msg) => socket?.send(JSON.stringify(msg)));
+		connection = createMessageConnection(reader, writer);
+
+		onNotification(connection, moveNotification, moveParamsSchema, ({ dx, dy }) =>
+			moveFocus(dx, dy)
+		);
+		// These carry no params, so there's nothing for a zod schema to
+		// enforce — registered directly on the connection instead of through
+		// the onNotification wrapper.
+		connection.onNotification(selectNotification, () => {
+			if (document.activeElement instanceof HTMLElement) document.activeElement.click();
+		});
+		connection.onNotification(backNotification, () => history.back());
+		onNotification(connection, keyNotification, keyParamsSchema, ({ value }) => pressPinKey(value));
+		onNotification(connection, textNotification, textParamsSchema, ({ value }) =>
+			setFocusedText(value)
+		);
+		connection.onNotification(enterNotification, () => submitFocusedText());
+		connection.onNotification(requestStateNotification, () => sendState());
+		connection.onNotification(remoteConnectedNotification, () => {
+			toast.success(m.remote_connected_toast(), { icon: Smartphone });
+		});
+		connection.onNotification(remoteDisconnectedNotification, () => {
+			toast(m.remote_disconnected_toast(), { icon: Unplug });
+		});
+		connection.listen();
+
 		socket.onopen = () => {
 			// Only accepted from the relay's loopback check — this tab and the
-			// relay run on the same device. See src/api/ws/relay.ts.
-			send({ type: 'tvHello' });
+			// relay run on the same device. See src/api/ws/relay.ts. Sent as a
+			// raw frame, not through the RPC connection above — it's a
+			// relay-level handshake message (see pairing/protocol.ts), not part
+			// of the app-level remote-control protocol that starts afterwards.
+			socket?.send(JSON.stringify({ type: 'tvHello' } satisfies TvHello));
 			sendState();
 		};
 
 		socket.onmessage = (event) => {
-			let message: Record<string, unknown>;
 			try {
-				message = JSON.parse(event.data);
+				reader.push(JSON.parse(event.data));
 			} catch {
-				return;
-			}
-
-			switch (message.type) {
-				case 'move':
-					moveFocus(Number(message.dx) || 0, Number(message.dy) || 0);
-					break;
-				case 'select':
-					if (document.activeElement instanceof HTMLElement) document.activeElement.click();
-					break;
-				case 'back':
-					history.back();
-					break;
-				case 'key':
-					pressPinKey(String(message.value));
-					break;
-				case 'text':
-					setFocusedText(String(message.value ?? ''));
-					break;
-				case 'enter':
-					submitFocusedText();
-					break;
-				case 'requestState':
-					sendState();
-					break;
-				case 'remoteConnected':
-					toast.success(m.remote_connected_toast(), { icon: Smartphone });
-					break;
-				case 'remoteDisconnected':
-					toast(m.remote_disconnected_toast(), { icon: Unplug });
-					break;
+				// Malformed frame — drop it rather than crash the connection.
 			}
 		};
 
@@ -286,6 +304,7 @@
 			document.removeEventListener('focusin', onFocusChange);
 			document.removeEventListener('click', onClick);
 			observer.disconnect();
+			connection?.dispose();
 			socket?.close();
 		};
 	});
