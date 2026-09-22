@@ -101,11 +101,18 @@
 		const fromCenter = { x: from.left + from.width / 2, y: from.top + from.height / 2 };
 		const dirLen = Math.hypot(dx, dy) || 1;
 
+		// A mostly-horizontal swipe should stay inside the current shelf: the
+		// cone below is wide enough that the next row's cards can otherwise
+		// win over "nothing further right in this row", which reads as focus
+		// randomly hopping rows instead of stopping at the row's end.
+		const shelf = Math.abs(dx) > Math.abs(dy) ? active.closest('[data-pivi-hscroll]') : null;
+
 		let best: HTMLElement | null = null;
 		let bestScore = Infinity;
 
 		for (const el of els) {
 			if (el === active) continue;
+			if (shelf && !shelf.contains(el)) continue;
 			const r = el.getBoundingClientRect();
 			const center = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 			const vx = center.x - fromCenter.x;

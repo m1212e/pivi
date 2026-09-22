@@ -23,6 +23,18 @@
 	let text = $state('');
 	let textInput: HTMLInputElement | undefined = $state();
 
+	// visualViewport shrinks when the on-screen keyboard opens, unlike window.innerHeight.
+	// We use that gap to smoothly translate the input up above the keyboard.
+	let keyboardInset = $state(0);
+	const KEYBOARD_HEIGHT_THRESHOLD = 120;
+
+	function updateKeyboardState() {
+		const vv = window.visualViewport;
+		if (!vv) return;
+		const diff = window.innerHeight - vv.height;
+		keyboardInset = diff > KEYBOARD_HEIGHT_THRESHOLD ? diff : 0;
+	}
+
 	$effect(() => {
 		if (tab === 'keyboard') textInput?.focus();
 	});
@@ -93,6 +105,9 @@
 	onMount(() => {
 		let cancelled = false;
 
+		window.visualViewport?.addEventListener('resize', updateKeyboardState);
+		updateKeyboardState();
+
 		connectRemoteSession(page.params.token ?? null, {
 			onMessage: (message) => {
 				if (message.type === 'state') {
@@ -123,6 +138,7 @@
 		return () => {
 			cancelled = true;
 			session?.close();
+			window.visualViewport?.removeEventListener('resize', updateKeyboardState);
 		};
 	});
 </script>
@@ -151,7 +167,10 @@
 			</span>
 		</header>
 
-		<main class="flex flex-1 flex-col items-center justify-center px-6">
+		<main
+			class="flex flex-1 flex-col items-center justify-center px-6 transition-transform duration-300 ease-out"
+			style="transform: translateY(-{tab === 'keyboard' ? keyboardInset / 2 : 0}px)"
+		>
 			{#if tab === 'trackpad'}
 				<div
 					role="application"
