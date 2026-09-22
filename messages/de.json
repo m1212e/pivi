@@ -33,6 +33,7 @@
 	"type_here_placeholder": "Hier eingeben…",
 	"enter": "Eingabe",
 	"backspace": "Löschen",
+	"use_phone_to_enter_pin": "Benutze dein Handy, um die PIN einzugeben",
 	"not_paired_title": "Nicht gekoppelt",
 	"not_paired_description": "Lass dir auf dem Fernseher den Kopplungs-QR-Code anzeigen und scanne ihn mit diesem Handy.",
 	"pairing_error_title": "Verbindung fehlgeschlagen",

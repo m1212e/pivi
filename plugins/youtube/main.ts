@@ -1,12 +1,13 @@
 // Entry point run by the host as a child process (see
 // src/api/plugins/runtime.ts's loadPlugin). Wires the pieces in this folder
 // together against the plugin RPC contract in src/lib/plugins/host.ts:
-// login (auth.ts), browsing — personalized (tvHomeFeed.ts) when signed in,
-// generic trending (invidious.ts) otherwise — and playback (stream.ts + a
-// session request).
+// login (auth.ts), browsing — this account's personalized home feed
+// (tvHomeFeed.ts), signed in only, no generic/anonymous fallback — and
+// playback (stream.ts + a session request).
 import {
 	activateNotification,
 	logNotification,
+	profileChangedNotification,
 	publishDashboardNotification,
 	publishScreenNotification,
 	readyNotification,
@@ -21,11 +22,10 @@ import type { UiNode } from '#lib/plugins/ui';
 import { connection } from './connection';
 import { manifest } from './manifest';
 import { beginSignIn, isSignedIn } from './auth';
-import { fetchTrending } from './invidious';
 import { fetchTvHomeFeed } from './tvHomeFeed';
 import type { VideoSummary } from './youtubeClient';
 import { resolveStream } from './stream';
-import { innertube, restoreSession } from './innertube';
+import { innertube, loadSessionForActiveProfile } from './innertube';
 
 const SCREEN_ID = 'browse';
 
@@ -52,10 +52,9 @@ function browseScreen(results: VideoSummary[]): UiNode {
 		type: 'container',
 		direction: 'column',
 		children: [
-			// Signed in: the list below is this account's real personalized
-			// home feed (tvHomeFeed.ts). Signed out: Invidious's generic
-			// trending (invidious.ts) — sign-in is a manual action, not
-			// something gating activation, since browsing works fine without it.
+			// Sign-in is a manual action, not something gating activation --
+			// the screen itself still opens signed out, just with an empty
+			// list and this button instead of the personalized feed below.
 			isSignedIn()
 				? { type: 'text', value: 'Signed in', variant: 'subtitle' }
 				: { type: 'button', label: 'Sign in with Google', onSelect: 'signIn' },
@@ -98,11 +97,49 @@ async function playVideo(videoId: string, title: string) {
 	if (!result.granted) log('warn', 'Playback session was not granted');
 }
 
+// Module scope (not activate()'s own local) since a profile switch needs to
+// re-run this after activate() has already run once — see main()'s
+// profileChangedNotification handler.
+let lastResults: VideoSummary[] = [];
+
+async function refresh() {
+	if (isSignedIn()) {
+		try {
+			lastResults = await fetchTvHomeFeed(innertube);
+		} catch (err) {
+			// TV's home feed is undocumented internal API — a shape change
+			// or a transient failure shouldn't take the whole dashboard
+			// down with it, so this just leaves lastResults as-is.
+			const info = (err as { info?: unknown } | undefined)?.info;
+			log('error', `TV home feed failed: ${String(err)} info=${JSON.stringify(info)}`);
+		}
+	} else {
+		// lastResults is module scope (see above), so without this a profile
+		// switch to a signed-out (or never-signed-in) profile would otherwise
+		// republish whichever profile's videos happened to be signed in last
+		// -- this plugin process is shared across every pivi profile, not one
+		// instance per user. No signed-out fallback content on purpose: this
+		// plugin only ever showed generic/anonymous trending because it
+		// briefly needed *some* content source before sign-in worked
+		// (invidious.ts, now removed) -- there's nothing worth showing here
+		// without a signed-in account, and browseScreen already surfaces the
+		// "Sign in with Google" button.
+		lastResults = [];
+	}
+
+	connection.sendNotification(publishDashboardNotification, {
+		pluginId: manifest.id,
+		cards: lastResults.map(videoToCard)
+	});
+	publishScreen(lastResults);
+}
+
 function main() {
 	connection.sendNotification(readyNotification, manifest);
 
 	// Registered before anything is awaited, so an 'activate' that arrives
-	// while restoreSession() (below) is still in flight is never missed.
+	// while loadSessionForActiveProfile() (below) is still in flight is
+	// never missed.
 	connection.onNotification(activateNotification, () => {
 		activate().catch((err: unknown) => {
 			log('error', err instanceof Error ? err.message : String(err));
@@ -117,49 +154,25 @@ function main() {
 	connection.onNotification(sessionEndedNotification, (ended) => {
 		if (ended.reason === 'error') log('error', `Playback session ended: ${ended.message}`);
 	});
-
-	// Fire-and-forget here purely as a head start — the host can only look
-	// up a stored credential once it knows this plugin's manifest, which the
-	// readyNotification just above is what tells it, so this couldn't run
-	// any earlier. activate() awaits the same cached promise before it
-	// needs the answer, so this isn't required for correctness, just so a
-	// sign-in that was already there doesn't wait on activate() to kick it off.
-	restoreSession().catch(() => {});
 }
 
 async function activate() {
-	let lastResults: VideoSummary[] = [];
-
-	async function refresh() {
-		if (isSignedIn()) {
-			try {
-				lastResults = await fetchTvHomeFeed(innertube);
-			} catch (err) {
-				// TV's home feed is undocumented internal API — a shape change
-				// or a transient failure shouldn't take the whole dashboard
-				// down with it, so this falls back the same way a signed-out
-				// session does.
-				const info = (err as { info?: unknown } | undefined)?.info;
-				log(
-					'error',
-					`TV home feed failed, falling back to trending: ${String(err)} info=${JSON.stringify(info)}`
-				);
-			}
-		}
-		if (lastResults.length === 0) lastResults = await fetchTrending();
-
-		connection.sendNotification(publishDashboardNotification, {
-			pluginId: manifest.id,
-			cards: lastResults.map(videoToCard)
-		});
-		publishScreen(lastResults);
-	}
-
 	// Needed before isSignedIn() (refresh()/browseScreen(), below) can be
-	// trusted — see restoreSession's own comment for why this can't just run
-	// at module load instead.
-	await restoreSession();
+	// trusted — see loadSessionForActiveProfile's own comment for why this
+	// can't just run at module load instead.
+	await loadSessionForActiveProfile();
 	await refresh();
+
+	// Not registered until the initial load above has actually finished --
+	// loadSessionForActiveProfile() swaps out the exact `innertube` instance
+	// that same call is still setting up, so an overlapping profile switch
+	// mid-startup could otherwise let whichever finishes last silently
+	// clobber the other's result.
+	connection.onNotification(profileChangedNotification, () => {
+		loadSessionForActiveProfile()
+			.then(refresh)
+			.catch((err: unknown) => log('error', err instanceof Error ? err.message : String(err)));
+	});
 
 	connection.onNotification(uiEventNotification, (event) => {
 		if (event.screenId !== SCREEN_ID) return;

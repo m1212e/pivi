@@ -20,6 +20,7 @@ import {
 	verify
 } from '#lib/crypto/pairing';
 import {
+	clearDeviceCredentials,
 	getDeviceCredentials,
 	setDeviceCredentials,
 	type DeviceCredentials
@@ -36,6 +37,17 @@ export type RemoteSessionCallbacks = {
 	onClose: () => void;
 };
 
+// Thrown by reconnect() when the *stored* credentials themselves are the
+// problem (the TV no longer recognizes this device, or isn't the TV this
+// device remembers pairing with) rather than a transient/network failure.
+// The one real-world cause: the TV's database got reset (dev reset, fresh
+// install, restored from backup) while this phone still has a since-deleted
+// deviceId cached in IndexedDB. Recoverable by forgetting the stale
+// credentials and pairing again, so it's kept distinct from other
+// reconnect() failures (e.g. a real signature mismatch) that connectRemoteSession
+// doesn't try to self-heal from.
+class StaleCredentialsError extends Error {}
+
 // null return means "nothing to connect with" — no stored device and no
 // pairing token in the URL. The caller shows a "not paired" state.
 export async function connectRemoteSession(
@@ -45,15 +57,35 @@ export async function connectRemoteSession(
 	let credentials = await getDeviceCredentials();
 	if (!credentials && !token) return null;
 
-	const socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
-	await waitForOpen(socket);
+	let socket = await openSocket();
 
-	if (!credentials) {
-		credentials = await pair(socket, token!);
-		await setDeviceCredentials(credentials);
+	let keys: { c2sKey: Uint8Array; s2cKey: Uint8Array } | undefined;
+
+	if (credentials) {
+		try {
+			keys = await reconnect(socket, credentials);
+		} catch (err) {
+			if (!(err instanceof StaleCredentialsError)) throw err;
+			await clearDeviceCredentials();
+			credentials = null;
+			// The relay only tells us the credentials are stale after we've
+			// already sent it a 'hello', which moves its connection state past
+			// 'unauth' -- it won't accept a 'pair' message on this same socket
+			// anymore, so recovering means starting over with a fresh one.
+			socket.close();
+			// Nothing left to recover with — same as never having paired.
+			if (!token) return null;
+			socket = await openSocket();
+		}
 	}
 
-	const { c2sKey, s2cKey } = await reconnect(socket, credentials);
+	if (!keys) {
+		credentials = await pair(socket, token!);
+		await setDeviceCredentials(credentials);
+		keys = await reconnect(socket, credentials);
+	}
+
+	const { c2sKey, s2cKey } = keys;
 
 	socket.addEventListener('message', (event) => {
 		const message = safeParse(event.data);
@@ -111,7 +143,14 @@ async function reconnect(
 	});
 
 	const challenge = await nextMessage(socket);
-	if (challenge.type === 'authError') throw new Error(challenge.message);
+	if (challenge.type === 'authError') {
+		// The relay only sends this specific message when the deviceId isn't
+		// in its pairedDevice table at all — the one way that happens for a
+		// device we ourselves stored credentials for is the TV's database
+		// having been reset since.
+		if (challenge.message === 'Unknown device') throw new StaleCredentialsError(challenge.message);
+		throw new Error(challenge.message);
+	}
 	if (challenge.type !== 'challenge') throw new Error('Unexpected response to hello');
 
 	const relayEphemeralPublicKey = fromBase64Url(challenge.ephemeralPublicKey);
@@ -121,7 +160,12 @@ async function reconnect(
 		utf8ToBytes(credentials.deviceId)
 	);
 	if (!verify(credentials.tvPublicKey, transcript, fromBase64Url(challenge.signature))) {
-		throw new Error('This does not appear to be the same TV this device was paired with');
+		// Same reset scenario, just caught client-side instead: the paired
+		// device row survived but the TV's own identity keypair didn't, so
+		// the signature no longer matches the TV public key we have stored.
+		throw new StaleCredentialsError(
+			'This does not appear to be the same TV this device was paired with'
+		);
 	}
 
 	const sharedSecret = deriveSharedSecret(ephemeral.secretKey, relayEphemeralPublicKey);
@@ -149,6 +193,12 @@ function safeParse(data: unknown): Record<string, unknown> | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+async function openSocket(): Promise<WebSocket> {
+	const socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
+	await waitForOpen(socket);
+	return socket;
 }
 
 function waitForOpen(socket: WebSocket): Promise<void> {

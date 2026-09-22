@@ -1,3 +1,0 @@
-[submodule "vendor/invidious"]
-	path = vendor/invidious
-	url = https://github.com/iv-org/invidious.git

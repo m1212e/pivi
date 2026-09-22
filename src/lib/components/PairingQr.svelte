@@ -5,6 +5,10 @@
 	let { url, size = 208 }: { url: string; size?: number } = $props();
 
 	let container: HTMLDivElement;
+	// qr-code-styling is dynamically imported and the QR itself is built
+	// off-thread, so the container sits empty for a beat after mount —
+	// without this the pairing card just shows a blank white square.
+	let loaded = $state(false);
 
 	onMount(() => {
 		let cancelled = false;
@@ -35,6 +39,7 @@
 				backgroundOptions: { color: '#ffffff' }
 			});
 			qr.append(container);
+			loaded = true;
 		});
 
 		return () => {
@@ -43,4 +48,12 @@
 	});
 </script>
 
-<div bind:this={container} class="overflow-hidden rounded-2xl leading-none"></div>
+<div
+	class="relative overflow-hidden rounded-2xl leading-none"
+	style="width: {size}px; height: {size}px"
+>
+	{#if !loaded}
+		<div class="absolute inset-0 animate-pulse rounded-2xl bg-white/10"></div>
+	{/if}
+	<div bind:this={container}></div>
+</div>

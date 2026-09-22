@@ -28,7 +28,7 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   hardware. Android TV would solve native app support and DRM "for free" but
   would mean giving up the custom gesture navigation and plugin architecture
   entirely — the actual point of this project.
-- **YouTube**: support both a yt-dlp/Invidious-style extraction plugin (gets
+- **YouTube**: support a yt-dlp-style extraction plugin (gets
   ad-free
 - **Google Cast**: unofficial open-source DIAL + Cast receiver rather than
   registering for the official Google Cast SDK (CAF) — avoids developer
@@ -156,27 +156,25 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
     streaming logic needed on our side)
   - **Immich** — REST API, mostly for browsing/casting photos
   - **Twitch** — Helix API + HLS stream URLs
-  - **YouTube** — dual plugin: Invidious/yt-dlp extraction (ad-free) + Cast-from-phone fallback
+  - **YouTube** — yt-dlp extraction (ad-free) + Cast-from-phone fallback
     - Built as a prototype (`plugins/youtube/`) to validate the plugin
-      contracts; ended up a genuine two-source browsing design, not the
-      single "Invidious/yt-dlp" line above:
-      - **Signed out / generic**: a self-hosted Invidious instance as a
-        sidecar (`docker-compose.yaml`, see `RUNTIME_DEPENDENCIES.md`),
-        called over its plain REST API (`plugins/youtube/invidious.ts`) for
-        trending/search. Landed here after direct authenticated InnerTube
-        calls (`youtubei.js`) reliably 400ed on the WEB client (OAuth-only
-        auth, no cookie) — Invidious already does that reverse-engineering
-        itself, no reason to redo it for the generic case.
-      - **Signed in**: this account's actual personalized YouTube home feed
-        (`plugins/youtube/tvHomeFeed.ts`), via the TV InnerTube client — the
-        one client OAuth2 is documented to work with. `youtubei.js`'s own
-        typed WEB-oriented parser classes (`HomeFeed`/`Search`) can't read
-        TV's response shape, but the raw TV JSON turned out to be plain and
-        readable (unobfuscated field names), so this walks it directly with
-        a small recursive tile-finder instead of needing typed parser
-        classes — cheaper than it looked at first. A PO token (BotGuard
-        attestation, via `bgutils-js`) was tried and ruled out along the way
-        as unrelated to the WEB-client 400s.
+      contracts. No browsing without signing in — only this account's
+      actual personalized YouTube home feed and search
+      (`plugins/youtube/tvHomeFeed.ts` / `tvSearch.ts`), via the TV
+      InnerTube client — the one client OAuth2 is documented to work with.
+      `youtubei.js`'s own typed WEB-oriented parser classes
+      (`HomeFeed`/`Search`) can't read TV's response shape (direct
+      authenticated InnerTube calls also reliably 400 on the WEB client
+      itself — OAuth-only auth, no cookie), but the raw TV JSON turned out
+      to be plain and readable (unobfuscated field names), so both walk it
+      directly with a small recursive tile-finder (`plugins/youtube/tvTiles.ts`)
+      instead of needing typed parser classes — cheaper than it looked at
+      first. A PO token (BotGuard attestation, via `bgutils-js`) was tried
+      and ruled out along the way as unrelated to the WEB-client 400s.
+      An earlier version of this plugin used a self-hosted Invidious
+      sidecar for generic/signed-out trending and search; dropped since
+      this app has no anonymous/public-content use case, and search turned
+      out to work through the same raw-TV-client approach as the home feed.
       - Sign-in itself (`plugins/youtube/auth.ts`) goes through `youtubei.js`
         directly either way — device-code OAuth2, no registered Google
         client needed.

@@ -33,6 +33,7 @@
 	"type_here_placeholder": "Type here…",
 	"enter": "Enter",
 	"backspace": "Backspace",
+	"use_phone_to_enter_pin": "Use your phone to enter the PIN",
 	"not_paired_title": "Not paired",
 	"not_paired_description": "Ask the TV to show its pairing QR code, then scan it with this phone.",
 	"pairing_error_title": "Couldn't connect",

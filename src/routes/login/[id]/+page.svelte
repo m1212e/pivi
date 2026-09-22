@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PinPad from '#lib/components/PinPad.svelte';
@@ -23,7 +22,11 @@
 	async function submit() {
 		try {
 			await client.mutate.login({ __args: { username: profile!.username, pin } });
-			await goto('/home');
+			// A full navigation, not goto()'s client-side routing -- the new
+			// profile shouldn't inherit any of the previous session's client-side
+			// state (urql's cache, module-level state elsewhere), and tearing
+			// down the whole JS runtime is the only way to guarantee that.
+			window.location.href = '/home';
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.wrong_pin());
 			pin = '';
@@ -64,6 +67,6 @@
 
 		<h1 class="text-2xl font-semibold text-white/95">{m.enter_pin_for({ name: label })}</h1>
 
-		<PinPad bind:value={pin} error={message} />
+		<PinPad bind:value={pin} error={message} showKeypad={false} />
 	{/if}
 </div>

@@ -12,13 +12,12 @@ export const manifest: PluginManifest = pluginManifestSchema.parse({
 	version: '0.1.0',
 	source: { repo: 'local', ref: 'HEAD' },
 	capabilities: [
-		// youtubei.js (innertube.ts) talks to youtube.com for sign-in;
-		// invidious.ts talks to the self-hosted Invidious instance
-		// (docker-compose.yaml) for browsing/search. Declared here for
-		// documentation even though this prototype doesn't route either
+		// youtubei.js (innertube.ts, tvHomeFeed.ts, tvSearch.ts) talks to
+		// youtube.com for sign-in and all browsing/search. Declared here for
+		// documentation even though this prototype doesn't route the
 		// library's own network calls through the httpRequest capability
 		// check.
-		{ type: 'network', domains: ['www.youtube.com', 'localhost'] },
+		{ type: 'network', domains: ['www.youtube.com'] },
 		{ type: 'credential-storage' },
 		{ type: 'display-exclusive' }
 	],

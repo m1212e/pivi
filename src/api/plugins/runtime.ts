@@ -29,6 +29,7 @@ import {
 	logParamsSchema,
 	oauthCodeNotification,
 	pluginAuthSchema,
+	profileChangedNotification,
 	publicOriginResultSchema,
 	publishAuthNotification,
 	publishDashboardNotification,
@@ -45,7 +46,7 @@ import { pluginManifestSchema } from '#lib/plugins/manifest';
 import { pluginScreenSchema } from '#lib/plugins/ui';
 import { sessionRequestSchema } from '#lib/plugins/session';
 import { openUrlNotification } from '#lib/pairing/remoteProtocol';
-import { getActiveProfileUser } from '../activeProfile';
+import { getActiveProfileUser, onActiveProfileChanged } from '../activeProfile';
 import { getLanAddress } from '../lan';
 import { sendToPhones } from '../ws/relay';
 import { getPluginCredential, setPluginCredential } from './credentials';
@@ -232,6 +233,12 @@ export async function loadPlugin(
 
 	connection.sendNotification(activateNotification);
 
+	// Every plugin gets this regardless of whether it actually has any
+	// account-bound state -- one that doesn't care just never listens for it.
+	const unsubscribeActiveProfile = onActiveProfileChanged(() => {
+		connection.sendNotification(profileChangedNotification);
+	});
+
 	return {
 		manifest: manifest!,
 		getDashboard: () => dashboard,
@@ -241,6 +248,7 @@ export async function loadPlugin(
 		deliverOAuthCode: (code, state) =>
 			connection.sendNotification(oauthCodeNotification, { code, state }),
 		dispose: () => {
+			unsubscribeActiveProfile();
 			connection.sendNotification(shutdownNotification);
 			connection.dispose();
 			child.kill();

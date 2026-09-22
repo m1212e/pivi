@@ -129,3 +129,12 @@ export const oauthCodeNotification = new NotificationType<z.infer<typeof oauthCo
 );
 
 export const shutdownNotification = new NotificationType0('host/shutdown');
+
+// Sent whenever which pivi profile is active changes (login/logout) -- lets
+// a plugin swap any account-bound state (YouTube's signed-in session, for
+// this plugin) over to whichever profile is active now instead of staying
+// stuck on whoever was active when the plugin process started. No payload:
+// a plugin re-derives "whose credential is this" the same way it always
+// does, through credentialGetRequest, which the host already resolves
+// against the current active profile.
+export const profileChangedNotification = new NotificationType0('host/profileChanged');

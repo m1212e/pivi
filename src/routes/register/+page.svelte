@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import { usernameError } from '#lib/username';
 	import { client } from '#lib/api/rumbleClient/client';
@@ -30,7 +29,11 @@
 	async function submit() {
 		try {
 			await client.mutate.register({ __args: { username: trimmedUsername, pin } });
-			await goto('/home');
+			// A full navigation, not goto()'s client-side routing -- the new
+			// profile shouldn't inherit any of the previous session's client-side
+			// state (urql's cache, module-level state elsewhere), and tearing
+			// down the whole JS runtime is the only way to guarantee that.
+			window.location.href = '/home';
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.could_not_create_profile());
 			pin = '';
@@ -95,7 +98,7 @@
 			</button>
 		{:else}
 			<h1 class="text-2xl font-semibold text-white/95">{m.set_pin()}</h1>
-			<PinPad bind:value={pin} error={message} />
+			<PinPad bind:value={pin} error={message} showKeypad={false} />
 		{/if}
 	</div>
 </div>

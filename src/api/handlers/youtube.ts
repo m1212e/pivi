@@ -60,10 +60,17 @@ const YoutubeScreenRef = schemaBuilder.objectRef<YoutubeScreen>('YoutubeScreen')
 	})
 });
 
-async function resolveDashboard(): Promise<YoutubeCard[]> {
+// `null` means the plugin hasn't published a dashboard at all yet (still
+// activating/running its first refresh) -- distinct from `[]`, which means
+// it finished and genuinely has nothing to show (e.g. signed out). Losing
+// this distinction (as `dashboard?.cards ?? []` used to) made the frontend
+// unable to tell "still loading" from "empty," so it showed the empty-state
+// UI on every fresh page load instead of a loading skeleton.
+async function resolveDashboard(): Promise<YoutubeCard[] | null> {
 	const plugin = await getYoutubePlugin();
 	const dashboard = plugin.getDashboard();
-	return (dashboard?.cards ?? []).map((card) => ({
+	if (!dashboard) return null;
+	return dashboard.cards.map((card) => ({
 		id: card.id,
 		title: card.title,
 		subtitle: card.kind === 'resume' ? card.subtitle : card.meta,
@@ -87,7 +94,7 @@ async function resolveScreen(): Promise<YoutubeScreen> {
 }
 
 schemaBuilder.queryFields((t) => ({
-	youtubeDashboard: t.field({ type: [YoutubeCardRef], resolve: resolveDashboard }),
+	youtubeDashboard: t.field({ type: [YoutubeCardRef], nullable: true, resolve: resolveDashboard }),
 
 	// Present only while a device-code sign-in is pending/just finished — a
 	// code + link is enough to render this, no per-plugin login screen
@@ -106,6 +113,7 @@ schemaBuilder.queryFields((t) => ({
 schemaBuilder.subscriptionFields((t) => ({
 	youtubeDashboard: t.field({
 		type: [YoutubeCardRef],
+		nullable: true,
 		subscribe: () => pluginPubSub.subscribe(`${PLUGIN_ID}:dashboard`),
 		resolve: resolveDashboard
 	}),

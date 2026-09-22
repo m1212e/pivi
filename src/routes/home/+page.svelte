@@ -1,16 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { pluginActionSchema, pluginActionHref } from '#lib/plugins/dashboard';
 	import PairingQr from '#lib/components/PairingQr.svelte';
 	import HeroBanner from '#lib/components/HeroBanner.svelte';
+	import HeroBannerEmpty from '#lib/components/HeroBannerEmpty.svelte';
 	import HeroBannerSkeleton from '#lib/components/HeroBannerSkeleton.svelte';
 	import VideoRow from '#lib/components/VideoRow.svelte';
 	import VideoRowSkeleton from '#lib/components/VideoRowSkeleton.svelte';
+	import PlaceholderRow from '#lib/components/PlaceholderRow.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import * as m from '#lib/paraglide/messages';
@@ -63,6 +64,13 @@
 			pluginActionSchema.parse(JSON.parse(card.actionJson))
 		);
 	}
+	// `null` means the plugin hasn't published a dashboard at all yet (still
+	// activating -- see resolveDashboard's comment in
+	// src/api/handlers/youtube.ts), distinct from `[]` (published, genuinely
+	// nothing to show). That race is real even for this top-level await: SSR
+	// can render before the plugin's first refresh() finishes, same as any
+	// other request.
+	//
 	// Copied into a plain array rather than assigned directly: what
 	// liveQuery resolves to (and what .subscribe()'s callback hands back) is
 	// a memoized Proxy over rumble's own internal, mutable "current data"
@@ -72,9 +80,10 @@
 	// invalidate $derived state depending on it (observed: the hero staying
 	// stuck on its very first value while the shelf below kept updating).
 	// Spreading into a fresh array each time guarantees a new reference.
-	let youtubeCards = $state<YoutubeCard[]>([
-		...(await client.liveQuery.youtubeDashboard(YOUTUBE_CARD_FIELDS))
-	]);
+	const initialYoutubeDashboard = await client.liveQuery.youtubeDashboard(YOUTUBE_CARD_FIELDS);
+	let youtubeCards = $state<YoutubeCard[] | null>(
+		initialYoutubeDashboard ? [...initialYoutubeDashboard] : null
+	);
 	onMount(() => {
 		// .subscribe() returns an ES Observable Subscription object
 		// (.unsubscribe()), not a plain unsubscribe function — returning it
@@ -83,21 +92,57 @@
 		const subscription = client.liveQuery
 			.youtubeDashboard(YOUTUBE_CARD_FIELDS)
 			.subscribe((value) => {
-				youtubeCards = value ? [...value] : [];
+				youtubeCards = value ? [...value] : null;
 			});
 		return () => subscription.unsubscribe();
 	});
 
-	// Whatever the dashboard's top-ranked card happens to be becomes the hero
-	// — generic over whichever plugin's cards these are, so this doesn't
-	// need touching as more plugins start contributing cards. Pulled out of
-	// its row so it isn't shown twice.
-	const heroCard = $derived(youtubeCards[0]);
-	const shelfCards = $derived(youtubeCards.slice(1));
+	// Each app's contributed cards, keyed by app id — the one thing here
+	// that's still hardcoded, since youtubeDashboard is the only per-plugin
+	// query that exists today (see plugins/dashboard.ts's dashboardContributionSchema
+	// comment: a generic aggregator is the eventual real source). Everything
+	// downstream of this map — which rows render skeleton/placeholder/real
+	// content — is generic over however many entries end up in it.
+	const cardsByAppId = $derived<Record<string, YoutubeCard[] | null>>({ youtube: youtubeCards });
+
+	// Whatever the first app-with-cards' top-ranked card happens to be
+	// becomes the hero — generic over whichever plugin's cards these are, so
+	// this doesn't need touching as more plugins start contributing cards.
+	// Pulled out of its row so it isn't shown twice.
+	const heroCard = $derived(apps.map((app) => cardsByAppId[app.id]?.[0]).find(Boolean));
+
+	// Per app: whether it's still loading, whether it settled with any
+	// content, and the cards to show in its shelf (with the hero card, if it
+	// came from this app, excluded so it isn't shown twice). An app that's
+	// still loading gets a skeleton; one that settled with zero cards gets an
+	// explanatory placeholder instead of a row titled "Suggested on {app}"
+	// for content that doesn't exist.
+	const appRows = $derived(
+		apps.map((app) => {
+			const cards = cardsByAppId[app.id];
+			const isHeroApp = cards?.[0]?.id === heroCard?.id;
+			return {
+				...app,
+				loading: cards === null,
+				hasContent: (cards?.length ?? 0) > 0,
+				shelfCards: cards ? (isHeroApp ? cards.slice(1) : cards) : []
+			};
+		})
+	);
+
+	// True once every app has published something (even an empty result) --
+	// used to decide whether a missing hero means "still loading" or "no app
+	// has anything to show."
+	const dashboardLoading = $derived(appRows.some((row) => row.loading));
 
 	async function signOut() {
 		await client.mutate.signOut();
-		await goto('/');
+		// A full navigation, not goto()'s client-side routing -- switching
+		// profiles should leave nothing of the previous session behind (urql's
+		// cache, this page's own $state, any other module-level client state),
+		// and the only way to guarantee that without hunting down every place
+		// that might hold some is to tear down the whole JS runtime.
+		window.location.href = '/';
 	}
 
 	// Same short-lived-token refresh as the profile-select screen — the
@@ -149,11 +194,10 @@
 					source={heroCard.appName}
 					href={cardHref(heroCard)}
 				/>
-			{:else}
-				<!-- The youtube plugin always eventually falls back to trending
-				     even when signed out, so no heroCard yet just means the
-				     plugin is still activating/fetching. -->
+			{:else if dashboardLoading}
 				<HeroBannerSkeleton />
+			{:else}
+				<HeroBannerEmpty />
 			{/if}
 
 			<div
@@ -192,49 +236,24 @@
 
 		<div class="flex flex-col gap-10">
 			<AppsRow title="Apps" items={apps} />
-			{#if youtubeCards.length === 0}
-				<!-- The youtube plugin always eventually falls back to trending
-				     even when signed out, so an empty result here means the
-				     plugin is still activating/fetching, not "nothing to show". -->
-				<VideoRowSkeleton title="Suggested on YouTube" />
-			{:else if shelfCards.length > 0}
-				<VideoRow
-					title="Suggested on YouTube"
-					items={shelfCards.map((c) => ({
-						id: c.id,
-						title: c.title,
-						meta: c.subtitle,
-						image: c.image,
-						href: cardHref(c)
-					}))}
-				/>
-				<!-- Temporary: same cards reshuffled into extra rows so there's
-				     enough below the fold to actually see the scroll-triggered
-				     unfold animation. Remove once there's real second/third rows
-				     of plugin-sourced content. -->
-				<VideoRow
-					title="More like this"
-					items={[...shelfCards].reverse().map((c) => ({
-						id: `more-${c.id}`,
-						title: c.title,
-						meta: c.subtitle,
-						image: c.image,
-						href: cardHref(c)
-					}))}
-				/>
-				<VideoRow
-					title="Because you watched YouTube"
-					items={shelfCards
-						.map((c, i, arr) => arr[(i + 1) % arr.length])
-						.map((c) => ({
-							id: `because-${c.id}`,
+			{#each appRows as row (row.id)}
+				{#if row.loading}
+					<VideoRowSkeleton title={row.name} />
+				{:else if !row.hasContent}
+					<PlaceholderRow appName={row.name} appHref={row.href} />
+				{:else if row.shelfCards.length > 0}
+					<VideoRow
+						title="Suggested on {row.name}"
+						items={row.shelfCards.map((c) => ({
+							id: c.id,
 							title: c.title,
 							meta: c.subtitle,
 							image: c.image,
 							href: cardHref(c)
 						}))}
-				/>
-			{/if}
+					/>
+				{/if}
+			{/each}
 		</div>
 	</div>
 {/if}

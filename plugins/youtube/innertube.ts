@@ -34,21 +34,37 @@ async function storeTokens(tokens: OAuth2Tokens): Promise<void> {
 	);
 }
 
-// Non-persistent: the library's own cache is for player/signature data
-// (needed for getStreamingData/download, which this plugin doesn't use —
-// playback still goes through yt-dlp, see stream.ts), not for our OAuth
-// tokens. Those are handled explicitly below through our own credential
-// storage instead, since that's the contract every plugin uses.
+// UniversalCache(false) alone is not actually non-persistent: it still
+// writes to a real file on disk (os.tmpdir()/youtubei.js instead of a
+// repo-local dir), just not our OAuth tokens -- those are handled
+// explicitly below through our own credential storage, since that's the
+// contract every plugin uses. What it does write there without
+// enable_session_cache: false is an unscoped, shared-across-all-profiles
+// session blob (visitor id, client config), keyed by a fixed string with
+// no per-user isolation at all. enable_session_cache: false stops that
+// write; the cache instance itself stays, since Player still needs it for
+// signature data (getStreamingData/download, which this plugin doesn't
+// use directly -- playback goes through yt-dlp, see stream.ts).
 //
-// This session is used for sign-in/account identity and, once signed in,
-// the real personalized home feed (tvHomeFeed.ts, via the TV client — the
-// only one OAuth2 is documented to work with). Generic/signed-out browsing
-// goes through invidious.ts instead: the WEB client here 400s on OAuth-only
-// auth (no cookie), and youtubei.js's typed WEB-oriented parser classes
-// (HomeFeed/Search) can't read TV/ANDROID-shaped responses, which is why
-// tvHomeFeed.ts walks the raw TV response itself instead of using them. See
-// SKETCH.md's YouTube plugin notes for the full investigation.
-export const innertube = await Innertube.create({ cache: new UniversalCache(false) });
+// This session is used for sign-in/account identity and the real
+// personalized home feed and search (tvHomeFeed.ts/tvSearch.ts, via the TV
+// client — the only one OAuth2 is documented to work with). The WEB client
+// 400s on OAuth-only auth (no cookie), and youtubei.js's typed WEB-oriented
+// parser classes (HomeFeed/Search) can't read TV/ANDROID-shaped responses
+// anyway, which is why tvHomeFeed.ts/tvSearch.ts walk the raw TV response
+// themselves instead of using them. See SKETCH.md's YouTube plugin notes
+// for the full investigation.
+//
+// A `let`, not a `const`: this plugin process is shared across every pivi
+// profile (one process, not one per account), so whichever profile is
+// actually active can change while the process keeps running (see
+// loadSessionForActiveProfile below). Every module that imports `innertube`
+// sees the live binding, so a swap here is picked up everywhere without
+// those modules needing to do anything differently.
+export let innertube = await Innertube.create({
+	cache: new UniversalCache(false),
+	enable_session_cache: false
+});
 
 // Confirmed by reading OAuth2.ts directly: the *first* successful device-code
 // login only ever emits 'auth', never 'update-credentials' — that event is
@@ -59,8 +75,11 @@ export const innertube = await Innertube.create({ cache: new UniversalCache(fals
 function persist({ credentials }: { credentials: OAuth2Tokens }) {
 	storeTokens(credentials).catch(() => {});
 }
-innertube.session.on('auth', persist);
-innertube.session.on('update-credentials', persist);
+function wirePersistence(client: Innertube) {
+	client.session.on('auth', persist);
+	client.session.on('update-credentials', persist);
+}
+wirePersistence(innertube);
 
 // NOT run at module load: the host's credentialGetRequest handler only
 // knows which plugin is asking once it's received this plugin's
@@ -71,21 +90,35 @@ innertube.session.on('update-credentials', persist);
 // imports, including this file's top-level code, has finished), so calling
 // getStoredTokens() here unconditionally always got `{ value: null }` back,
 // even with a real stored credential — meaning sign-in silently never
-// survived a process restart. main.ts calls this explicitly, after ready.
-let restored: Promise<void> | undefined;
-export function restoreSession(): Promise<void> {
-	if (!restored) {
-		restored = (async () => {
-			const stored = await getStoredTokens();
-			if (!stored) return;
-			try {
-				await innertube.session.signIn(stored);
-			} catch (err) {
-				// Stored tokens no longer valid (revoked, expired refresh token) —
-				// fall back to signed-out browsing; the user can sign in again.
-				console.error('[youtube] stored sign-in failed:', err);
-			}
-		})();
+// survived a process restart. main.ts calls this explicitly, after ready,
+// and again every time the host says the active profile changed.
+//
+// Re-invokable (unlike a single memoized promise, which is all this needed
+// back when it only ever ran once at startup): the host already resolves
+// getStoredTokens()/credentialGetRequest against whichever profile is
+// active *right now*, so calling this again after a profile switch loads
+// the new profile's own credential. A fresh Innertube instance rather than
+// reusing/resetting the old one, because Session's own signOut() revokes
+// the credentials at Google — fine for a real "sign out of YouTube" action,
+// wrong here, since switching pivi profiles must never invalidate the
+// *previous* profile's real Google login.
+export async function loadSessionForActiveProfile(): Promise<void> {
+	const stored = await getStoredTokens();
+
+	const next = await Innertube.create({
+		cache: new UniversalCache(false),
+		enable_session_cache: false
+	});
+	wirePersistence(next);
+	if (stored) {
+		try {
+			await next.session.signIn(stored);
+		} catch (err) {
+			// Stored tokens no longer valid (revoked, expired refresh token) —
+			// fall back to signed-out browsing; the user can sign in again.
+			console.error('[youtube] stored sign-in failed:', err);
+		}
 	}
-	return restored;
+
+	innertube = next;
 }

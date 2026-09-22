@@ -1447,13 +1447,10 @@ export const schema = {
 					{
 						name: 'youtubeDashboard',
 						type: {
-							kind: 'NON_NULL',
+							kind: 'LIST',
 							ofType: {
-								kind: 'LIST',
-								ofType: {
-									kind: 'NON_NULL',
-									ofType: { name: 'YoutubeCard', kind: 'OBJECT', ofType: null, __proto__: null }
-								}
+								kind: 'NON_NULL',
+								ofType: { name: 'YoutubeCard', kind: 'OBJECT', ofType: null, __proto__: null }
 							}
 						},
 						args: []
@@ -1704,13 +1701,10 @@ export const schema = {
 					{
 						name: 'youtubeDashboard',
 						type: {
-							kind: 'NON_NULL',
+							kind: 'LIST',
 							ofType: {
-								kind: 'LIST',
-								ofType: {
-									kind: 'NON_NULL',
-									ofType: { name: 'YoutubeCard', kind: 'OBJECT', ofType: null, __proto__: null }
-								}
+								kind: 'NON_NULL',
+								ofType: { name: 'YoutubeCard', kind: 'OBJECT', ofType: null, __proto__: null }
 							}
 						},
 						args: []
