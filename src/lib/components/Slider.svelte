@@ -152,7 +152,6 @@
 	}
 
 	const fraction = $derived((value - min) / (max - min));
-	const inset = $derived(size === 'sm' ? 0.125 : 0.375);
 </script>
 
 <div
@@ -172,7 +171,7 @@
 	onpointerup={onPointerUp}
 	onpointercancel={onPointerUp}
 	onkeydown={onKeydown}
-	class="relative touch-none rounded-full bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 outline-none {orientation ===
+	class="relative touch-none overflow-hidden rounded-full bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 outline-none {orientation ===
 	'horizontal'
 		? size === 'sm'
 			? 'h-2 w-full min-w-40'
@@ -181,20 +180,16 @@
 			? 'h-56 w-2'
 			: 'h-56 w-11'}"
 >
-	<!-- Sized directly (not a transform: scale on a full-size div) so the
-	     pill's rounded corners stay circular at any fraction instead of
-	     stretching into an ellipse. Only the cross-axis is inset via a
-	     shorthand (inset-x/inset-y) -- setting all four sides (inset-1)
-	     alongside an explicit bottom+height is over-constrained, and CSS
-	     resolves that by dropping `bottom` in favor of `top`, which silently
-	     flipped the vertical fill to grow from the top instead of the
-	     bottom it was actually meant to anchor to. -->
+	<!-- No rounding, inset, or gap of its own -- the track above clips it
+	     (`overflow-hidden` + the same `rounded-full`) into the track's own
+	     rounded shape at both ends, so this just reads as the pill itself
+	     filling up rather than a separate, smaller pill floating inside it. -->
 	<div
-		class="absolute rounded-full bg-white {orientation === 'horizontal'
-			? 'inset-y-0.5'
-			: 'inset-x-0.5'}"
+		class="absolute bg-white {orientation === 'horizontal'
+			? 'inset-y-0 left-0'
+			: 'inset-x-0 bottom-0'}"
 		style={orientation === 'horizontal'
-			? `left: ${inset}rem; width: calc(${fraction * 100}% - ${inset * 2}rem)`
-			: `bottom: ${inset}rem; height: calc(${fraction * 100}% - ${inset * 2}rem)`}
+			? `width: ${fraction * 100}%`
+			: `height: ${fraction * 100}%`}
 	></div>
 </div>

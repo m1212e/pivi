@@ -243,6 +243,34 @@ html[data-view-transition='zoom-in']::view-transition-new(root) {
 	animation: 380ms cubic-bezier(0.4, 0, 0.2, 1) both pivi-zoom-in-new;
 }
 
+/*
+ * Opts every same-origin navigation into the browser's own automatic
+ * cross-document view transition (Chrome only, same caveat as above) --
+ * needed because the login flow's last step (see login/[id]'s own submit())
+ * is a full page reload, not a client-side navigation +layout.svelte's
+ * onNavigate can intercept with its own JS-driven startViewTransition() call.
+ * Harmless everywhere else: with no matching view-transition-name on either
+ * side of a given navigation, this just produces the engine's default
+ * whole-page crossfade instead of a hard cut.
+ */
+@view-transition {
+	navigation: auto;
+}
+
+/*
+ * The profile picture and pairing QR code both carry `view-transition-name:
+ * profile-avatar`/`pairing-qr` (see the picker, PIN entry, and home pages)
+ * so the browser morphs that one element's position/size across a
+ * navigation instead of just cross-fading it away with the rest of the
+ * page. Slightly slower than the whole-page zoom above since there's more
+ * for the eye to track (movement, not just scale/fade).
+ */
+::view-transition-group(profile-avatar),
+::view-transition-group(pairing-qr) {
+	animation-duration: 450ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* A card sitting right at a shelf's edge is deliberately only partly
    visible — it's the "there's more, keep scrolling" affordance every TV/
    streaming UI uses. Without this it just looks like it's been chopped off

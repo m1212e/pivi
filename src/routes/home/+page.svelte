@@ -24,7 +24,8 @@
 	const me = await client.liveQuery.user({
 		__args: { id: page.data.userId },
 		id: true,
-		username: true
+		username: true,
+		image: true
 	});
 	const label = me?.username;
 
@@ -159,7 +160,15 @@
 		// cache, this page's own $state, any other module-level client state),
 		// and the only way to guarantee that without hunting down every place
 		// that might hold some is to tear down the whole JS runtime.
-		window.location.href = '/';
+		//
+		// `from` tells the picker which profile this was so it can statically
+		// tag that one avatar's `view-transition-name` for the shared-element
+		// morph -- a full reload has no JS state to hand that off with
+		// otherwise (unlike the same-document picker->PIN transition, which
+		// +layout.svelte tags dynamically), and the picker shows many avatars
+		// at once so it can't just tag one unconditionally the way the PIN and
+		// home pages (each showing only one) already do.
+		window.location.href = `/?from=${encodeURIComponent(me.id)}`;
 	}
 
 	// Same short-lived-token refresh as the profile-select screen — the
@@ -231,10 +240,15 @@
 						data-focus-ring-target
 						class="flex size-9 items-center justify-center overflow-hidden rounded-full"
 						style="background: {profileGradient(me.username ?? me.id)}"
+						style:view-transition-name="profile-avatar"
 					>
-						<span class="text-sm font-semibold text-white/90 uppercase">
-							{label?.slice(0, 1)}
-						</span>
+						{#if me.image}
+							<img src={me.image} alt="" class="size-full object-cover" />
+						{:else}
+							<span class="text-sm font-semibold text-white/90 uppercase">
+								{label?.slice(0, 1)}
+							</span>
+						{/if}
 					</span>
 					<span class="text-sm font-medium text-white/90">{label}</span>
 				</button>
@@ -244,7 +258,9 @@
 						<div
 							class="rounded-3xl bg-white/12 p-3 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
 						>
-							<PairingQr url={pairing.remoteUrl} size={220} />
+							<div style:view-transition-name="pairing-qr">
+								<PairingQr url={pairing.remoteUrl} size={220} />
+							</div>
 						</div>
 					{/if}
 				</div>

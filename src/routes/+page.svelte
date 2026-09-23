@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
@@ -10,6 +11,16 @@
 		username: true,
 		image: true
 	});
+
+	// Set by home's own signOut() (a full reload, not a client-side nav) so
+	// this page knows which one profile to statically tag for the
+	// shared-element morph -- unlike the picker->PIN leg, which
+	// +layout.svelte's onNavigate can tag dynamically since that's a
+	// same-document navigation, a hard reload has no other way to hand this
+	// off, and this page shows many avatars at once so it can't just tag one
+	// unconditionally the way the PIN and home pages (each showing only one)
+	// already do.
+	const signedOutProfileId = page.url.searchParams.get('from');
 
 	// The QR code embeds a short-lived pairing token, so if this idle screen
 	// sits open long enough for it to expire, refresh it before that happens
@@ -43,6 +54,9 @@
 					data-focus-ring-target
 					class="flex size-28 items-center justify-center overflow-hidden rounded-full transition group-hover:scale-105 sm:size-32"
 					style="background: {profileGradient(profile.username ?? profile.id)}"
+					style:view-transition-name={profile.id === signedOutProfileId
+						? 'profile-avatar'
+						: undefined}
 				>
 					{#if profile.image}
 						<img src={profile.image} alt="" class="size-full object-cover" />
@@ -81,7 +95,12 @@
 		<div
 			class="flex items-center gap-5 rounded-3xl bg-white/12 px-6 py-5 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
 		>
-			<PairingQr url={pairing.remoteUrl} size={192} />
+			<!-- Only one QR code is ever on screen on this page, unlike the
+			     profile avatars below -- safe to name statically rather than
+			     needing +layout.svelte to pick it out dynamically. -->
+			<div style:view-transition-name="pairing-qr">
+				<PairingQr url={pairing.remoteUrl} size={192} />
+			</div>
 			<div class="max-w-56 text-sm text-white/60">
 				<p class="font-medium text-white/90">{m.scan_with_phone()}</p>
 				<p>{m.remote_description()}</p>
