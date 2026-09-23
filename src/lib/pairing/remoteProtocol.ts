@@ -32,7 +32,11 @@ export const stateParamsSchema = z.object({
 	hasPinPad: z.boolean(),
 	hasTextInput: z.boolean(),
 	canGoBack: z.boolean(),
-	isLoggedIn: z.boolean()
+	// Whether the "Home" button on the phone is worth showing -- true only
+	// while the TV is actually inside an app or the player, i.e. somewhere
+	// "Home" would take it somewhere new. Not shown on the home screen
+	// itself (nothing to go home to) or on the pre-login profile picker.
+	canGoHome: z.boolean()
 });
 export const stateNotification = new NotificationType<z.infer<typeof stateParamsSchema>>(
 	'remote/state'

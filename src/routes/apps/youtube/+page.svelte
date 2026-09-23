@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 	import { client } from '#lib/api/rumbleClient/client';
 	import UiNodeRenderer from '#lib/components/plugins/UiNodeRenderer.svelte';
 	import type { UiNode } from '#lib/plugins/ui';
@@ -73,15 +72,7 @@
 		};
 	});
 
-	// A dashboard card's action (see #lib/plugins/dashboard's pluginActionHref)
-	// lands here as a `deepLink` query param rather than this page needing to
-	// know anything about where it was clicked from — it's just the same
-	// event id the browse screen's own Play buttons already send (onEvent
-	// below), so the plugin doesn't need a separate "open this video" concept.
-	onMount(() => {
-		const deepLink = page.url.searchParams.get('deepLink');
-		if (deepLink) onEvent(deepLink);
-	});
+	const APP_HREF = '/apps/youtube';
 </script>
 
 <svelte:head><title>YouTube</title></svelte:head>
@@ -103,7 +94,7 @@
 			</button>
 		</div>
 	{:else if screen}
-		<UiNodeRenderer node={screen} {onEvent} />
+		<UiNodeRenderer node={screen} {onEvent} pluginId="youtube" appHref={APP_HREF} />
 	{:else}
 		<p class="text-white/50">Loading…</p>
 	{/if}

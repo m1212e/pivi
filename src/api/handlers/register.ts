@@ -7,6 +7,7 @@ import './pairing';
 import './auth';
 import './youtube';
 import './remote';
+import './playback';
 
 if (!building) {
 	startPairingRelay();

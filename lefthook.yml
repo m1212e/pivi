@@ -8,3 +8,5 @@ pre-push:
   commands:
     lint:
       run: bunx eslint "{push_files}"
+    fallow:
+      run: bunx fallow audit

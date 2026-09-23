@@ -2,6 +2,58 @@
 @plugin '@tailwindcss/typography';
 
 /*
+ * A TV remote/keyboard drives scrolling into view itself, so a visible
+ * scrollbar track is never actually useful here -- applied to every element
+ * (not just the shelves that opt into `.scrollbar-none` below) so a plain
+ * `overflow-auto`/`overflow-y-scroll` div anywhere in the app hides its
+ * scrollbar too, with nothing extra to remember per component.
+ */
+* {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+	display: none;
+}
+
+/*
+ * svelte-sonner (the toast library, see +layout.svelte) hardcodes every
+ * dimension as literal px in its own stylesheet/inline styles rather than
+ * rem, so none of it responds to tvScale.ts's root-font-size scaling the
+ * way the rest of the (rem-based Tailwind) app does -- toasts stayed a
+ * fixed physical size no matter how big the TV/root font-size got. These
+ * are the same numbers svelte-sonner defaults to, just converted to rem
+ * (at its own 16px base) so they scale along with everything else instead.
+ * `--width`/`--gap` need `!important` since the library sets them as an
+ * inline style on `[data-sonner-toaster]` itself, which otherwise beats a
+ * plain stylesheet rule.
+ */
+[data-sonner-toaster] {
+	--width: 22.25rem !important; /* 356px */
+	--gap: 0.875rem !important; /* 14px */
+	--border-radius: 0.5rem !important; /* 8px */
+}
+[data-sonner-toast][data-styled='true'] {
+	padding: 1rem !important; /* 16px */
+	font-size: 0.8125rem !important; /* 13px */
+}
+[data-sonner-toast][data-styled='true'] [data-icon] {
+	height: 1rem !important; /* 16px */
+	width: 1rem !important;
+}
+[data-sonner-toast][data-styled='true'] [data-button] {
+	height: 1.5rem !important; /* 24px */
+	font-size: 0.75rem !important; /* 12px */
+	border-radius: 0.25rem !important; /* 4px */
+	padding-left: 0.5rem !important; /* 8px */
+	padding-right: 0.5rem !important;
+}
+[data-sonner-toast][data-styled='true'] [data-close-button] {
+	height: 1.25rem !important; /* 20px */
+	width: 1.25rem !important;
+}
+
+/*
  * Every page in this app is dark, but html/body themselves are never given a
  * background - during the zoom view transition below, the old/new page
  * snapshots are scaled down (to <100%), which exposes whatever's behind them
@@ -139,16 +191,10 @@ body {
 	opacity: 0.55;
 }
 
-/* Dashboard shelves scroll horizontally but the scrollbar itself is never
-   the point of interaction on a TV (remote/keyboard focus drives scrolling
-   into view instead), so hide it across browsers. */
+/* Scrollbar hiding itself is global (see top of file) -- this just adds
+   smooth scrolling for a shelf brought into view by remote/keyboard focus. */
 .scrollbar-none {
-	scrollbar-width: none;
-	-ms-overflow-style: none;
 	scroll-behavior: smooth;
-}
-.scrollbar-none::-webkit-scrollbar {
-	display: none;
 }
 
 /*

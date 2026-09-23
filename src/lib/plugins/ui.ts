@@ -6,6 +6,7 @@
 // filters UI that a fixed card schema can't express.
 import { z } from 'zod';
 import { pluginThemeSchema } from './theme';
+import { pluginActionSchema, type PluginAction } from './dashboard';
 
 // The type has to be declared by hand alongside the schema — zod can't
 // infer a recursive type from a lazily-defined schema on its own, since the
@@ -14,15 +15,19 @@ export type UiNode =
 	| { type: 'container'; direction: 'row' | 'column'; children: UiNode[] }
 	| { type: 'text'; value: string; variant?: 'title' | 'subtitle' | 'body' }
 	| { type: 'image'; src: string; aspect?: 'video' | 'poster' | 'square' }
-	// `onSelect`/`onChange`/`onSubmit` are event ids, not callbacks — the
-	// plugin process has no direct handle on the shell's DOM, so the event
-	// crosses back over the RPC channel as a UiEvent instead.
-	| { type: 'button'; label: string; onSelect: string }
+	// `onSelect` is an event id, not a callback — the plugin process has no
+	// direct handle on the shell's DOM, so the event crosses back over the
+	// RPC channel as a UiEvent instead. `action`, when present, takes over
+	// instead: the button becomes a real navigable link (via the same
+	// pluginActionHref every dashboard card already resolves through) rather
+	// than firing a UI event — this is how a screen's own "Play" button
+	// reaches the shared player route without a bespoke navigation path.
+	| { type: 'button'; label: string; onSelect?: string; action?: PluginAction }
 	| { type: 'toggle'; label: string; value: boolean; onChange: string }
 	| { type: 'textInput'; label: string; placeholder?: string; secret?: boolean; onSubmit: string }
 	| { type: 'list'; items: UiNode[] };
 
-export const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
+const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 	z.discriminatedUnion('type', [
 		z.object({
 			type: z.literal('container'),
@@ -39,7 +44,12 @@ export const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 			src: z.string(),
 			aspect: z.enum(['video', 'poster', 'square']).optional()
 		}),
-		z.object({ type: z.literal('button'), label: z.string(), onSelect: z.string() }),
+		z.object({
+			type: z.literal('button'),
+			label: z.string(),
+			onSelect: z.string().optional(),
+			action: pluginActionSchema.optional()
+		}),
 		z.object({
 			type: z.literal('toggle'),
 			label: z.string(),

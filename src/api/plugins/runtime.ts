@@ -35,16 +35,17 @@ import {
 	publishDashboardNotification,
 	publishScreenNotification,
 	readyNotification,
-	requestSessionRequest,
-	requestSessionResultSchema,
-	sessionEndedNotification,
+	resolvedStreamSchema,
+	resolveSkipSegmentsRequest,
+	resolveStreamRequest,
 	shutdownNotification,
-	uiEventNotification
+	uiEventNotification,
+	type ResolvedStream,
+	type SkipSegment
 } from '#lib/plugins/host';
-import { dashboardContributionSchema, type PluginAction } from '#lib/plugins/dashboard';
+import { dashboardContributionSchema } from '#lib/plugins/dashboard';
 import { pluginManifestSchema } from '#lib/plugins/manifest';
 import { pluginScreenSchema } from '#lib/plugins/ui';
-import { sessionRequestSchema } from '#lib/plugins/session';
 import { openUrlNotification } from '#lib/pairing/remoteProtocol';
 import { getActiveProfileUser, onActiveProfileChanged } from '../activeProfile';
 import { getLanAddress } from '../lan';
@@ -58,6 +59,8 @@ export type PluginInstance = {
 	getAuth(): ReturnType<typeof pluginAuthSchema.parse> | undefined;
 	sendUiEvent(event: UiEvent): void;
 	deliverOAuthCode(code: string, state: string): void;
+	resolveStream(sessionId: string, maxHeight?: number): Promise<ResolvedStream>;
+	resolveSkipSegments(sessionId: string): Promise<SkipSegment[]>;
 	dispose(): void;
 };
 
@@ -67,32 +70,6 @@ function hostAllowsDomain(manifest: PluginManifest, url: string): boolean {
 		(c) =>
 			c.type === 'network' && c.domains.some((d) => hostname === d || hostname.endsWith(`.${d}`))
 	);
-}
-
-function hasCapability(manifest: PluginManifest, type: string): boolean {
-	return manifest.capabilities.some((c) => c.type === type);
-}
-
-// Starts `mpv` directly on the resolved stream URL rather than depending on
-// a wrapper library — SKETCH.md's actual target is libmpv over its JSON IPC
-// socket, but this prototype only needs "play this URL and know when it's
-// done," which a plain child process gives us with no extra dependency.
-function playMedia(
-	url: string,
-	audioUrl: string | undefined,
-	onEnded: (reason: 'completed' | 'error', message?: string) => void
-) {
-	// Most modern YouTube formats are video-only + audio-only rather than
-	// one muxed file (see plugins/youtube/stream.ts) — mpv plays both
-	// together fine via --audio-file, no local muxing needed.
-	const args = audioUrl ? [url, `--audio-file=${audioUrl}`, '--fullscreen'] : [url, '--fullscreen'];
-	const mpv = spawn('mpv', args, { stdio: 'ignore' });
-	mpv.on('exit', (code) => {
-		if (code === 0) onEnded('completed');
-		else onEnded('error', `mpv exited with code ${code}`);
-	});
-	mpv.on('error', (err) => onEnded('error', err.message));
-	return mpv;
 }
 
 export type PluginUpdateKind = 'dashboard' | 'auth' | 'screen';
@@ -171,23 +148,6 @@ export async function loadPlugin(
 		console[level](`[plugin${manifest ? `:${manifest.id}` : ''}] ${message}`);
 	});
 
-	connection.onRequest(requestSessionRequest, (raw) => {
-		const request = sessionRequestSchema.parse(raw);
-		if (!manifest) return requestSessionResultSchema.parse({ granted: false });
-
-		const granted = request.needs.every((need) => hasCapability(manifest!, need));
-		if (granted && request.media) {
-			playMedia(request.media.url, request.media.audioUrl, (reason, message) => {
-				connection.sendNotification(sessionEndedNotification, {
-					sessionId: request.sessionId,
-					reason,
-					message
-				});
-			});
-		}
-		return requestSessionResultSchema.parse({ granted });
-	});
-
 	connection.onRequest(httpRequestRequest, async (raw) => {
 		const params = httpRequestParamsSchema.parse(raw);
 		if (!manifest || !hostAllowsDomain(manifest, params.url)) {
@@ -247,6 +207,22 @@ export async function loadPlugin(
 		sendUiEvent: (event) => connection.sendNotification(uiEventNotification, event),
 		deliverOAuthCode: (code, state) =>
 			connection.sendNotification(oauthCodeNotification, { code, state }),
+		resolveStream: async (sessionId, maxHeight) =>
+			resolvedStreamSchema.parse(
+				await connection.sendRequest(resolveStreamRequest, { sessionId, maxHeight })
+			),
+		resolveSkipSegments: async (sessionId) => {
+			try {
+				const { segments } = await connection.sendRequest(resolveSkipSegmentsRequest, {
+					sessionId
+				});
+				return segments;
+			} catch {
+				// The plugin has no handler registered for this request at all --
+				// same as it having nothing to report.
+				return [];
+			}
+		},
 		dispose: () => {
 			unsubscribeActiveProfile();
 			connection.sendNotification(shutdownNotification);
@@ -255,5 +231,3 @@ export async function loadPlugin(
 		}
 	};
 }
-
-export type { PluginAction };

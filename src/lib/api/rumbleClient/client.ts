@@ -221,8 +221,30 @@ export type PersonName = unknown;
 
 export type PhoneNumber = unknown;
 
+export type PluginPlaybackInfo = {
+	acodec: String | null;
+	audioContainer: String | null;
+	direct: Boolean;
+	duration: Float;
+	title: String;
+	vcodec: String;
+	videoContainer: String;
+};
+
+export type PluginSkipSegment = {
+	endSeconds: Float;
+	label: String;
+	startSeconds: Float;
+};
+
 export type Query = {
 	pairing: () => Pairing;
+	pluginPlaybackInfo: (p: {
+		maxHeight?: Int | null | undefined;
+		pluginId: String;
+		sessionId: String;
+	}) => PluginPlaybackInfo;
+	pluginSkipSegments: (p: { pluginId: String; sessionId: String }) => PluginSkipSegment[];
 	user: (p: { id: ID }) => User;
 	users: (p?: {
 		limit?: Int | null | undefined;

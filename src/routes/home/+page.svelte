@@ -60,6 +60,7 @@
 	const YOUTUBE_APP_HREF = '/apps/youtube';
 	function cardHref(card: YoutubeCard): string {
 		return pluginActionHref(
+			'youtube',
 			YOUTUBE_APP_HREF,
 			pluginActionSchema.parse(JSON.parse(card.actionJson))
 		);
@@ -111,24 +112,41 @@
 	// Pulled out of its row so it isn't shown twice.
 	const heroCard = $derived(apps.map((app) => cardsByAppId[app.id]?.[0]).find(Boolean));
 
+	function isHeroCard(cards: YoutubeCard[] | null, heroCard: YoutubeCard | undefined): boolean {
+		if (!cards || cards.length === 0 || !heroCard) return false;
+		return cards[0].id === heroCard.id;
+	}
+
+	function hasCards(cards: YoutubeCard[] | null): boolean {
+		return !!cards && cards.length > 0;
+	}
+
+	function shelfCardsFor(cards: YoutubeCard[] | null, isHero: boolean): YoutubeCard[] {
+		if (!cards) return [];
+		return isHero ? cards.slice(1) : cards;
+	}
+
+	function appRowFor(
+		app: (typeof apps)[number],
+		cards: YoutubeCard[] | null,
+		heroCard: YoutubeCard | undefined
+	) {
+		const isHero = isHeroCard(cards, heroCard);
+		return {
+			...app,
+			loading: cards === null,
+			hasContent: hasCards(cards),
+			shelfCards: shelfCardsFor(cards, isHero)
+		};
+	}
+
 	// Per app: whether it's still loading, whether it settled with any
 	// content, and the cards to show in its shelf (with the hero card, if it
 	// came from this app, excluded so it isn't shown twice). An app that's
 	// still loading gets a skeleton; one that settled with zero cards gets an
 	// explanatory placeholder instead of a row titled "Suggested on {app}"
 	// for content that doesn't exist.
-	const appRows = $derived(
-		apps.map((app) => {
-			const cards = cardsByAppId[app.id];
-			const isHeroApp = cards?.[0]?.id === heroCard?.id;
-			return {
-				...app,
-				loading: cards === null,
-				hasContent: (cards?.length ?? 0) > 0,
-				shelfCards: cards ? (isHeroApp ? cards.slice(1) : cards) : []
-			};
-		})
-	);
+	const appRows = $derived(apps.map((app) => appRowFor(app, cardsByAppId[app.id], heroCard)));
 
 	// True once every app has published something (even an empty result) --
 	// used to decide whether a missing hero means "still loading" or "no app

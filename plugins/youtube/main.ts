@@ -3,7 +3,9 @@
 // together against the plugin RPC contract in src/lib/plugins/host.ts:
 // login (auth.ts), browsing — this account's personalized home feed
 // (tvHomeFeed.ts), signed in only, no generic/anonymous fallback — and
-// playback (stream.ts + a session request).
+// playback (stream.ts, resolved on demand by resolveStreamRequest — the
+// host's generic streaming proxy calls this, not this plugin, so playback
+// itself is entirely the host's concern).
 import {
 	activateNotification,
 	logNotification,
@@ -11,9 +13,8 @@ import {
 	publishDashboardNotification,
 	publishScreenNotification,
 	readyNotification,
-	requestSessionRequest,
-	requestSessionResultSchema,
-	sessionEndedNotification,
+	resolveSkipSegmentsRequest,
+	resolveStreamRequest,
 	shutdownNotification,
 	uiEventNotification
 } from '#lib/plugins/host';
@@ -25,6 +26,7 @@ import { beginSignIn, isSignedIn } from './auth';
 import { fetchTvHomeFeed } from './tvHomeFeed';
 import type { VideoSummary } from './youtubeClient';
 import { resolveStream } from './stream';
+import { fetchSkipSegments } from './sponsorBlock';
 import { innertube, loadSessionForActiveProfile } from './innertube';
 
 const SCREEN_ID = 'browse';
@@ -33,9 +35,11 @@ function log(level: 'info' | 'warn' | 'error', message: string) {
 	connection.sendNotification(logNotification, { level, message });
 }
 
-// Same "play:<id>" convention the browse screen's own Play buttons use
-// (onEvent below) — a dashboard card and a browse-screen row ending up at
-// the same video go through one shared event, not two.
+// A `session` action, not `deepLink` — the video id doubles as the session
+// id since it's already exactly what resolveStream (below) needs, and it
+// takes the card straight to the shared player route (see
+// #lib/plugins/dashboard's pluginActionHref) without this plugin needing to
+// know anything about how playback actually happens.
 function videoToCard(video: VideoSummary): HomeCard {
 	return {
 		kind: 'suggestion',
@@ -43,7 +47,7 @@ function videoToCard(video: VideoSummary): HomeCard {
 		title: video.title,
 		meta: video.channelTitle,
 		image: video.thumbnailUrl,
-		action: { type: 'deepLink', target: `play:${video.id}` }
+		action: { type: 'session', sessionId: video.id }
 	};
 }
 
@@ -67,7 +71,11 @@ function browseScreen(results: VideoSummary[]): UiNode {
 						{ type: 'image', src: video.thumbnailUrl, aspect: 'video' },
 						{ type: 'text', value: video.title, variant: 'title' },
 						{ type: 'text', value: video.channelTitle, variant: 'subtitle' },
-						{ type: 'button', label: 'Play', onSelect: `play:${video.id}` }
+						{
+							type: 'button',
+							label: 'Play',
+							action: { type: 'session', sessionId: video.id }
+						}
 					]
 				}))
 			}
@@ -81,20 +89,6 @@ function publishScreen(results: VideoSummary[]) {
 		screenId: SCREEN_ID,
 		root: browseScreen(results)
 	});
-}
-
-async function playVideo(videoId: string, title: string) {
-	log('info', `Resolving stream for ${videoId}`);
-	const { videoUrl, audioUrl } = await resolveStream(videoId);
-	const result = requestSessionResultSchema.parse(
-		await connection.sendRequest(requestSessionRequest, {
-			pluginId: manifest.id,
-			sessionId: `youtube-${videoId}-${Date.now()}`,
-			needs: ['display-exclusive'],
-			media: { url: videoUrl, audioUrl, title }
-		})
-	);
-	if (!result.granted) log('warn', 'Playback session was not granted');
 }
 
 // Module scope (not activate()'s own local) since a profile switch needs to
@@ -148,11 +142,23 @@ function main() {
 
 	connection.onNotification(shutdownNotification, () => process.exit(0));
 
-	// Otherwise a playback failure (e.g. mpv missing/failing to start) is
-	// silent — the session request itself only reports whether it was
-	// *granted*, not how the session actually ended.
-	connection.onNotification(sessionEndedNotification, (ended) => {
-		if (ended.reason === 'error') log('error', `Playback session ended: ${ended.message}`);
+	// The host's streaming proxy calls this on demand (see
+	// src/routes/api/stream/[pluginId]/[sessionId]) — sessionId is just the
+	// video id for this plugin, an opaque string as far as the host's
+	// concerned, same as a deepLink target already is.
+	connection.onRequest(resolveStreamRequest, ({ sessionId, maxHeight }) =>
+		resolveStream(sessionId, maxHeight)
+	);
+
+	// sessionId doubles as the video id here too (see resolveStreamRequest's
+	// own comment) -- SponsorBlock keys its own data off the same id.
+	connection.onRequest(resolveSkipSegmentsRequest, async ({ sessionId }) => {
+		try {
+			return { segments: await fetchSkipSegments(sessionId) };
+		} catch (err) {
+			log('error', err instanceof Error ? err.message : String(err));
+			return { segments: [] };
+		}
 	});
 }
 
@@ -184,15 +190,6 @@ async function activate() {
 			beginSignIn()
 				.then(() => refresh())
 				.catch((err: unknown) => log('error', err instanceof Error ? err.message : String(err)));
-			return;
-		}
-
-		if (event.eventId.startsWith('play:')) {
-			const videoId = event.eventId.slice('play:'.length);
-			const video = lastResults.find((v) => v.id === videoId);
-			playVideo(videoId, video?.title ?? videoId).catch((err: unknown) =>
-				log('error', err instanceof Error ? err.message : String(err))
-			);
 		}
 	});
 }

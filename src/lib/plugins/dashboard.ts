@@ -19,7 +19,7 @@ export const pluginActionSchema = z.discriminatedUnion('type', [
 
 export type PluginAction = z.infer<typeof pluginActionSchema>;
 
-export const resumeCardSchema = z.object({
+const resumeCardSchema = z.object({
 	kind: z.literal('resume'),
 	id: z.string(),
 	title: z.string(),
@@ -29,9 +29,7 @@ export const resumeCardSchema = z.object({
 	action: pluginActionSchema
 });
 
-export type ResumeCard = z.infer<typeof resumeCardSchema>;
-
-export const suggestionCardSchema = z.object({
+const suggestionCardSchema = z.object({
 	kind: z.literal('suggestion'),
 	id: z.string(),
 	title: z.string(),
@@ -40,12 +38,7 @@ export const suggestionCardSchema = z.object({
 	action: pluginActionSchema
 });
 
-export type SuggestionCard = z.infer<typeof suggestionCardSchema>;
-
-export const homeCardSchema = z.discriminatedUnion('kind', [
-	resumeCardSchema,
-	suggestionCardSchema
-]);
+const homeCardSchema = z.discriminatedUnion('kind', [resumeCardSchema, suggestionCardSchema]);
 
 export type HomeCard = z.infer<typeof homeCardSchema>;
 
@@ -60,13 +53,18 @@ export const dashboardContributionSchema = z.object({
 
 export type DashboardContribution = z.infer<typeof dashboardContributionSchema>;
 
-// Turns a card's action into a URL for the app it belongs to, generic over
-// whichever plugin the card came from — a dashboard card and the app's own
-// UI reaching the same place go through the same query param convention
-// (the app's +page.svelte reads `deepLink` back out and forwards it to the
-// plugin as a UI event) rather than the host needing to know what a
-// `deepLink` target string means for any particular plugin.
-export function pluginActionHref(appHref: string, action: PluginAction): string {
+// Turns a card's (or a screen button's) action into a URL, generic over
+// whichever plugin it came from. A `session` action always resolves to the
+// one shared player route (src/routes/play) regardless of plugin — that
+// route asks the plugin itself to resolve the stream, so nothing here needs
+// to know how any particular plugin plays media. A `deepLink` still goes
+// through the app's own query-param convention (the app's +page.svelte reads
+// it back out and forwards it to the plugin as a UI event), since that
+// convention is plugin-defined and has nothing to do with playback.
+export function pluginActionHref(pluginId: string, appHref: string, action: PluginAction): string {
+	if (action.type === 'session') {
+		return `/play/${encodeURIComponent(pluginId)}/${encodeURIComponent(action.sessionId)}`;
+	}
 	if (action.type === 'deepLink') {
 		return `${appHref}?deepLink=${encodeURIComponent(action.target)}`;
 	}

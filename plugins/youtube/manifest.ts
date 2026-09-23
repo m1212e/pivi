@@ -13,11 +13,12 @@ export const manifest: PluginManifest = pluginManifestSchema.parse({
 	source: { repo: 'local', ref: 'HEAD' },
 	capabilities: [
 		// youtubei.js (innertube.ts, tvHomeFeed.ts, tvSearch.ts) talks to
-		// youtube.com for sign-in and all browsing/search. Declared here for
-		// documentation even though this prototype doesn't route the
-		// library's own network calls through the httpRequest capability
+		// youtube.com for sign-in and all browsing/search; sponsorBlock.ts
+		// talks to sponsor.ajay.app for skippable-section data. Declared here
+		// for documentation even though this prototype doesn't route these
+		// libraries' own network calls through the httpRequest capability
 		// check.
-		{ type: 'network', domains: ['www.youtube.com'] },
+		{ type: 'network', domains: ['www.youtube.com', 'sponsor.ajay.app'] },
 		{ type: 'credential-storage' },
 		{ type: 'display-exclusive' }
 	],

@@ -15,8 +15,6 @@ export const deviceCodeAuthSchema = z.object({
 	status: z.enum(['pending', 'complete', 'expired', 'error'])
 });
 
-export type DeviceCodeAuth = z.infer<typeof deviceCodeAuthSchema>;
-
 // The default login mechanism: a normal OAuth redirect flow, completed on
 // the paired phone (real keyboard, password manager, 2FA autofill) rather
 // than a per-plugin login screen on the TV. `state` is the plugin's own
@@ -31,5 +29,3 @@ export const phoneAuthHandoffSchema = z.object({
 	state: z.string(),
 	status: z.enum(['pending', 'complete', 'error'])
 });
-
-export type PhoneAuthHandoff = z.infer<typeof phoneAuthHandoffSchema>;

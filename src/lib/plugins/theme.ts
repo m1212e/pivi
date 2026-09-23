@@ -11,5 +11,3 @@ export const pluginThemeSchema = z.object({
 	logoUrl: z.string().optional(),
 	cornerRadius: z.enum(['none', 'sm', 'md', 'lg']).optional()
 });
-
-export type PluginTheme = z.infer<typeof pluginThemeSchema>;

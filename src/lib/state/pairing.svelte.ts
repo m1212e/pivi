@@ -1,6 +1,6 @@
 import { urqlClient } from '#lib/api/client';
 
-export type Pairing = { pairingToken: string; remoteUrl: string | null };
+type Pairing = { pairingToken: string; remoteUrl: string | null };
 
 const PAIRING_QUERY = /* GraphQL */ `
 	query PivPairing {

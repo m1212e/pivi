@@ -22,15 +22,19 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 		});
 	});
 
+// Pages no longer gate themselves with a `load` function, so /home's (and
+// any app page's) "must have an active profile" check lives here instead.
+function requiresActiveProfile(pathname: string): boolean {
+	return pathname === '/home' || pathname.startsWith('/apps/') || pathname.startsWith('/play/');
+}
+
 const handleActiveProfile: Handle = async ({ event, resolve }) => {
 	// Pivi is single-device/local-network, so "who's logged in" is one global
 	// row in the DB rather than a per-browser session cookie.
 	const user = await getActiveProfileUser();
 	if (user) event.locals.user = user;
 
-	// Pages no longer gate themselves with a `load` function, so /home's (and
-	// any app page's) "must have an active profile" check lives here instead.
-	if (!user && (event.url.pathname === '/home' || event.url.pathname.startsWith('/apps/'))) {
+	if (!user && requiresActiveProfile(event.url.pathname)) {
 		redirect(302, '/');
 	}
 

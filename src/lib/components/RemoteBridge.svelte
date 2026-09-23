@@ -97,11 +97,14 @@
 		sendNotification(connection, stateNotification, stateParamsSchema, {
 			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
 			hasTextInput: !!focusedTextInput(),
-			canGoBack: location.pathname !== '/',
+			// Neither the pre-login profile picker ('/') nor the home screen
+			// itself has anywhere sensible to go back *to*.
+			canGoBack: location.pathname !== '/' && location.pathname !== '/home',
 			// Mirrors hooks.server.ts's own definition of "has an active
-			// profile" (the routes it guards), rather than adding a separate
-			// auth query just for this.
-			isLoggedIn: location.pathname === '/home' || location.pathname.startsWith('/apps/')
+			// profile" for the routes that actually go somewhere Home would
+			// usefully return from -- unlike canGoBack, this stays false on
+			// '/home' itself, since Home is already where you are.
+			canGoHome: location.pathname.startsWith('/apps/') || location.pathname.startsWith('/play/')
 		});
 	}
 
@@ -111,6 +114,34 @@
 				'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
 			)
 		].filter((el) => el.offsetParent !== null);
+	}
+
+	// A slider (#lib/components/Slider.svelte) opts out of normal spatial nav
+	// along its own axis while it holds focus -- a swipe matching its
+	// orientation adjusts its value instead of moving focus (dispatched as a
+	// plain DOM event, the same way pressPinKey/setFocusedText below drive
+	// other on-screen controls rather than needing their own RPC messages);
+	// a swipe across the other axis still falls through to moveFocus, so
+	// swiping "off axis" carries focus away exactly like leaving any other
+	// control.
+	// Dispatches the swipe to the focused slider when its own axis matches the
+	// swipe's dominant axis. Returns whether it did, so the caller falls
+	// through to normal spatial-nav focus movement otherwise.
+	function trySliderAdjust(active: HTMLElement, dx: number, dy: number): boolean {
+		const horizontal = active.getAttribute('data-pivi-slider-orientation') !== 'vertical';
+		const isHorizontalSwipe = Math.abs(dx) > Math.abs(dy);
+		if (horizontal !== isHorizontalSwipe) return false;
+		const delta = horizontal ? dx : -dy;
+		active.dispatchEvent(new CustomEvent('pivi-slider-adjust', { detail: { delta } }));
+		return true;
+	}
+
+	function handleMove(dx: number, dy: number) {
+		const active = document.activeElement;
+		if (active instanceof HTMLElement && active.hasAttribute('data-pivi-slider')) {
+			if (trySliderAdjust(active, dx, dy)) return;
+		}
+		moveFocus(dx, dy);
 	}
 
 	// Lightweight spatial navigation: from the focused element, pick the
@@ -268,11 +299,21 @@
 		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
 
 		const reader = new PushMessageReader();
-		const writer = new SinkMessageWriter((msg) => socket?.send(JSON.stringify(msg)));
+		// `socket?.` alone isn't enough of a guard -- calling `.send()` while
+		// the handshake hasn't finished yet (readyState CONNECTING) throws
+		// synchronously, and a focusin/mutation can fire sendState() that
+		// early during initial mount, before `onopen` below has run. Silently
+		// dropping the message when the socket isn't actually open yet
+		// matches how every other send on this connection already behaves
+		// best-effort (e.g. a phone that hasn't paired yet just never gets a
+		// stateNotification, rather than crashing the tab that would send it).
+		const writer = new SinkMessageWriter((msg) => {
+			if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
+		});
 		connection = createMessageConnection(reader, writer);
 
 		onNotification(connection, moveNotification, moveParamsSchema, ({ dx, dy }) =>
-			moveFocus(dx, dy)
+			handleMove(dx, dy)
 		);
 		// These carry no params, so there's nothing for a zod schema to
 		// enforce — registered directly on the connection instead of through

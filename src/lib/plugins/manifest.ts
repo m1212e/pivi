@@ -7,7 +7,7 @@ import { z } from 'zod';
 // No filesystem capability exists at all — a plugin has no legitimate need
 // to read/write arbitrary paths. State/config goes through
 // credential-storage or the dashboard/session contracts instead.
-export const pluginCapabilitySchema = z.discriminatedUnion('type', [
+const pluginCapabilitySchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('network'), domains: z.array(z.string()) }),
 	z.object({ type: z.literal('credential-storage') }),
 	// Materially bigger trust decisions than the above — a plugin's process
@@ -20,8 +20,6 @@ export const pluginCapabilitySchema = z.discriminatedUnion('type', [
 		devices: z.array(z.enum(['gamepad', 'keyboard']))
 	})
 ]);
-
-export type PluginCapability = z.infer<typeof pluginCapabilitySchema>;
 
 export const pluginManifestSchema = z.object({
 	id: z.string(),

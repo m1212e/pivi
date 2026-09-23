@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
+import { z } from 'zod';
 import { PAIRING_WS_PORT } from '#lib/wsConfig';
 import {
 	decrypt,
@@ -15,13 +16,22 @@ import {
 	utf8ToBytes,
 	bytesToUtf8
 } from '#lib/crypto/pairing';
-import type {
-	AuthError,
-	Challenge,
-	Encrypted,
-	PairError,
-	PairSuccess,
-	Ready
+import {
+	challengeResponseSchema,
+	helloRequestSchema,
+	pairRequestSchema,
+	phoneToRelaySchema,
+	tvHelloSchema,
+	type AuthError,
+	type Challenge,
+	type ChallengeResponse,
+	type Encrypted,
+	type HelloRequest,
+	type PairError,
+	type PairRequest,
+	type PairSuccess,
+	type PhoneToRelay,
+	type Ready
 } from '#lib/pairing/protocol';
 import {
 	remoteConnectedNotification,
@@ -72,16 +82,8 @@ function phoneSocketsWithKeys() {
 	);
 }
 
-async function handlePairRequest(
-	socket: WebSocket,
-	message: { token?: unknown; devicePublicKey?: unknown }
-) {
+async function handlePairRequest(socket: WebSocket, message: PairRequest) {
 	const { token, devicePublicKey } = message;
-	if (typeof token !== 'string' || typeof devicePublicKey !== 'string') {
-		fail(socket, { type: 'pairError', message: 'Malformed pairing request' } satisfies PairError);
-		return;
-	}
-
 	if (!isPairingTokenValid(token)) {
 		fail(socket, {
 			type: 'pairError',
@@ -108,16 +110,8 @@ async function handlePairRequest(
 	} satisfies PairSuccess);
 }
 
-async function handleHelloRequest(
-	socket: WebSocket,
-	message: { deviceId?: unknown; ephemeralPublicKey?: unknown }
-) {
+async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
 	const { deviceId, ephemeralPublicKey } = message;
-	if (typeof deviceId !== 'string' || typeof ephemeralPublicKey !== 'string') {
-		fail(socket, { type: 'authError', message: 'Malformed hello' } satisfies AuthError);
-		return;
-	}
-
 	const device = await db.query.pairedDevice.findFirst({ where: { id: deviceId } });
 	if (!device) {
 		fail(socket, { type: 'authError', message: 'Unknown device' } satisfies AuthError);
@@ -155,13 +149,10 @@ async function handleHelloRequest(
 async function handleChallengeResponse(
 	socket: WebSocket,
 	state: Extract<ConnState, { role: 'awaiting-response' }>,
-	message: { signature?: unknown }
+	message: ChallengeResponse
 ) {
 	const { signature } = message;
-	if (
-		typeof signature !== 'string' ||
-		!verify(state.devicePublicKey, state.transcript, fromBase64Url(signature))
-	) {
+	if (!verify(state.devicePublicKey, state.transcript, fromBase64Url(signature))) {
 		fail(socket, {
 			type: 'authError',
 			message: 'Signature verification failed'
@@ -241,9 +232,9 @@ export function startPairingRelay() {
 }
 
 async function onMessage(socket: WebSocket, remoteAddress: string | undefined, data: RawData) {
-	let message: Record<string, unknown>;
+	let raw: unknown;
 	try {
-		message = JSON.parse(data.toString());
+		raw = JSON.parse(data.toString());
 	} catch {
 		fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
 		return;
@@ -258,11 +249,23 @@ async function onMessage(socket: WebSocket, remoteAddress: string | undefined, d
 	}
 
 	if (state.role === 'phone') {
-		relayFromPhone(socket, state, message);
+		const parsed = phoneToRelaySchema.safeParse(raw);
+		if (!parsed.success) {
+			fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
+			return;
+		}
+		relayFromPhone(socket, state, parsed.data);
 		return;
 	}
 
 	if (state.role === 'unauth') {
+		const parsed = z.union([tvHelloSchema, pairRequestSchema, helloRequestSchema]).safeParse(raw);
+		if (!parsed.success) {
+			fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
+			return;
+		}
+		const message = parsed.data;
+
 		if (message.type === 'tvHello') {
 			if (!isLoopback(remoteAddress)) {
 				fail(socket, {
@@ -287,8 +290,13 @@ async function onMessage(socket: WebSocket, remoteAddress: string | undefined, d
 		}
 	}
 
-	if (state.role === 'awaiting-response' && message.type === 'response') {
-		await handleChallengeResponse(socket, state, message);
+	if (state.role === 'awaiting-response') {
+		const parsed = challengeResponseSchema.safeParse(raw);
+		if (!parsed.success) {
+			fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
+			return;
+		}
+		await handleChallengeResponse(socket, state, parsed.data);
 		return;
 	}
 
@@ -312,13 +320,9 @@ function relayFromTv(sender: WebSocket, raw: string) {
 function relayFromPhone(
 	socket: WebSocket,
 	state: Extract<ConnState, { role: 'phone' }>,
-	message: Record<string, unknown>
+	message: PhoneToRelay
 ) {
-	if (
-		message.type !== 'enc' ||
-		typeof message.nonce !== 'string' ||
-		typeof message.ciphertext !== 'string'
-	) {
+	if (message.type !== 'enc') {
 		fail(socket, { type: 'authError', message: 'Expected encrypted frame' } satisfies AuthError);
 		return;
 	}

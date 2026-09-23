@@ -52,17 +52,26 @@ export async function registerWithPin(username: string, pin: string) {
 	return created;
 }
 
+function checkNotLockedOut(state: LoginAttempts | undefined) {
+	if (!state || state.lockedUntil <= Date.now()) return;
+	const secondsLeft = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+	throw new AuthError(`Too many attempts, try again in ${secondsLeft}s`);
+}
+
+async function verifyCredentials(username: string, pin: string) {
+	const existing = await db.query.user.findFirst({ where: { username: { eq: username } } });
+	if (!existing) return null;
+	return (await verifyPin(pin, existing.pinHash)) ? existing : null;
+}
+
 export async function loginWithPin(username: string, pin: string) {
 	pruneLoginAttempts();
 
 	const state = loginAttempts.get(username);
-	if (state && state.lockedUntil > Date.now()) {
-		const secondsLeft = Math.ceil((state.lockedUntil - Date.now()) / 1000);
-		throw new AuthError(`Too many attempts, try again in ${secondsLeft}s`);
-	}
+	checkNotLockedOut(state);
 
-	const existing = await db.query.user.findFirst({ where: { username: { eq: username } } });
-	if (!existing || !(await verifyPin(pin, existing.pinHash))) {
+	const existing = await verifyCredentials(username, pin);
+	if (!existing) {
 		recordFailedLogin(username, state);
 		throw new AuthError('Wrong PIN');
 	}

@@ -48,12 +48,21 @@
 	});
 </script>
 
+<!--
+	`size` renders as rem (size / 16), not raw px, so this container scales
+	with the rest of the TV UI on a bigger screen (see #lib/tvScale) instead
+	of staying a fixed physical size while everything around it grows. The
+	library still builds the QR itself as an SVG at the literal `size` px
+	given below -- `[&>svg]:size-full` is what makes that vector output
+	stretch to fill however big the rem-sized container actually renders,
+	rather than clipping/floating at its own native pixel dimensions.
+-->
 <div
 	class="relative overflow-hidden rounded-2xl leading-none"
-	style="width: {size}px; height: {size}px"
+	style="width: {size / 16}rem; height: {size / 16}rem"
 >
 	{#if !loaded}
 		<div class="absolute inset-0 animate-pulse rounded-2xl bg-white/10"></div>
 	{/if}
-	<div bind:this={container}></div>
+	<div bind:this={container} class="[&>svg]:size-full"></div>
 </div>

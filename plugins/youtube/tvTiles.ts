@@ -8,17 +8,23 @@ import type { VideoSummary } from './youtubeClient';
 // response, regardless of which shelf/section it's nested under. Robust to
 // the exact section layout changing, since all that's actually needed is
 // "every video tile on the page", not the shelf structure around it.
+function isTileRenderer(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object';
+}
+
+function findTilesInObject(obj: Record<string, unknown>, out: Record<string, unknown>[]): void {
+	if (isTileRenderer(obj.tileRenderer)) out.push(obj.tileRenderer);
+	for (const value of Object.values(obj)) findTiles(value, out);
+}
+
+function findTilesInArray(items: unknown[], out: Record<string, unknown>[]): void {
+	for (const item of items) findTiles(item, out);
+}
+
 function findTiles(node: unknown, out: Record<string, unknown>[]): void {
 	if (!node || typeof node !== 'object') return;
-	if (Array.isArray(node)) {
-		for (const item of node) findTiles(item, out);
-		return;
-	}
-	const obj = node as Record<string, unknown>;
-	if (obj.tileRenderer && typeof obj.tileRenderer === 'object') {
-		out.push(obj.tileRenderer as Record<string, unknown>);
-	}
-	for (const value of Object.values(obj)) findTiles(value, out);
+	if (Array.isArray(node)) return findTilesInArray(node, out);
+	findTilesInObject(node as Record<string, unknown>, out);
 }
 
 type Tile = {
@@ -37,23 +43,41 @@ type Tile = {
 	};
 };
 
+type TileLines = {
+	lineRenderer?: {
+		items?: { lineItemRenderer?: { text?: { runs?: { text?: string }[] } } }[];
+	};
+}[];
+
+// The channel name is whichever line's first item is plain text runs rather
+// than a badge/view-count/date — those share the same lineRenderer shape but
+// carry a `badge` instead of `text`, so this just takes the first line that
+// actually has text.
+function firstLineText(lines: TileLines | undefined): string {
+	return (
+		lines
+			?.map((line) => line.lineRenderer?.items?.[0]?.lineItemRenderer?.text?.runs?.[0]?.text)
+			.find((text): text is string => !!text) ?? ''
+	);
+}
+
+function tileMetadataOf(tile: Tile) {
+	return tile.metadata?.tileMetadataRenderer;
+}
+
+function titleOf(meta: ReturnType<typeof tileMetadataOf>): string {
+	return meta?.title?.simpleText ?? 'Untitled';
+}
+
 function tileToSummary(tile: Tile): VideoSummary | null {
 	if (!tile.contentId || tile.contentType !== 'TILE_CONTENT_TYPE_VIDEO') return null;
 
-	const meta = tile.metadata?.tileMetadataRenderer;
-	// The channel name is whichever line's first item is plain text runs
-	// rather than a badge/view-count/date — those share the same lineRenderer
-	// shape but carry a `badge` instead of `text`, so this just takes the
-	// first line that actually has text.
-	const channelTitle =
-		meta?.lines
-			?.map((line) => line.lineRenderer?.items?.[0]?.lineItemRenderer?.text?.runs?.[0]?.text)
-			.find((text): text is string => !!text) ?? '';
+	const meta = tileMetadataOf(tile);
 
 	return {
 		id: tile.contentId,
-		title: meta?.title?.simpleText ?? 'Untitled',
-		channelTitle,
+		title: titleOf(meta),
+		channelTitle: firstLineText(meta?.lines),
 		// TV tile widgets only carry thumbnails sized for their own small
 		// on-screen tiles (a few hundred px wide at most) — nowhere near
 		// enough for the dashboard's full-bleed hero banner, which also uses
@@ -76,6 +100,21 @@ function tileToSummary(tile: Tile): VideoSummary | null {
 // legitimately appear in more than one shelf/section (harmless for a real
 // TV UI, which renders each shelf separately, but downstream UI here keys
 // each item by video id, which breaks on a duplicate).
+// Adds `tile`'s summary to `results` if it's a real, not-yet-seen video tile.
+// Returns whether `results` has now hit `limit`, so the caller knows to stop.
+function addUniqueTile(
+	tile: Tile,
+	seen: Set<string>,
+	results: VideoSummary[],
+	limit: number
+): boolean {
+	const summary = tileToSummary(tile);
+	if (!summary || seen.has(summary.id)) return false;
+	seen.add(summary.id);
+	results.push(summary);
+	return results.length >= limit;
+}
+
 export function collectTiles(root: unknown, limit: number): VideoSummary[] {
 	const tiles: Record<string, unknown>[] = [];
 	findTiles(root, tiles);
@@ -83,11 +122,7 @@ export function collectTiles(root: unknown, limit: number): VideoSummary[] {
 	const seen = new Set<string>();
 	const results: VideoSummary[] = [];
 	for (const tile of tiles) {
-		const summary = tileToSummary(tile as Tile);
-		if (!summary || seen.has(summary.id)) continue;
-		seen.add(summary.id);
-		results.push(summary);
-		if (results.length >= limit) break;
+		if (addUniqueTile(tile as Tile, seen, results, limit)) break;
 	}
 	return results;
 }

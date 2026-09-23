@@ -1372,6 +1372,94 @@ export const schema = {
 			{ kind: 'SCALAR', name: 'PhoneNumber' },
 			{
 				kind: 'OBJECT',
+				name: 'PluginPlaybackInfo',
+				fields: [
+					{
+						name: 'acodec',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'audioContainer',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'direct',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'duration',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Float', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'title',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'vcodec',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'videoContainer',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'PluginSkipSegment',
+				fields: [
+					{
+						name: 'endSeconds',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Float', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'label',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'startSeconds',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Float', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'Query',
 				fields: [
 					{
@@ -1381,6 +1469,67 @@ export const schema = {
 							ofType: { name: 'Pairing', kind: 'OBJECT', ofType: null, __proto__: null }
 						},
 						args: []
+					},
+					{
+						name: 'pluginPlaybackInfo',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'PluginPlaybackInfo', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'maxHeight',
+								type: { kind: 'SCALAR', name: 'Int', ofType: null, __proto__: null }
+							},
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'sessionId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'pluginSkipSegments',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: {
+										name: 'PluginSkipSegment',
+										kind: 'OBJECT',
+										ofType: null,
+										__proto__: null
+									}
+								}
+							}
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'sessionId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
 					},
 					{
 						name: 'user',

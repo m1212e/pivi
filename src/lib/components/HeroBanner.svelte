@@ -83,12 +83,6 @@
 				</svg>
 				Play
 			</a>
-			<button
-				type="button"
-				class="rounded-full bg-white/10 px-6 py-2.5 text-sm font-medium text-white/90 ring-1 ring-white/20 transition hover:bg-white/20 focus:outline-none sm:text-base"
-			>
-				More info
-			</button>
 		</div>
 	</div>
 </div>

@@ -13,7 +13,6 @@ import { z } from 'zod';
 import { pluginManifestSchema } from './manifest';
 import { dashboardContributionSchema } from './dashboard';
 import { pluginScreenSchema, uiEventSchema } from './ui';
-import { sessionRequestSchema, sessionEndedSchema } from './session';
 import { deviceCodeAuthSchema, phoneAuthHandoffSchema } from './auth';
 
 // Plugin -> host
@@ -30,14 +29,65 @@ export const publishScreenNotification = new NotificationType<z.infer<typeof plu
 	'plugin/publishScreen'
 );
 
-export const requestSessionResultSchema = z.object({ granted: z.boolean() });
-export type RequestSessionResult = z.infer<typeof requestSessionResultSchema>;
+// Any plugin that wants in-browser playback implements this same handler
+// shape — the host never knows anything about a particular plugin's stream
+// source, only this generic result. `audioUrl` is separate rather than
+// assumed-muxed-into `videoUrl` since most modern YouTube formats (and
+// plausibly other sources) are video-only + audio-only rather than one
+// combined file — the streaming proxy (src/routes/api/stream) remuxes them.
+// `duration` has to come from here rather than the eventual <video> element,
+// since a live-remuxed stream can't report its own duration reliably.
+// The container each track is actually packaged in -- not reliably
+// guessable from the codec string alone (YouTube serves vp9 in either mp4
+// or webm depending on format, and av1 as mp4 despite webm supporting it
+// too), so this has to come from whatever actually resolved the stream
+// (e.g. yt-dlp's own reported format extension), not be re-derived
+// downstream from vcodec/acodec.
+const containerSchema = z.enum(['mp4', 'webm']);
+export type Container = z.infer<typeof containerSchema>;
 
-export const requestSessionRequest = new RequestType<
-	z.infer<typeof sessionRequestSchema>,
-	RequestSessionResult,
+export const resolvedStreamSchema = z.object({
+	videoUrl: z.string(),
+	audioUrl: z.string().optional(),
+	vcodec: z.string(),
+	acodec: z.string().optional(),
+	videoContainer: containerSchema,
+	audioContainer: containerSchema.optional(),
+	title: z.string(),
+	duration: z.number()
+});
+export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
+
+// `maxHeight`, when present, caps the requested video quality (see
+// plugins/youtube/stream.ts) -- always requesting the true "best" available
+// stream regardless of what the network/CPU can actually remux and forward
+// in real time is what made playback choppy in practice, so the player page
+// lets the viewer pick a lower cap instead of always maxing this out.
+export const resolveStreamRequest = new RequestType<
+	{ sessionId: string; maxHeight?: number },
+	ResolvedStream,
 	void
->('plugin/requestSession');
+>('plugin/resolveStream');
+
+// A skippable stretch of the video a plugin knows about (a SponsorBlock
+// segment, for the YouTube plugin) -- generic over whatever the plugin's
+// source for these actually is, the player only ever needs a time range and
+// a label to show on the "prevent skip" button (see the player page).
+export const skipSegmentSchema = z.object({
+	startSeconds: z.number(),
+	endSeconds: z.number(),
+	label: z.string()
+});
+export type SkipSegment = z.infer<typeof skipSegmentSchema>;
+
+// Not every plugin has a source for these -- one that doesn't just never
+// implements this request, which runtime.ts's resolveSkipSegments treats the
+// same as "no skippable sections" rather than a hard failure.
+export const resolveSkipSegmentsRequest = new RequestType<
+	{ sessionId: string },
+	{ segments: SkipSegment[] },
+	void
+>('plugin/resolveSkipSegments');
 
 export const pluginAuthSchema = z.union([deviceCodeAuthSchema, phoneAuthHandoffSchema]);
 
@@ -53,14 +103,14 @@ export const httpRequestParamsSchema = z.object({
 	headers: z.record(z.string(), z.string()).optional(),
 	body: z.string().optional()
 });
-export type HttpRequestParams = z.infer<typeof httpRequestParamsSchema>;
+type HttpRequestParams = z.infer<typeof httpRequestParamsSchema>;
 
 export const httpResponseResultSchema = z.object({
 	status: z.number(),
 	headers: z.record(z.string(), z.string()),
 	body: z.string()
 });
-export type HttpResponseResult = z.infer<typeof httpResponseResultSchema>;
+type HttpResponseResult = z.infer<typeof httpResponseResultSchema>;
 
 // The plugin process has no direct network access beyond what its manifest
 // declares — outbound requests are proxied through the host, which enforces
@@ -115,16 +165,13 @@ export const uiEventNotification = new NotificationType<z.infer<typeof uiEventSc
 	'host/uiEvent'
 );
 
-export const sessionEndedNotification = new NotificationType<z.infer<typeof sessionEndedSchema>>(
-	'host/sessionEnded'
-);
-
 // Delivered once the phone completes a PhoneAuthHandoff and Google (or
 // whatever the plugin's login provider is) redirects back to pivi's own
 // server — see src/routes/oauth/callback and src/api/plugins/pendingAuth.ts.
-export const oauthCodeParamsSchema = z.object({ code: z.string(), state: z.string() });
-
-export const oauthCodeNotification = new NotificationType<z.infer<typeof oauthCodeParamsSchema>>(
+// No zod schema behind this one (unlike the rest of the file): the host
+// constructs `{ code, state }` itself from its own already-validated data, so
+// there's nothing to parse here, just a shape to describe.
+export const oauthCodeNotification = new NotificationType<{ code: string; state: string }>(
 	'host/oauthCode'
 );
 

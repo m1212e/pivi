@@ -5,74 +5,100 @@
 	// generic renderer serves every plugin that uses this tier, not just
 	// YouTube.
 	import type { UiNode } from '#lib/plugins/ui';
+	import { pluginActionHref } from '#lib/plugins/dashboard';
 	import Self from './UiNodeRenderer.svelte';
 
 	let {
 		node,
-		onEvent
+		onEvent,
+		pluginId,
+		appHref
 	}: {
 		node: UiNode;
 		onEvent: (eventId: string, value?: string | boolean) => void;
+		// Only needed by a button carrying an `action` (see #lib/plugins/ui's
+		// UiNode) — every other node type ignores these.
+		pluginId?: string;
+		appHref?: string;
 	} = $props();
 </script>
 
-{#if node.type === 'container'}
-	<div class="flex gap-3 {node.direction === 'row' ? 'flex-row items-center' : 'flex-col'}">
-		{#each node.children as child, i (i)}
-			<Self node={child} {onEvent} />
+{#snippet containerNode(n: Extract<UiNode, { type: 'container' }>)}
+	<div class="flex gap-3 {n.direction === 'row' ? 'flex-row items-center' : 'flex-col'}">
+		{#each n.children as child, i (i)}
+			<Self node={child} {onEvent} {pluginId} {appHref} />
 		{/each}
 	</div>
-{:else if node.type === 'text'}
+{/snippet}
+
+{#snippet textNode(n: Extract<UiNode, { type: 'text' }>)}
 	<span
-		class={node.variant === 'title'
+		class={n.variant === 'title'
 			? 'font-medium text-white/90'
-			: node.variant === 'subtitle'
+			: n.variant === 'subtitle'
 				? 'text-sm text-white/50'
 				: 'text-sm text-white/70'}
 	>
-		{node.value}
+		{n.value}
 	</span>
-{:else if node.type === 'image'}
+{/snippet}
+
+{#snippet imageNode(n: Extract<UiNode, { type: 'image' }>)}
 	<img
-		src={node.src}
+		src={n.src}
 		alt=""
-		class="rounded-lg object-cover {node.aspect === 'poster'
+		class="rounded-lg object-cover {n.aspect === 'poster'
 			? 'aspect-2/3 w-24'
-			: node.aspect === 'square'
+			: n.aspect === 'square'
 				? 'aspect-square w-16'
 				: 'aspect-video w-32'}"
 	/>
-{:else if node.type === 'button'}
-	<button
-		type="button"
-		onclick={() => onEvent(node.onSelect)}
+{/snippet}
+
+{#snippet buttonLinkNode(n: Extract<UiNode, { type: 'button' }>, href: string)}
+	<a
+		{href}
 		class="rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/20 focus:outline-none"
 	>
-		{node.label}
+		{n.label}
+	</a>
+{/snippet}
+
+{#snippet buttonNode(n: Extract<UiNode, { type: 'button' }>)}
+	<button
+		type="button"
+		onclick={() => n.onSelect && onEvent(n.onSelect)}
+		class="rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/20 focus:outline-none"
+	>
+		{n.label}
 	</button>
-{:else if node.type === 'toggle'}
+{/snippet}
+
+{#snippet toggleNode(n: Extract<UiNode, { type: 'toggle' }>)}
 	<label class="flex items-center gap-2 text-sm text-white/80">
 		<input
 			type="checkbox"
-			checked={node.value}
-			onchange={(e) => onEvent(node.onChange, e.currentTarget.checked)}
+			checked={n.value}
+			onchange={(e) => onEvent(n.onChange, e.currentTarget.checked)}
 		/>
-		{node.label}
+		{n.label}
 	</label>
-{:else if node.type === 'textInput'}
+{/snippet}
+
+{#snippet textInputNode(n: Extract<UiNode, { type: 'textInput' }>)}
 	<form
 		class="flex gap-2"
 		onsubmit={(e) => {
 			e.preventDefault();
 			const input = e.currentTarget.elements.namedItem('value') as HTMLInputElement;
-			onEvent(node.onSubmit, input.value);
+			onEvent(n.onSubmit, input.value);
 		}}
 	>
 		<input
 			name="value"
-			type={node.secret ? 'password' : 'text'}
-			placeholder={node.placeholder ?? node.label}
-			aria-label={node.label}
+			type={n.secret ? 'password' : 'text'}
+			placeholder={n.placeholder ?? n.label}
+			aria-label={n.label}
 			class="rounded-full bg-white/12 px-4 py-2 text-sm text-white placeholder-white/40 focus:outline-none"
 		/>
 		<button
@@ -82,10 +108,30 @@
 			Go
 		</button>
 	</form>
-{:else if node.type === 'list'}
+{/snippet}
+
+{#snippet listNode(n: Extract<UiNode, { type: 'list' }>)}
 	<div class="flex flex-col gap-3">
-		{#each node.items as item, i (i)}
-			<Self node={item} {onEvent} />
+		{#each n.items as item, i (i)}
+			<Self node={item} {onEvent} {pluginId} {appHref} />
 		{/each}
 	</div>
+{/snippet}
+
+{#if node.type === 'container'}
+	{@render containerNode(node)}
+{:else if node.type === 'text'}
+	{@render textNode(node)}
+{:else if node.type === 'image'}
+	{@render imageNode(node)}
+{:else if node.type === 'button' && node.action && pluginId && appHref}
+	{@render buttonLinkNode(node, pluginActionHref(pluginId, appHref, node.action))}
+{:else if node.type === 'button'}
+	{@render buttonNode(node)}
+{:else if node.type === 'toggle'}
+	{@render toggleNode(node)}
+{:else if node.type === 'textInput'}
+	{@render textInputNode(node)}
+{:else if node.type === 'list'}
+	{@render listNode(node)}
 {/if}

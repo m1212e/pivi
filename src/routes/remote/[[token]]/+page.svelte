@@ -40,7 +40,7 @@
 	let hasPinPad = $state(false);
 	let hasTextInput = $state(false);
 	let canGoBack = $state(false);
-	let isLoggedIn = $state(false);
+	let canGoHome = $state(false);
 
 	const tab = $derived(hasPinPad ? 'pin' : hasTextInput ? 'keyboard' : 'trackpad');
 
@@ -74,18 +74,19 @@
 		touchMoved = false;
 	}
 
+	function reportMove(conn: MessageConnection, t: Touch) {
+		const dx = t.clientX - touchOrigin!.x;
+		const dy = t.clientY - touchOrigin!.y;
+		if (Math.abs(dx) <= MOVE_THRESHOLD && Math.abs(dy) <= MOVE_THRESHOLD) return;
+		sendNotification(conn, moveNotification, moveParamsSchema, { dx, dy });
+		navigator.vibrate?.(3);
+		touchOrigin = { x: t.clientX, y: t.clientY };
+		touchMoved = true;
+	}
+
 	function onTouchMove(event: TouchEvent) {
 		if (!touchOrigin || !connection) return;
-		const t = event.touches[0];
-		const dx = t.clientX - touchOrigin.x;
-		const dy = t.clientY - touchOrigin.y;
-
-		if (Math.abs(dx) > MOVE_THRESHOLD || Math.abs(dy) > MOVE_THRESHOLD) {
-			sendNotification(connection, moveNotification, moveParamsSchema, { dx, dy });
-			navigator.vibrate?.(3);
-			touchOrigin = { x: t.clientX, y: t.clientY };
-			touchMoved = true;
-		}
+		reportMove(connection, event.touches[0]);
 	}
 
 	function onTouchEnd() {
@@ -156,7 +157,7 @@
 			hasPinPad = state.hasPinPad;
 			hasTextInput = state.hasTextInput;
 			canGoBack = state.canGoBack;
-			isLoggedIn = state.isLoggedIn;
+			canGoHome = state.canGoHome;
 		});
 		// Sent directly by the host (not the TV) when a plugin hands off a
 		// login — see relay.ts's sendToPhones and SKETCH.md's "Login"
@@ -212,87 +213,102 @@
 	<meta name="apple-mobile-web-app-title" content={m.remote_title()} />
 </svelte:head>
 
+{#snippet readyHeader()}
+	<header class="grid grid-cols-3 items-center px-4 pt-4 pb-2">
+		<div class="justify-self-start">
+			{#if canGoBack}
+				<button
+					type="button"
+					onclick={goBack}
+					class="rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+				>
+					&larr; {m.back()}
+				</button>
+			{/if}
+		</div>
+		{#if canGoHome}
+			<button
+				type="button"
+				onclick={goHome}
+				aria-label={m.home()}
+				class="justify-self-center rounded-full bg-white/12 p-3 text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="size-5"
+				>
+					<path d="M3 10.5 12 3l9 7.5" />
+					<path d="M5.5 9.5V20a1 1 0 0 0 1 1h4v-6h3v6h4a1 1 0 0 0 1-1V9.5" />
+				</svg>
+			</button>
+		{/if}
+		<span class="flex items-center gap-2 justify-self-end text-xs text-white/50">
+			<span class="size-2 rounded-full {connected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
+			{connected ? m.connected() : m.connecting()}
+		</span>
+	</header>
+{/snippet}
+
+{#snippet trackpadTab()}
+	<div
+		role="application"
+		aria-label={m.trackpad_label()}
+		ontouchstart={onTouchStart}
+		ontouchmove={onTouchMove}
+		ontouchend={onTouchEnd}
+		class="flex size-full max-h-96 w-full max-w-sm touch-none items-center justify-center rounded-3xl bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 select-none"
+	>
+		<p class="px-8 text-center text-sm text-white/40">{m.swipe_hint()}</p>
+	</div>
+{/snippet}
+
+{#snippet keyboardTab()}
+	<form onsubmit={onTextSubmit} class="flex w-full max-w-sm flex-col items-center gap-3">
+		<input
+			bind:this={textInput}
+			bind:value={text}
+			oninput={onTextInput}
+			enterkeyhint="go"
+			placeholder={m.type_here_placeholder()}
+			class="w-full rounded-full bg-white/12 px-6 py-4 text-center text-lg text-white placeholder-white/40 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+		/>
+		<button
+			type="submit"
+			aria-label={m.enter()}
+			class="w-full rounded-full bg-white px-6 py-4 text-lg font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+		>
+			{m.enter()}
+		</button>
+	</form>
+{/snippet}
+
+{#snippet readyMain()}
+	<main
+		class="flex flex-1 flex-col items-center justify-center px-6 transition-transform duration-300 ease-out"
+		style="transform: translateY(-{tab === 'keyboard' ? keyboardInset / 2 : 0}px)"
+	>
+		{#if tab === 'trackpad'}
+			{@render trackpadTab()}
+		{:else if tab === 'pin'}
+			<PinPad bind:value={pin} onkey={onPinKey} oncomplete={onPinComplete} />
+		{:else}
+			{@render keyboardTab()}
+		{/if}
+	</main>
+{/snippet}
+
 <div
 	class="flex h-dvh flex-col bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 text-white"
 >
 	{#if phase === 'ready'}
-		<header class="grid grid-cols-3 items-center px-4 pt-4 pb-2">
-			<div class="justify-self-start">
-				{#if canGoBack}
-					<button
-						type="button"
-						onclick={goBack}
-						class="rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-					>
-						&larr; {m.back()}
-					</button>
-				{/if}
-			</div>
-			{#if isLoggedIn}
-				<button
-					type="button"
-					onclick={goHome}
-					aria-label={m.home()}
-					class="justify-self-center rounded-full bg-white/12 p-3 text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						class="size-5"
-					>
-						<path d="M3 10.5 12 3l9 7.5" />
-						<path d="M5.5 9.5V20a1 1 0 0 0 1 1h4v-6h3v6h4a1 1 0 0 0 1-1V9.5" />
-					</svg>
-				</button>
-			{/if}
-			<span class="flex items-center gap-2 justify-self-end text-xs text-white/50">
-				<span class="size-2 rounded-full {connected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
-				{connected ? m.connected() : m.connecting()}
-			</span>
-		</header>
-
-		<main
-			class="flex flex-1 flex-col items-center justify-center px-6 transition-transform duration-300 ease-out"
-			style="transform: translateY(-{tab === 'keyboard' ? keyboardInset / 2 : 0}px)"
-		>
-			{#if tab === 'trackpad'}
-				<div
-					role="application"
-					aria-label={m.trackpad_label()}
-					ontouchstart={onTouchStart}
-					ontouchmove={onTouchMove}
-					ontouchend={onTouchEnd}
-					class="flex size-full max-h-96 w-full max-w-sm touch-none items-center justify-center rounded-3xl bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 select-none"
-				>
-					<p class="px-8 text-center text-sm text-white/40">{m.swipe_hint()}</p>
-				</div>
-			{:else if tab === 'pin'}
-				<PinPad bind:value={pin} onkey={onPinKey} oncomplete={onPinComplete} />
-			{:else}
-				<form onsubmit={onTextSubmit} class="flex w-full max-w-sm flex-col items-center gap-3">
-					<input
-						bind:this={textInput}
-						bind:value={text}
-						oninput={onTextInput}
-						enterkeyhint="go"
-						placeholder={m.type_here_placeholder()}
-						class="w-full rounded-full bg-white/12 px-6 py-4 text-center text-lg text-white placeholder-white/40 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-					/>
-					<button
-						type="submit"
-						aria-label={m.enter()}
-						class="w-full rounded-full bg-white px-6 py-4 text-lg font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-					>
-						{m.enter()}
-					</button>
-				</form>
-			{/if}
-		</main>
+		{@render readyHeader()}
+		{@render readyMain()}
 	{:else if phase === 'connecting'}
 		<main class="flex flex-1 flex-col items-center justify-center px-8 text-center">
 			<p class="text-white/60">{m.connecting()}</p>

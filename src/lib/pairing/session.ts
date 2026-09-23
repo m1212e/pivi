@@ -25,7 +25,12 @@ import {
 	setDeviceCredentials,
 	type DeviceCredentials
 } from '#lib/state/deviceCredentials';
-import type { PhoneToRelay, RelayToPhone } from './protocol';
+import {
+	encryptedSchema,
+	relayToPhoneSchema,
+	type PhoneToRelay,
+	type RelayToPhone
+} from './protocol';
 
 export type RemoteSession = {
 	send: (message: Record<string, unknown>) => void;
@@ -48,58 +53,84 @@ export type RemoteSessionCallbacks = {
 // doesn't try to self-heal from.
 class StaleCredentialsError extends Error {}
 
+type SessionKeys = { c2sKey: Uint8Array; s2cKey: Uint8Array };
+
+async function reconnectOrClearStale(
+	socket: WebSocket,
+	credentials: DeviceCredentials
+): Promise<SessionKeys | 'stale'> {
+	try {
+		return await reconnect(socket, credentials);
+	} catch (err) {
+		if (!(err instanceof StaleCredentialsError)) throw err;
+		return 'stale';
+	}
+}
+
+// Establishes session keys on `initialSocket`, self-healing once if stored
+// credentials turn out to be stale (see StaleCredentialsError's own comment).
+async function establishKeys(
+	initialSocket: WebSocket,
+	credentials: DeviceCredentials | null,
+	token: string | null
+): Promise<{ socket: WebSocket; keys: SessionKeys } | null> {
+	let socket = initialSocket;
+
+	if (credentials) {
+		const result = await reconnectOrClearStale(socket, credentials);
+		if (result !== 'stale') return { socket, keys: result };
+
+		await clearDeviceCredentials();
+		// The relay only tells us the credentials are stale after we've
+		// already sent it a 'hello', which moves its connection state past
+		// 'unauth' -- it won't accept a 'pair' message on this same socket
+		// anymore, so recovering means starting over with a fresh one.
+		socket.close();
+		// Nothing left to recover with — same as never having paired.
+		if (!token) return null;
+		socket = await openSocket();
+	}
+
+	const paired = await pair(socket, token!);
+	await setDeviceCredentials(paired);
+	return { socket, keys: await reconnect(socket, paired) };
+}
+
+function attachMessageListener(
+	socket: WebSocket,
+	s2cKey: Uint8Array,
+	onMessage: RemoteSessionCallbacks['onMessage']
+) {
+	socket.addEventListener('message', (event) => {
+		const parsed = encryptedSchema.safeParse(safeParse(event.data));
+		if (!parsed.success) return;
+		const message = parsed.data;
+		try {
+			const plaintext = bytesToUtf8(
+				decrypt(s2cKey, fromBase64Url(message.nonce), fromBase64Url(message.ciphertext))
+			);
+			onMessage(JSON.parse(plaintext));
+		} catch {
+			// Malformed/undecryptable frame — drop it rather than crash the session.
+		}
+	});
+}
+
 // null return means "nothing to connect with" — no stored device and no
 // pairing token in the URL. The caller shows a "not paired" state.
 export async function connectRemoteSession(
 	token: string | null,
 	callbacks: RemoteSessionCallbacks
 ): Promise<RemoteSession | null> {
-	let credentials = await getDeviceCredentials();
+	const credentials = await getDeviceCredentials();
 	if (!credentials && !token) return null;
 
-	let socket = await openSocket();
-
-	let keys: { c2sKey: Uint8Array; s2cKey: Uint8Array } | undefined;
-
-	if (credentials) {
-		try {
-			keys = await reconnect(socket, credentials);
-		} catch (err) {
-			if (!(err instanceof StaleCredentialsError)) throw err;
-			await clearDeviceCredentials();
-			credentials = null;
-			// The relay only tells us the credentials are stale after we've
-			// already sent it a 'hello', which moves its connection state past
-			// 'unauth' -- it won't accept a 'pair' message on this same socket
-			// anymore, so recovering means starting over with a fresh one.
-			socket.close();
-			// Nothing left to recover with — same as never having paired.
-			if (!token) return null;
-			socket = await openSocket();
-		}
-	}
-
-	if (!keys) {
-		credentials = await pair(socket, token!);
-		await setDeviceCredentials(credentials);
-		keys = await reconnect(socket, credentials);
-	}
-
+	const established = await establishKeys(await openSocket(), credentials, token);
+	if (!established) return null;
+	const { socket, keys } = established;
 	const { c2sKey, s2cKey } = keys;
 
-	socket.addEventListener('message', (event) => {
-		const message = safeParse(event.data);
-		if (!message || message.type !== 'enc') return;
-		if (typeof message.nonce !== 'string' || typeof message.ciphertext !== 'string') return;
-		try {
-			const plaintext = bytesToUtf8(
-				decrypt(s2cKey, fromBase64Url(message.nonce), fromBase64Url(message.ciphertext))
-			);
-			callbacks.onMessage(JSON.parse(plaintext));
-		} catch {
-			// Malformed/undecryptable frame — drop it rather than crash the session.
-		}
-	});
+	attachMessageListener(socket, s2cKey, callbacks.onMessage);
 	socket.addEventListener('close', callbacks.onClose);
 
 	return {
@@ -214,9 +245,9 @@ function nextMessage(socket: WebSocket): Promise<RelayToPhone> {
 	return new Promise((resolve, reject) => {
 		const onMessage = (event: MessageEvent) => {
 			cleanup();
-			const message = safeParse(event.data);
-			if (!message) reject(new Error('Malformed message from the TV'));
-			else resolve(message as RelayToPhone);
+			const parsed = relayToPhoneSchema.safeParse(safeParse(event.data));
+			if (!parsed.success) reject(new Error('Malformed message from the TV'));
+			else resolve(parsed.data);
 		};
 		const onClose = () => {
 			cleanup();
