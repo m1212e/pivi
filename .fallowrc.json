@@ -5,6 +5,21 @@
 	// Registered by URL string (navigator.serviceWorker.register), not an
 	// import, so the static module graph can't see it's reachable.
 	"dynamicallyLoaded": ["static/remote/sw.js"],
+	// src/lib/api/rumbleClient/* is regenerated wholesale from the GraphQL
+	// schema on every dev/build run (see src/api/handlers/register.ts) --
+	// its own unused-export/unused-type findings are just whatever fields
+	// the schema happens to expose that this app doesn't currently query,
+	// not something to hand-edit here (the next generation would just
+	// reintroduce them). `ignoreFindings`, not `ignorePatterns`, since other
+	// files still genuinely import real symbols from it and need it to stay
+	// part of the module graph.
+	"ignoreFindings": ["src/lib/api/rumbleClient/**"],
+	// Both actually used, just invisible to static import-graph analysis:
+	// `pg` is drizzle-orm/node-postgres's own runtime driver (src/api/db/
+	// index.ts imports the drizzle wrapper, never `pg` by name), and
+	// `@tailwindcss/typography` is pulled in via a CSS `@plugin` directive
+	// (src/routes/layout.css), not a JS/TS import.
+	"ignoreDependencies": ["pg", "@tailwindcss/typography"],
 	"duplicates": {
 		// Hide pair-only clones; focus on widespread copy-paste
 		// worth refactoring. Lower to 2 to report every duplicate pair.

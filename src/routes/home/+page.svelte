@@ -28,6 +28,11 @@
 		image: true
 	});
 	const label = me?.username;
+	// Named separately (rather than `NonNullable<typeof me>` written inline
+	// where it's needed, in topBar's own snippet parameter below) since that
+	// snippet's parameter is also named `me`, shadowing this one in the same
+	// scope its own type annotation would otherwise need to reference.
+	type Profile = NonNullable<typeof me>;
 
 	// Real plugin-sourced data (see src/api/handlers/youtube.ts), alongside
 	// the placeholder rows below — proves the Tier 1 dashboard contract
@@ -208,6 +213,54 @@
 
 <svelte:head><title>Pivi</title></svelte:head>
 
+<!-- A genuine top-level snippet (fallow scores one of these as its own
+     complexity unit, separate from the page's own <template>) rather than
+     one nested inside the `{#if me}` below -- `me` is only ever non-null
+     when this actually renders, so it's taken as a parameter instead of
+     relying on the outer block's own narrowing, which a nested snippet
+     wouldn't have inherited anyway. -->
+{#snippet topBar(me: Profile)}
+	<div
+		data-pivi-top-bar
+		class="absolute inset-x-0 top-0 flex items-start justify-between px-8 pt-6 sm:px-12"
+		transition:fade={{ duration: 400, delay: 150 }}
+	>
+		<button
+			type="button"
+			onclick={signOut}
+			class="flex items-center gap-3 rounded-full bg-white/12 py-2 pr-5 pl-2 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+		>
+			<span
+				data-focus-ring-target
+				class="flex size-9 items-center justify-center overflow-hidden rounded-full"
+				style="background: {profileGradient(me.username ?? me.id)}"
+				style:view-transition-name="profile-avatar"
+			>
+				{#if me.image}
+					<img src={me.image} alt="" class="size-full object-cover" />
+				{:else}
+					<span class="text-sm font-semibold text-white/90 uppercase">
+						{label?.slice(0, 1)}
+					</span>
+				{/if}
+			</span>
+			<span class="text-sm font-medium text-white/90">{label}</span>
+		</button>
+
+		<div class="flex flex-col items-end gap-4">
+			{#if pairing.remoteUrl}
+				<div
+					class="rounded-3xl bg-white/12 p-3 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
+				>
+					<div style:view-transition-name="pairing-qr">
+						<PairingQr url={pairing.remoteUrl} size={220} />
+					</div>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
 {#if me}
 	<div class="flex min-h-screen flex-col gap-10 bg-slate-950 pb-16 text-white">
 		<div class="relative">
@@ -226,45 +279,7 @@
 				<HeroBannerEmpty />
 			{/if}
 
-			<div
-				data-pivi-top-bar
-				class="absolute inset-x-0 top-0 flex items-start justify-between px-8 pt-6 sm:px-12"
-				transition:fade={{ duration: 400, delay: 150 }}
-			>
-				<button
-					type="button"
-					onclick={signOut}
-					class="flex items-center gap-3 rounded-full bg-white/12 py-2 pr-5 pl-2 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
-				>
-					<span
-						data-focus-ring-target
-						class="flex size-9 items-center justify-center overflow-hidden rounded-full"
-						style="background: {profileGradient(me.username ?? me.id)}"
-						style:view-transition-name="profile-avatar"
-					>
-						{#if me.image}
-							<img src={me.image} alt="" class="size-full object-cover" />
-						{:else}
-							<span class="text-sm font-semibold text-white/90 uppercase">
-								{label?.slice(0, 1)}
-							</span>
-						{/if}
-					</span>
-					<span class="text-sm font-medium text-white/90">{label}</span>
-				</button>
-
-				<div class="flex flex-col items-end gap-4">
-					{#if pairing.remoteUrl}
-						<div
-							class="rounded-3xl bg-white/12 p-3 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
-						>
-							<div style:view-transition-name="pairing-qr">
-								<PairingQr url={pairing.remoteUrl} size={220} />
-							</div>
-						</div>
-					{/if}
-				</div>
-			</div>
+			{@render topBar(me)}
 		</div>
 
 		<div class="flex flex-col gap-10">

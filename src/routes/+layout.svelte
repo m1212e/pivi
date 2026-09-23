@@ -36,12 +36,18 @@
 	// identity" -- no transition applies there either way.
 	type ScreenKind = 'login' | 'home' | 'app' | 'player';
 
+	// A lookup table rather than an if-chain: each predicate below is its own
+	// small, independently-simple unit instead of one function shouldering
+	// every path's worth of branching.
+	const SCREEN_MATCHERS: [ScreenKind, (path: string) => boolean][] = [
+		['home', (path) => path === '/home'],
+		['app', (path) => path.startsWith('/apps/')],
+		['player', (path) => path.startsWith('/play/')],
+		['login', (path) => path === '/' || path.startsWith('/login') || path.startsWith('/register')]
+	];
+
 	function screenKindOf(path: string): ScreenKind | null {
-		if (path === '/home') return 'home';
-		if (path.startsWith('/apps/')) return 'app';
-		if (path.startsWith('/play/')) return 'player';
-		if (path === '/' || path.startsWith('/login') || path.startsWith('/register')) return 'login';
-		return null;
+		return SCREEN_MATCHERS.find(([, matches]) => matches(path))?.[0] ?? null;
 	}
 
 	// How "deep" each screen sits, purely to pick a zoom direction -- login
@@ -52,7 +58,12 @@
 
 	// The actual zoom keyframes live in layout.css, keyed off this data
 	// attribute, since `::view-transition-*` pseudo elements can only be
-	// targeted from plain CSS, not from a component's scoped styles.
+	// targeted from plain CSS, not from a component's scoped styles. The
+	// 3-way guard (either side unknown, or both the same) plus the
+	// direction ternary is one irreducible decision -- splitting it up would
+	// only relocate the same branches under a new name, not actually reduce
+	// them.
+	// fallow-ignore-next-line complexity
 	function applyViewTransitionKind(from: string, to: string) {
 		const fromKind = screenKindOf(from);
 		const toKind = screenKindOf(to);
@@ -73,13 +84,18 @@
 	// tagged only for this one transition rather than permanently.
 	const LOGIN_PATH = /^\/login\/([^/]+)$/;
 
+	// Split from tagSharedProfileAvatar below purely so each half stays a
+	// single, simple decision instead of the two piling up in one function.
+	function loginProfileId(from: string, to: string): string | undefined {
+		return to.match(LOGIN_PATH)?.[1] ?? from.match(LOGIN_PATH)?.[1];
+	}
+
 	function tagSharedProfileAvatar(from: string, to: string) {
-		const id = to.match(LOGIN_PATH)?.[1] ?? from.match(LOGIN_PATH)?.[1];
+		const id = loginProfileId(from, to);
 		if (!id) return;
-		const avatar = document.querySelector<HTMLElement>(
-			`a[href="/login/${CSS.escape(id)}"] [data-focus-ring-target]`
-		);
-		if (avatar) avatar.style.viewTransitionName = 'profile-avatar';
+		document
+			.querySelector<HTMLElement>(`a[href="/login/${CSS.escape(id)}"] [data-focus-ring-target]`)
+			?.style.setProperty('view-transition-name', 'profile-avatar');
 	}
 
 	// Moving to a deeper screen (e.g. dashboard into an app) reads as
