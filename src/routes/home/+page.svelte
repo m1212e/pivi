@@ -14,7 +14,6 @@
 	import PlaceholderRow from '#lib/components/PlaceholderRow.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
 	import { getPairing } from '#lib/state/pairing.svelte';
-	import * as m from '#lib/paraglide/messages';
 
 	// The one real installed plugin — see plugins/youtube/manifest.ts. A
 	// generic plugin registry (listing whatever's actually installed) is the

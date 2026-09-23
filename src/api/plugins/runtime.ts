@@ -37,6 +37,7 @@ import {
 	readyNotification,
 	resolvedStreamSchema,
 	resolveSkipSegmentsRequest,
+	skipSegmentSchema,
 	resolveStreamRequest,
 	shutdownNotification,
 	uiEventNotification,
@@ -216,10 +217,11 @@ export async function loadPlugin(
 				const { segments } = await connection.sendRequest(resolveSkipSegmentsRequest, {
 					sessionId
 				});
-				return segments;
+				return skipSegmentSchema.array().parse(segments);
 			} catch {
-				// The plugin has no handler registered for this request at all --
-				// same as it having nothing to report.
+				// The plugin has no handler registered for this request at all, or
+				// returned something that doesn't match the contract -- either way,
+				// treated the same as it having nothing to report.
 				return [];
 			}
 		},
