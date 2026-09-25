@@ -63,16 +63,19 @@
 	// events and after DOM mutations (see the MutationObserver below), since
 	// a step of a form can swap out the focused element entirely — the focus
 	// silently drops to <body> with no `focusin` to react to.
-	function onFocusChange() {
+	// A focusable element (e.g. a profile link) can opt a specific descendant
+	// in to carry the visible ring instead of itself — say, a circular avatar
+	// inside a wider rectangular link — via `data-focus-ring-target`. Falls
+	// back to the focused element itself, and to nothing at all when focus has
+	// dropped to <body>.
+	function focusRingTarget(): HTMLElement | null {
 		const active = document.activeElement;
-		// A focusable element (e.g. a profile link) can opt a specific
-		// descendant in to carry the visible ring instead of itself — say, a
-		// circular avatar inside a wider rectangular link — via
-		// `data-focus-ring-target`. Falls back to the focused element itself.
-		const next =
-			active instanceof HTMLElement && active !== document.body
-				? (active.querySelector<HTMLElement>('[data-focus-ring-target]') ?? active)
-				: null;
+		if (!(active instanceof HTMLElement) || active === document.body) return null;
+		return active.querySelector<HTMLElement>('[data-focus-ring-target]') ?? active;
+	}
+
+	function onFocusChange() {
+		const next = focusRingTarget();
 		if (next !== currentEl) {
 			currentEl?.classList.remove('pivi-remote-focus');
 			currentEl = next;
@@ -93,12 +96,17 @@
 		});
 	}
 
+	// A <textarea>, or an <input> of a type text is actually typed into --
+	// a checkbox or a range slider is focusable but has nothing to relay a
+	// phone keyboard to.
+	function isTextualInput(el: Element | null): el is HTMLInputElement | HTMLTextAreaElement {
+		if (el instanceof HTMLTextAreaElement) return true;
+		return el instanceof HTMLInputElement && TEXTUAL_INPUT_TYPES.has(el.type);
+	}
+
 	function focusedTextInput() {
 		const active = document.activeElement;
-		if (!(active instanceof HTMLInputElement) && !(active instanceof HTMLTextAreaElement))
-			return null;
-		if (active instanceof HTMLInputElement && !TEXTUAL_INPUT_TYPES.has(active.type)) return null;
-		return active;
+		return isTextualInput(active) ? active : null;
 	}
 
 	// Tells the phone what's actually on screen right now, so it only shows
@@ -107,6 +115,18 @@
 	// thing a screen reader or a real keyboard already keys off — instead of
 	// a bespoke marker attribute, so any future page with a normal <input>
 	// gets remote-keyboard support with no extra wiring.
+	// Where the phone's Back/Home buttons are worth showing at all: neither
+	// the pre-login profile picker ('/') nor the home screen itself has
+	// anywhere sensible to go back *to*, and Home only goes somewhere new
+	// from inside an app or the player (mirroring hooks.server.ts's own
+	// definition of "has an active profile" for those routes).
+	function navigationFlags() {
+		return {
+			canGoBack: location.pathname !== '/' && location.pathname !== '/home',
+			canGoHome: location.pathname.startsWith('/apps/') || location.pathname.startsWith('/play/')
+		};
+	}
+
 	function sendState() {
 		if (!connection) return;
 		// Queried once and reused below -- `playing`/position/duration/quality
@@ -117,14 +137,7 @@
 		sendNotification(connection, stateNotification, stateParamsSchema, {
 			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
 			hasTextInput: !!focusedTextInput(),
-			// Neither the pre-login profile picker ('/') nor the home screen
-			// itself has anywhere sensible to go back *to*.
-			canGoBack: location.pathname !== '/' && location.pathname !== '/home',
-			// Mirrors hooks.server.ts's own definition of "has an active
-			// profile" for the routes that actually go somewhere Home would
-			// usefully return from -- unlike canGoBack, this stays false on
-			// '/home' itself, since Home is already where you are.
-			canGoHome: location.pathname.startsWith('/apps/') || location.pathname.startsWith('/play/'),
+			...navigationFlags(),
 			profiles: pickerProfiles(),
 			// Sliced to the first three here (rather than trusting the phone
 			// to do it) so the phone doesn't need to know that limit is even a
@@ -136,60 +149,64 @@
 		});
 	}
 
-	// The player page's own position/duration/quality/diagnostics state,
-	// straight off `data-pivi-player-*` attributes (same idea as
-	// pickerProfiles/dashboardApps below) -- this component has no business
-	// knowing how the player itself computes any of these. Zeroed/emptied
-	// when there's no player at all, since the schema requires them
-	// regardless of `hasPlayer`.
-	function playerProgress(playerEl: HTMLElement | null) {
-		if (!playerEl) {
-			return {
-				position: 0,
-				duration: 0,
-				quality: 0,
-				qualityOptions: [],
-				qualityModes: {},
-				subtitleTracks: [],
-				subtitleLanguage: null,
-				diagnosticsOpen: false,
-				volume: 0
-			};
-		}
-		let qualityModes: Record<string, 'direct' | 'mse' | 'ffmpeg'> = {};
-		try {
-			qualityModes = JSON.parse(playerEl.dataset.piviPlayerQualityModes ?? '{}');
-		} catch {
-			// Malformed/stale attribute mid-render -- fall back to no icons
-			// rather than crashing this whole state push.
-		}
-		let subtitleTracks: {
+	// What the player's own state fields are when there's no player at all --
+	// the schema requires them regardless of `hasPlayer`, and the phone
+	// ignores them in that case.
+	const NO_PLAYER_PROGRESS = {
+		position: 0,
+		duration: 0,
+		quality: 0,
+		qualityOptions: [] as number[],
+		qualityModes: {} as Record<string, 'direct' | 'mse' | 'ffmpeg'>,
+		subtitleTracks: [] as {
 			language: string;
 			label: string | null;
 			kind: 'caption' | 'transcription';
-		}[] = [];
+		}[],
+		subtitleLanguage: null as string | null,
+		diagnosticsOpen: false,
+		volume: 0
+	};
+
+	function numberAttr(value: string | undefined): number {
+		return Number(value) || 0;
+	}
+
+	function numberListAttr(value: string | undefined): number[] {
+		return (value ?? '').split(',').filter(Boolean).map(Number);
+	}
+
+	// A malformed/stale attribute caught mid-render falls back rather than
+	// crashing the whole state push -- the next one (they're frequent) carries
+	// the real value.
+	function jsonAttr<T>(value: string | undefined, fallback: T): T {
 		try {
-			subtitleTracks = JSON.parse(playerEl.dataset.piviPlayerSubtitleTracks ?? '[]');
+			return value ? JSON.parse(value) : fallback;
 		} catch {
-			// Same as qualityModes above -- an empty list just means the phone
-			// doesn't show the subtitle picker until the next state push.
+			return fallback;
 		}
+	}
+
+	// The player page's own position/quality/subtitle/diagnostics state,
+	// straight off `data-pivi-player-*` attributes (same idea as
+	// pickerProfiles/dashboardApps below) -- this component has no business
+	// knowing how the player itself computes any of these.
+	function playerProgress(playerEl: HTMLElement | null) {
+		if (!playerEl) return { ...NO_PLAYER_PROGRESS };
+		const data = playerEl.dataset;
 		return {
-			position: Number(playerEl.dataset.piviPlayerPosition) || 0,
-			duration: Number(playerEl.dataset.piviPlayerDuration) || 0,
-			quality: Number(playerEl.dataset.piviPlayerQuality) || 0,
-			qualityOptions: (playerEl.dataset.piviPlayerQualityOptions ?? '')
-				.split(',')
-				.filter(Boolean)
-				.map(Number),
-			qualityModes,
-			subtitleTracks,
+			position: numberAttr(data.piviPlayerPosition),
+			duration: numberAttr(data.piviPlayerDuration),
+			quality: numberAttr(data.piviPlayerQuality),
+			qualityOptions: numberListAttr(data.piviPlayerQualityOptions),
+			qualityModes: jsonAttr(data.piviPlayerQualityModes, NO_PLAYER_PROGRESS.qualityModes),
+			subtitleTracks: jsonAttr(data.piviPlayerSubtitleTracks, NO_PLAYER_PROGRESS.subtitleTracks),
 			// The empty attribute value is how the player page writes "off"
 			// (an attribute can't carry null), so it maps back to null here
 			// rather than to an empty-string language nothing would match.
-			subtitleLanguage: playerEl.dataset.piviPlayerSubtitleLanguage || null,
-			diagnosticsOpen: playerEl.dataset.piviPlayerDiagnosticsOpen === 'true',
-			volume: Number(playerEl.dataset.piviPlayerVolume) || 0
+			subtitleLanguage: data.piviPlayerSubtitleLanguage || null,
+			diagnosticsOpen: data.piviPlayerDiagnosticsOpen === 'true',
+			volume: numberAttr(data.piviPlayerVolume)
 		};
 	}
 
@@ -242,116 +259,145 @@
 		return true;
 	}
 
+	// Only an armed slider (a press already activated it -- see Slider.svelte)
+	// claims a swipe; an unarmed one just sits there while swipes move focus
+	// normally, so landing on one and continuing past it doesn't nudge its
+	// value.
+	function armedSlider(el: Element | null): HTMLElement | null {
+		if (!(el instanceof HTMLElement) || !el.hasAttribute('data-pivi-slider')) return null;
+		return el.getAttribute('data-pivi-slider-armed') === 'true' ? el : null;
+	}
+
 	function handleMove(dx: number, dy: number) {
-		const active = document.activeElement;
-		// Only an armed slider (a press already activated it -- see
-		// Slider.svelte) claims the swipe; an unarmed one just sits there while
-		// swipes move focus normally, so landing on one and continuing past it
-		// doesn't nudge its value.
-		if (
-			active instanceof HTMLElement &&
-			active.hasAttribute('data-pivi-slider') &&
-			active.getAttribute('data-pivi-slider-armed') === 'true'
-		) {
-			if (trySliderAdjust(active, dx, dy)) return;
-		}
+		const slider = armedSlider(document.activeElement);
+		if (slider && trySliderAdjust(slider, dx, dy)) return;
 		moveFocus(dx, dy);
+	}
+
+	function centerOf(el: Element): { x: number; y: number } {
+		const rect = el.getBoundingClientRect();
+		return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+	}
+
+	// The swipe as a unit vector -- a zero-length swipe (never sent in
+	// practice, but cheap to be safe about) would otherwise divide by zero
+	// and score every candidate NaN.
+	function unitVector(dx: number, dy: number): { x: number; y: number } {
+		const length = Math.hypot(dx, dy) || 1;
+		return { x: dx / length, y: dy / length };
+	}
+
+	// Which elements a swipe is even allowed to land on. A mostly-horizontal
+	// swipe stays inside the current shelf: the cone below is wide enough that
+	// the next row's cards can otherwise win over "nothing further right in
+	// this row", which reads as focus randomly hopping rows instead of
+	// stopping at the row's end.
+	function candidatesFor(els: HTMLElement[], active: HTMLElement, dx: number, dy: number) {
+		const shelf = Math.abs(dx) > Math.abs(dy) ? active.closest('[data-pivi-hscroll]') : null;
+		return els.filter((el) => el !== active && (!shelf || shelf.contains(el)));
+	}
+
+	// How good a move onto one candidate is: its distance, penalised by how
+	// far off the swipe's own direction it sits. `undefined` means it's
+	// outside the ~60deg cone (or on top of where focus already is), i.e. not
+	// a candidate at all. Lower is better.
+	function directionScore(
+		from: { x: number; y: number },
+		to: { x: number; y: number },
+		dir: { x: number; y: number }
+	): number | undefined {
+		const vx = to.x - from.x;
+		const vy = to.y - from.y;
+		const distance = Math.hypot(vx, vy);
+		const dot = vx * dir.x + vy * dir.y;
+		if (distance === 0 || dot <= 0) return undefined;
+		const cos = dot / distance;
+		return cos < 0.5 ? undefined : distance / cos;
+	}
+
+	function bestInDirection(els: HTMLElement[], active: HTMLElement, dx: number, dy: number) {
+		const from = centerOf(active);
+		const dir = unitVector(dx, dy);
+		let best: HTMLElement | null = null;
+		let bestScore = Infinity;
+		for (const el of candidatesFor(els, active, dx, dy)) {
+			const score = directionScore(from, centerOf(el), dir);
+			if (score === undefined || score >= bestScore) continue;
+			bestScore = score;
+			best = el;
+		}
+		return best;
+	}
+
+	function focusAndScroll(el: HTMLElement, els: HTMLElement[]) {
+		// Focus alone can jump instantly on some browsers regardless of the
+		// container's `scroll-behavior` (Safari in particular), so scroll it
+		// into view ourselves first and let focus land without re-scrolling.
+		scrollFocusedIntoView(el, els);
+		el.focus({ preventScroll: true });
 	}
 
 	// Lightweight spatial navigation: from the focused element, pick the
 	// nearest other focusable element that lies within a ~60deg cone in the
-	// swipe direction, rather than a fixed tab order.
+	// swipe direction, rather than a fixed tab order. With nothing focused
+	// (or focus somewhere that isn't a candidate at all, e.g. <body> after a
+	// navigation) the first candidate takes it, so a swipe always gets
+	// focus onto the page.
 	function moveFocus(dx: number, dy: number) {
 		const els = focusableElements();
-		if (els.length === 0) return;
-
 		const active = document.activeElement;
 		if (!(active instanceof HTMLElement) || !els.includes(active)) {
-			els[0].focus();
+			els[0]?.focus();
 			return;
 		}
-
-		const from = active.getBoundingClientRect();
-		const fromCenter = { x: from.left + from.width / 2, y: from.top + from.height / 2 };
-		const dirLen = Math.hypot(dx, dy) || 1;
-
-		// A mostly-horizontal swipe should stay inside the current shelf: the
-		// cone below is wide enough that the next row's cards can otherwise
-		// win over "nothing further right in this row", which reads as focus
-		// randomly hopping rows instead of stopping at the row's end.
-		const shelf = Math.abs(dx) > Math.abs(dy) ? active.closest('[data-pivi-hscroll]') : null;
-
-		let best: HTMLElement | null = null;
-		let bestScore = Infinity;
-
-		for (const el of els) {
-			if (el === active) continue;
-			if (shelf && !shelf.contains(el)) continue;
-			const r = el.getBoundingClientRect();
-			const center = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-			const vx = center.x - fromCenter.x;
-			const vy = center.y - fromCenter.y;
-			const dist = Math.hypot(vx, vy);
-			if (dist === 0) continue;
-
-			const dot = vx * dx + vy * dy;
-			if (dot <= 0) continue;
-
-			const cos = dot / (dist * dirLen);
-			if (cos < 0.5) continue;
-
-			const score = dist / cos;
-			if (score < bestScore) {
-				bestScore = score;
-				best = el;
-			}
-		}
-
-		if (!best) return;
-		// Focus alone can jump instantly on some browsers regardless of the
-		// container's `scroll-behavior` (Safari in particular), so scroll it
-		// into view ourselves first and let focus land without re-scrolling.
-		scrollFocusedIntoView(best, els);
-		best.focus({ preventScroll: true });
+		const best = bestInDirection(els, active, dx, dy);
+		if (best) focusAndScroll(best, els);
 	}
 
-	// `scrollIntoView({block/inline: 'nearest'})` only scrolls as far as
-	// making the *focused card* visible, which reads as "stuck" rather than
-	// "arrived" in a couple of spots: it's satisfied the instant a shelf's
-	// title (now much larger while active) is still scrolled just off the
-	// top of the viewport, and it stops short of a shelf's actual scroll
-	// limit for its first/last card. So instead: vertically, center whichever
-	// row (title included) or the top bar holds focus, and let the browser's
-	// own scroll clamping stop that short of the top/bottom of the page —
-	// which is exactly "center it, except near an end".
-	function scrollFocusedIntoView(el: HTMLElement, focusable: HTMLElement[]) {
-		const verticalTarget = el.closest<HTMLElement>('[data-pivi-row], [data-pivi-top-bar]') ?? el;
-		const rect = verticalTarget.getBoundingClientRect();
+	// Vertically, center whichever row (title included) or the top bar holds
+	// focus, and let the browser's own scroll clamping stop that short of the
+	// top/bottom of the page -- which is exactly "center it, except near an
+	// end". `scrollIntoView({block: 'nearest'})` instead reads as "stuck"
+	// rather than "arrived": it's satisfied the instant a shelf's title (now
+	// much larger while active) is still scrolled just off the top.
+	function centerVertically(el: HTMLElement) {
+		const target = el.closest<HTMLElement>('[data-pivi-row], [data-pivi-top-bar]') ?? el;
+		const rect = target.getBoundingClientRect();
 		const elementCenter = rect.top + rect.height / 2;
-		const viewportCenter = window.innerHeight / 2;
-		window.scrollTo({ top: window.scrollY + elementCenter - viewportCenter, behavior: 'smooth' });
+		window.scrollTo({
+			top: window.scrollY + elementCenter - window.innerHeight / 2,
+			behavior: 'smooth'
+		});
+	}
 
-		const shelf = el.closest<HTMLElement>('[data-pivi-hscroll]');
-		if (!shelf) return;
-		const itemsInShelf = focusable.filter((candidate) => shelf.contains(candidate));
-		if (el === itemsInShelf[0]) {
-			shelf.scrollTo({ left: 0, behavior: 'smooth' });
-		} else if (el === itemsInShelf[itemsInShelf.length - 1]) {
-			shelf.scrollTo({ left: shelf.scrollWidth, behavior: 'smooth' });
-		} else {
-			// Any other card moving out of frame just needs the shelf nudged
-			// enough to bring it back in. Done by hand (not
-			// `el.scrollIntoView({block: 'nearest', ...})`) because that also
-			// re-scrolls the window for the block axis — undoing the vertical
-			// centering above, since both target the same window scroll.
-			const shelfRect = shelf.getBoundingClientRect();
-			const elRect = el.getBoundingClientRect();
-			if (elRect.left < shelfRect.left) {
-				shelf.scrollBy({ left: elRect.left - shelfRect.left, behavior: 'smooth' });
-			} else if (elRect.right > shelfRect.right) {
-				shelf.scrollBy({ left: elRect.right - shelfRect.right, behavior: 'smooth' });
-			}
+	// Any card moving out of frame just needs the shelf nudged enough to bring
+	// it back in. Done by hand (not `el.scrollIntoView({block: 'nearest'})`)
+	// because that also re-scrolls the window for the block axis -- undoing
+	// the vertical centering above, since both target the same window scroll.
+	function nudgeShelf(shelf: HTMLElement, el: HTMLElement) {
+		const shelfRect = shelf.getBoundingClientRect();
+		const elRect = el.getBoundingClientRect();
+		if (elRect.left < shelfRect.left) {
+			shelf.scrollBy({ left: elRect.left - shelfRect.left, behavior: 'smooth' });
+		} else if (elRect.right > shelfRect.right) {
+			shelf.scrollBy({ left: elRect.right - shelfRect.right, behavior: 'smooth' });
 		}
+	}
+
+	// The first/last card in a shelf scrolls that shelf to its actual limit
+	// rather than just far enough to show the card -- `nearest` stops short of
+	// the end, which reads as the shelf refusing to finish scrolling.
+	function scrollShelf(shelf: HTMLElement, el: HTMLElement, focusable: HTMLElement[]) {
+		const items = focusable.filter((candidate) => shelf.contains(candidate));
+		if (el === items[0]) return shelf.scrollTo({ left: 0, behavior: 'smooth' });
+		if (el === items.at(-1)) return shelf.scrollTo({ left: shelf.scrollWidth, behavior: 'smooth' });
+		nudgeShelf(shelf, el);
+	}
+
+	function scrollFocusedIntoView(el: HTMLElement, focusable: HTMLElement[]) {
+		centerVertically(el);
+		const shelf = el.closest<HTMLElement>('[data-pivi-hscroll]');
+		if (shelf) scrollShelf(shelf, el, focusable);
 	}
 
 	// Plays the `.pivi-press` scale animation on whatever was just clicked —

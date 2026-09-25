@@ -62,18 +62,39 @@ type YtDlpInfo = {
 // SubtitleTrack to that one format (see host.ts's own comment on why), and
 // YouTube reliably offers a vtt variant for every language it lists here, so
 // there's nothing to convert or fall back to.
-function extractSubtitleTracks(info: YtDlpInfo): SubtitleTrack[] {
-	function trackFor(
-		entries: YtDlpSubtitleEntry[] | undefined,
-		kind: SubtitleTrack['kind'],
-		language: string
-	): SubtitleTrack | undefined {
-		const vtt = entries?.find((entry) => entry.ext === 'vtt');
-		return vtt
-			? { language, label: vtt.name, kind, url: vtt.url, format: 'vtt' as const }
-			: undefined;
-	}
+function trackFor(
+	entries: YtDlpSubtitleEntry[] | undefined,
+	kind: SubtitleTrack['kind'],
+	language: string
+): SubtitleTrack | undefined {
+	const vtt = entries?.find((entry) => entry.ext === 'vtt');
+	return vtt
+		? { language, label: vtt.name, kind, url: vtt.url, format: 'vtt' as const }
+		: undefined;
+}
 
+// First source to offer a language keeps it -- see extractSubtitleTracks
+// below for why a language must end up with exactly one track.
+function addTracks(
+	source: Record<string, YtDlpSubtitleEntry[]> | undefined,
+	kind: SubtitleTrack['kind'],
+	byLanguage: Map<string, SubtitleTrack>
+) {
+	for (const [language, entries] of Object.entries(source ?? {})) {
+		addTrack(byLanguage, language, trackFor(entries, kind, language));
+	}
+}
+
+function addTrack(
+	byLanguage: Map<string, SubtitleTrack>,
+	language: string,
+	track: SubtitleTrack | undefined
+) {
+	if (!track || byLanguage.has(language)) return;
+	byLanguage.set(language, track);
+}
+
+function extractSubtitleTracks(info: YtDlpInfo): SubtitleTrack[] {
 	// One entry per language, not one per (language, source) pair -- a
 	// language present in both `subtitles` and `automatic_captions` used to
 	// produce two separate SubtitleTrack entries here, which became two
@@ -87,21 +108,13 @@ function extractSubtitleTracks(info: YtDlpInfo): SubtitleTrack[] {
 	// collected first so they win the language when both exist -- a real,
 	// human-authored caption over the same language's auto-generated one.
 	const byLanguage = new Map<string, SubtitleTrack>();
-	for (const [language, entries] of Object.entries(info.subtitles ?? {})) {
-		const track = trackFor(entries, 'caption', language);
-		if (track) byLanguage.set(language, track);
-	}
-	for (const [language, entries] of Object.entries(info.automatic_captions ?? {})) {
-		if (byLanguage.has(language)) continue;
-		const track = trackFor(entries, 'transcription', language);
-		if (track) byLanguage.set(language, track);
-	}
-
+	addTracks(info.subtitles, 'caption', byLanguage);
+	addTracks(info.automatic_captions, 'transcription', byLanguage);
 	return [...byLanguage.values()];
 }
 
 // yt-dlp's own reported extension is the only reliable source for this --
-// see host.ts's Container type comment for why the codec string can't be
+// see host.ts's containerSchema comment for why the codec string can't be
 // trusted (vp9 shows up in both containers; av1 shows up as mp4 despite
 // webm supporting it). `m4a` is yt-dlp's extension for an audio-only mp4.
 function containerFrom(ext: string): 'mp4' | 'webm' {
@@ -167,14 +180,29 @@ export async function resolveStream(videoId: string, maxHeight?: number): Promis
 	]);
 	const info = JSON.parse(output.trim()) as YtDlpInfo;
 	const { video, audio } = extractTracks(videoId, info);
+	return toResolvedStream(info, video, audio);
+}
 
+// No separate audio track means a progressive/direct format, where the video
+// entry carries the audio codec itself and there's nothing to remux against.
+function audioFieldsFor(video: YtDlpFormat, audio: YtDlpFormat | undefined) {
+	return {
+		audioUrl: audio?.url,
+		acodec: (audio ?? video).acodec,
+		audioContainer: audio ? containerFrom(audio.ext) : undefined
+	};
+}
+
+function toResolvedStream(
+	info: YtDlpInfo,
+	video: YtDlpFormat,
+	audio: YtDlpFormat | undefined
+): ResolvedStream {
 	return {
 		videoUrl: video.url,
-		audioUrl: audio?.url,
 		vcodec: video.vcodec ?? 'unknown',
-		acodec: (audio ?? video).acodec,
 		videoContainer: containerFrom(video.ext),
-		audioContainer: audio ? containerFrom(audio.ext) : undefined,
+		...audioFieldsFor(video, audio),
 		title: info.title,
 		duration: info.duration,
 		subtitleTracks: extractSubtitleTracks(info)

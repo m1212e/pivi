@@ -41,12 +41,16 @@
 		}, 150);
 	}
 
+	function notifyIfComplete() {
+		if (value.length === length) oncomplete?.(value);
+	}
+
 	function press(digit: string, { silent = false }: { silent?: boolean } = {}) {
 		onkey?.(digit);
 		if (value.length >= length) return;
 		value += digit;
 		if (!silent) flash(digit);
-		if (value.length === length) oncomplete?.(value);
+		notifyIfComplete();
 	}
 
 	function backspace({ silent = false }: { silent?: boolean } = {}) {

@@ -23,6 +23,18 @@ type PluginSubtitleTrack = {
 	kind: 'caption' | 'transcription';
 };
 
+// Drops `url`/`format` on the way out: the client never sees a track's own
+// source URL (see the type comment above).
+function toGraphqlSubtitleTracks(
+	tracks: { language: string; label?: string; kind: 'caption' | 'transcription' }[] | undefined
+): PluginSubtitleTrack[] {
+	return (tracks ?? []).map(({ language, label, kind }) => ({
+		language,
+		label: label ?? null,
+		kind
+	}));
+}
+
 const PluginSubtitleTrackRef = schemaBuilder
 	.objectRef<PluginSubtitleTrack>('PluginSubtitleTrack')
 	.implement({
@@ -124,11 +136,7 @@ schemaBuilder.queryFields((t) => ({
 				acodec: acodec ?? null,
 				videoContainer,
 				audioContainer: audioContainer ?? null,
-				subtitleTracks: (subtitleTracks ?? []).map(({ language, label, kind }) => ({
-					language,
-					label: label ?? null,
-					kind
-				}))
+				subtitleTracks: toGraphqlSubtitleTracks(subtitleTracks)
 			};
 		}
 	}),

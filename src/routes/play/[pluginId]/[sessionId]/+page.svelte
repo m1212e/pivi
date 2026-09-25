@@ -262,8 +262,17 @@
 	// those "don't know yet" cases, same as qualityMeta's own undefined.
 	let mseAvailability = $state<Partial<Record<QualityOption, boolean>>>({});
 
+	// The only tiers MSE is even a candidate for: proxied (not direct), with a
+	// separate audio track to pair the video one with. A type guard, so the
+	// two callers that go on to hand `meta` to setupMsePlayback get the
+	// non-null acodec/audioContainer for free.
+	type MseQualityMeta = QualityMeta & { acodec: string; audioContainer: 'mp4' | 'webm' };
+	function isMseCandidate(meta: QualityMeta): meta is MseQualityMeta {
+		return !meta.direct && !!meta.acodec && !!meta.audioContainer;
+	}
+
 	async function probeMse(option: QualityOption, meta: QualityMeta) {
-		if (meta.direct || !meta.acodec || !meta.audioContainer) return;
+		if (!isMseCandidate(meta)) return;
 		try {
 			await Promise.all([
 				fetchSegmentIndex(indexUrlFor('video', meta.videoContainer, option)),
@@ -289,14 +298,20 @@
 	// "has an audio track" means MSE will actually work. `undefined` means
 	// still resolving (or never a candidate) -- both the quality list below
 	// and the phone (see qualityModes) show no icon for either case.
+	// Tri-state: `undefined` while the probe is still out, and ffmpeg once
+	// it's come back saying there's no usable index after all.
+	function probedMseMode(option: QualityOption): QualityMode | undefined {
+		const available = mseAvailability[option];
+		if (available === undefined) return undefined;
+		return available ? 'mse' : 'ffmpeg';
+	}
+
 	function qualityModeFor(option: QualityOption): QualityMode | undefined {
 		const meta = qualityMeta[option];
 		if (!meta) return undefined;
 		if (meta.direct) return 'direct';
-		if (!meta.acodec || !meta.audioContainer) return 'ffmpeg';
-		if (mseAvailability[option] === true) return 'mse';
-		if (mseAvailability[option] === false) return 'ffmpeg';
-		return undefined;
+		if (!isMseCandidate(meta)) return 'ffmpeg';
+		return probedMseMode(option);
 	}
 
 	// Same per-option modes as qualityButton's own icons, keyed by quality so
@@ -626,12 +641,8 @@
 			setupDirectPlayback(videoEl, resumeSeconds);
 			return;
 		}
-		if (meta.acodec && meta.audioContainer) {
-			await setupMsePlayback(
-				videoEl,
-				{ ...meta, acodec: meta.acodec, audioContainer: meta.audioContainer },
-				resumeSeconds
-			);
+		if (isMseCandidate(meta)) {
+			await setupMsePlayback(videoEl, meta, resumeSeconds);
 			return;
 		}
 		fallbackToFfmpeg(resumeSeconds, 'no audio track resolved for this session');
@@ -700,23 +711,35 @@
 	// No timer of its own, so pausing anywhere in the lead window genuinely
 	// freezes it instead of a decision firing on schedule regardless of
 	// whether anyone's watching.
-	$effect(() => {
-		if (activeSkipSegment) {
-			if (position >= activeSkipSegment.startSeconds) {
-				const segment = activeSkipSegment;
-				decidedSkipSegments.add(segment);
-				activeSkipSegment = null;
-				if (skipActive && playing) seek(segment.endSeconds);
-			}
-			return;
-		}
-		activeSkipSegment =
+	// Reached the segment: mark it decided either way, and jump past it if
+	// skipping is on and playback is actually running (a paused viewer
+	// scrubbing through one shouldn't be yanked forward).
+	function resolveSkipSegment(segment: SkipSegment) {
+		decidedSkipSegments.add(segment);
+		activeSkipSegment = null;
+		if (skipActive && playing) seek(segment.endSeconds);
+	}
+
+	// The next undecided segment whose lead window the playhead is already
+	// inside, if any.
+	function upcomingSkipSegment(): SkipSegment | null {
+		return (
 			skipSegments.find(
 				(segment) =>
 					!decidedSkipSegments.has(segment) &&
 					position >= segment.startSeconds - SKIP_LEAD_SECONDS &&
 					position < segment.startSeconds
-			) ?? null;
+			) ?? null
+		);
+	}
+
+	$effect(() => {
+		const active = activeSkipSegment;
+		if (!active) {
+			activeSkipSegment = upcomingSkipSegment();
+			return;
+		}
+		if (position >= active.startSeconds) resolveSkipSegment(active);
 	});
 
 	function togglePlayPause() {
@@ -860,12 +883,14 @@
 	// paused -- there's no persisted play/pause state to honor in the first
 	// place, so a fresh visit always starts playing from 0, same as before.
 	let initialized = false;
+	function attachInitialPlayback() {
+		const meta = qualityMeta[quality];
+		if (meta) setupPlayback(meta, 0);
+	}
 	$effect(() => {
-		if (videoEl && readyForInitialAttach && !initialized) {
-			initialized = true;
-			const meta = qualityMeta[quality];
-			if (meta) setupPlayback(meta, 0);
-		}
+		if (initialized || !videoEl || !readyForInitialAttach) return;
+		initialized = true;
+		attachInitialPlayback();
 	});
 
 	// Tears down the Shaka player when the page is left -- otherwise it'd

@@ -44,7 +44,6 @@ export const publishScreenNotification = new NotificationType<z.infer<typeof plu
 // (e.g. yt-dlp's own reported format extension), not be re-derived
 // downstream from vcodec/acodec.
 const containerSchema = z.enum(['mp4', 'webm']);
-export type Container = z.infer<typeof containerSchema>;
 
 // A subtitle/caption track a plugin already knows the URL for -- resolving
 // one costs nothing beyond what resolveStream already does (yt-dlp's own
@@ -57,7 +56,7 @@ export type Container = z.infer<typeof containerSchema>;
 // are. Restricted to `vtt` (never `srt`/others): every plugin resolving
 // through yt-dlp can ask for a vtt variant directly, so there's no format
 // conversion for the host to own.
-export const subtitleTrackSchema = z.object({
+const subtitleTrackSchema = z.object({
 	language: z.string(),
 	// A plugin-provided display name (yt-dlp reports one for auto-generated
 	// tracks, not always for manual ones) -- falls back to `language` itself

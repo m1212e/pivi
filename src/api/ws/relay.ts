@@ -67,16 +67,23 @@ type ConnState =
 // no UA-parsing dependency, just the two fields worth surfacing in a toast.
 // Falls back to a generic label rather than inventing a name when the UA
 // doesn't match anything recognizable.
+const UA_DEVICE_PATTERNS: readonly (readonly [RegExp, string])[] = [
+	[/iPad/, 'iPad'],
+	[/iPhone/, 'iPhone']
+];
+
+// Android UAs put the marketing model right before "Build/", e.g.
+// "...Android 14; Pixel 8 Pro Build/...)" — the only human-readable device
+// identifier a stock UA string actually carries.
+function androidModelFrom(userAgent: string): string | undefined {
+	return userAgent.match(/Android [^;]+;\s*([^;)]+?)\s*(?:Build\/[^)]*)?\)/)?.[1].trim();
+}
+
 function deriveDeviceName(userAgent: string | undefined): string {
 	if (!userAgent) return 'Phone';
-	if (/iPad/.test(userAgent)) return 'iPad';
-	if (/iPhone/.test(userAgent)) return 'iPhone';
-	// Android UAs put the marketing model right before "Build/", e.g.
-	// "...Android 14; Pixel 8 Pro Build/...)" — the only human-readable
-	// device identifier a stock UA string actually carries.
-	const androidModel = userAgent.match(/Android [^;]+;\s*([^;)]+?)\s*(?:Build\/[^)]*)?\)/);
-	if (androidModel) return androidModel[1].trim();
-	return 'Phone';
+	const known = UA_DEVICE_PATTERNS.find(([pattern]) => pattern.test(userAgent));
+	if (known) return known[1];
+	return androidModelFrom(userAgent) ?? 'Phone';
 }
 
 const connections = new Map<WebSocket, ConnState>();
@@ -277,87 +284,119 @@ export function startPairingRelay() {
 	});
 }
 
+// A socket's own role decides what a frame even means, so every frame lands
+// in exactly one of the per-role handlers below rather than in one long
+// chain of role/shape checks.
 async function onMessage(
 	socket: WebSocket,
 	remoteAddress: string | undefined,
 	userAgent: string | undefined,
 	data: RawData
 ) {
-	let raw: unknown;
-	try {
-		raw = JSON.parse(data.toString());
-	} catch {
-		fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
-		return;
-	}
-
 	const state = connections.get(socket);
 	if (!state) return;
-
+	// The one role whose frames are relayed verbatim -- a TV frame is already
+	// a JSON-RPC message for the phones, never something this relay reads.
 	if (state.role === 'tv') {
 		relayFromTv(socket, data.toString());
 		return;
 	}
+	const raw = parseFrame(socket, data);
+	if (raw === undefined) return;
+	await routeFrame(socket, state, raw, remoteAddress, userAgent);
+}
 
-	if (state.role === 'phone') {
-		const parsed = phoneToRelaySchema.safeParse(raw);
-		if (!parsed.success) {
-			fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
-			return;
-		}
-		relayFromPhone(socket, state, parsed.data);
+// `undefined` (rather than a throw) for an unparseable frame -- the socket
+// has already been failed by then, so the caller's only job is to stop.
+function parseFrame(socket: WebSocket, data: RawData): unknown {
+	try {
+		return JSON.parse(data.toString());
+	} catch {
+		fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
+		return undefined;
+	}
+}
+
+// Not `async`: every branch either finishes synchronously or hands back the
+// handler's own promise, which the caller awaits.
+function routeFrame(
+	socket: WebSocket,
+	state: Exclude<ConnState, { role: 'tv' }>,
+	raw: unknown,
+	remoteAddress: string | undefined,
+	userAgent: string | undefined
+): void | Promise<void> {
+	if (state.role === 'phone') return onPhoneFrame(socket, state, raw);
+	if (state.role === 'unauth') return onHandshakeFrame(socket, raw, remoteAddress, userAgent);
+	return onChallengeFrame(socket, state, raw);
+}
+
+function onPhoneFrame(
+	socket: WebSocket,
+	state: Extract<ConnState, { role: 'phone' }>,
+	raw: unknown
+) {
+	const parsed = phoneToRelaySchema.safeParse(raw);
+	if (!parsed.success) {
+		fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
 		return;
 	}
+	relayFromPhone(socket, state, parsed.data);
+}
 
-	if (state.role === 'unauth') {
-		const parsed = z.union([tvHelloSchema, pairRequestSchema, helloRequestSchema]).safeParse(raw);
-		if (!parsed.success) {
-			fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
-			return;
-		}
-		const message = parsed.data;
-
-		if (message.type === 'tvHello') {
-			if (!isLoopback(remoteAddress)) {
-				fail(socket, {
-					type: 'authError',
-					message: 'TV role is loopback-only'
-				} satisfies AuthError);
-				return;
-			}
-			clearHandshakeTimeout(socket);
-			connections.set(socket, { role: 'tv' });
-			return;
-		}
-
-		if (message.type === 'pair') {
-			await handlePairRequest(socket, message, userAgent);
-			return;
-		}
-
-		if (message.type === 'hello') {
-			await handleHelloRequest(socket, message);
-			return;
-		}
-	}
-
-	if (state.role === 'awaiting-response') {
-		const parsed = challengeResponseSchema.safeParse(raw);
-		if (!parsed.success) {
-			fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
-			return;
-		}
-		await handleChallengeResponse(socket, state, parsed.data);
+// The three things an unauthenticated socket is allowed to say: claim the TV
+// role, pair, or say hello as an already-paired phone.
+function onHandshakeFrame(
+	socket: WebSocket,
+	raw: unknown,
+	remoteAddress: string | undefined,
+	userAgent: string | undefined
+): void | Promise<void> {
+	const parsed = z.union([tvHelloSchema, pairRequestSchema, helloRequestSchema]).safeParse(raw);
+	if (!parsed.success) {
+		fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
 		return;
 	}
+	const message = parsed.data;
+	if (message.type === 'pair') return handlePairRequest(socket, message, userAgent);
+	if (message.type === 'hello') return handleHelloRequest(socket, message);
+	acceptTvHello(socket, remoteAddress);
+}
 
-	fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
+// The TV role is what gets to see every phone's decrypted traffic, so it's
+// only ever granted to something already running on this machine.
+function acceptTvHello(socket: WebSocket, remoteAddress: string | undefined) {
+	if (!isLoopback(remoteAddress)) {
+		fail(socket, { type: 'authError', message: 'TV role is loopback-only' } satisfies AuthError);
+		return;
+	}
+	clearHandshakeTimeout(socket);
+	connections.set(socket, { role: 'tv' });
+}
+
+async function onChallengeFrame(
+	socket: WebSocket,
+	state: Extract<ConnState, { role: 'awaiting-response' }>,
+	raw: unknown
+) {
+	const parsed = challengeResponseSchema.safeParse(raw);
+	if (!parsed.success) {
+		fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
+		return;
+	}
+	await handleChallengeResponse(socket, state, parsed.data);
+}
+
+// `except` is the sender itself on a TV-to-TV relay (a second TV tab, say) --
+// a socket never gets its own frame back.
+function broadcastToTvs(raw: string, except?: WebSocket) {
+	for (const tv of tvSockets()) {
+		if (tv !== except && tv.readyState === WebSocket.OPEN) tv.send(raw);
+	}
 }
 
 function relayFromTv(sender: WebSocket, raw: string) {
-	for (const socket of tvSockets()) {
-		if (socket !== sender && socket.readyState === WebSocket.OPEN) socket.send(raw);
-	}
+	broadcastToTvs(raw, sender);
 	for (const [socket, state] of phoneSocketsWithKeys()) {
 		const { nonce, ciphertext } = encrypt(state.s2cKey, utf8ToBytes(raw));
 		send(socket, {
@@ -365,6 +404,22 @@ function relayFromTv(sender: WebSocket, raw: string) {
 			nonce: toBase64Url(nonce),
 			ciphertext: toBase64Url(ciphertext)
 		} satisfies Encrypted);
+	}
+}
+
+// `undefined` on failure, same contract as parseFrame above.
+function decryptFromPhone(
+	socket: WebSocket,
+	state: Extract<ConnState, { role: 'phone' }>,
+	message: Extract<PhoneToRelay, { type: 'enc' }>
+): string | undefined {
+	try {
+		return bytesToUtf8(
+			decrypt(state.c2sKey, fromBase64Url(message.nonce), fromBase64Url(message.ciphertext))
+		);
+	} catch {
+		fail(socket, { type: 'authError', message: 'Decryption failed' } satisfies AuthError);
+		return undefined;
 	}
 }
 
@@ -377,20 +432,9 @@ function relayFromPhone(
 		fail(socket, { type: 'authError', message: 'Expected encrypted frame' } satisfies AuthError);
 		return;
 	}
-
-	let plaintext: string;
-	try {
-		plaintext = bytesToUtf8(
-			decrypt(state.c2sKey, fromBase64Url(message.nonce), fromBase64Url(message.ciphertext))
-		);
-	} catch {
-		fail(socket, { type: 'authError', message: 'Decryption failed' } satisfies AuthError);
-		return;
-	}
-
-	for (const tv of tvSockets()) {
-		if (tv.readyState === WebSocket.OPEN) tv.send(plaintext);
-	}
+	const plaintext = decryptFromPhone(socket, state, message);
+	if (plaintext === undefined) return;
+	broadcastToTvs(plaintext);
 }
 
 // Lets server-side code outside this module (the plugin host, for a

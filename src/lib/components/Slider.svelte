@@ -225,21 +225,24 @@
 		return () => node.removeEventListener('pivi-slider-adjust', onSwipeAdjust);
 	});
 
-	// Only while idle, and only once a just-committed value has actually been
-	// reached -- see the props comments on liveValue/onCommit/commitTolerance
-	// above. Until then the committed value is what stays on screen, so the
-	// bar holds where the viewer put it rather than rubber-banding back to
-	// where playback still is while the seek is in flight.
+	// What the bar should show for a given live value: the outstanding
+	// committed value until the live one has actually reached it, the live
+	// value from then on (clearing the wait as it goes). See the props
+	// comments on liveValue/onCommit/commitTolerance above -- until it's
+	// reached, the bar holds where the viewer put it rather than
+	// rubber-banding back to where playback still is while the seek is in
+	// flight.
+	function trackedValue(live: number): number {
+		if (pendingCommit === undefined) return live;
+		if (Math.abs(live - pendingCommit) > tolerance) return pendingCommit;
+		clearPendingCommit();
+		return live;
+	}
+
+	// Only while idle -- an interaction in progress owns `value` outright.
 	$effect(() => {
 		if (liveValue === undefined || interacting) return;
-		if (pendingCommit !== undefined) {
-			if (Math.abs(liveValue - pendingCommit) > tolerance) {
-				value = pendingCommit;
-				return;
-			}
-			clearPendingCommit();
-		}
-		value = liveValue;
+		value = trackedValue(liveValue);
 	});
 
 	$effect(() => () => {
@@ -256,19 +259,26 @@
 		return 0;
 	}
 
+	// Not a native button, so Enter/Space need their own arm toggle -- same
+	// press-to-activate gesture as onClick above.
+	function isActivationKey(key: string): boolean {
+		return key === 'Enter' || key === ' ';
+	}
+
+	// Returns whether the key was one this slider acts on, so the caller only
+	// swallows the keys it actually handled.
+	function adjustFromKey(key: string): boolean {
+		const delta = keyDelta(key);
+		if (delta === 0 || !armed) return false;
+		adjustBy(delta * step);
+		return true;
+	}
+
 	function onKeydown(event: KeyboardEvent) {
 		if (disabled) return;
-		// Not a native button, so Enter/Space need their own arm toggle here --
-		// same press-to-activate gesture as onClick above.
-		if (event.key === 'Enter' || event.key === ' ') {
-			event.preventDefault();
-			armed = !armed;
-			return;
-		}
-		const delta = keyDelta(event.key);
-		if (delta === 0 || !armed) return;
+		if (isActivationKey(event.key)) armed = !armed;
+		else if (!adjustFromKey(event.key)) return;
 		event.preventDefault();
-		adjustBy(delta * step);
 	}
 
 	// Clamped, and zero for a degenerate range -- `max` can legitimately be 0
@@ -317,6 +327,51 @@
 			back: `${(band * 3) / 8}rem`
 		};
 	});
+
+	// Every orientation-dependent class/style in one place, picked once, so
+	// the markup below reads as structure rather than as the same
+	// horizontal/vertical branch spelled out on each of its five attributes.
+	// `waveTile`'s axis is the opposite of the slider's own: a horizontal
+	// slider's leading edge is a vertical line, so the crest has to run down
+	// the height (the `-y` tile).
+	const AXIS = {
+		horizontal: {
+			fillEdge: 'inset-y-0 left-0',
+			solidSide: 'right',
+			waveEdge: 'pivi-slider-wave-y inset-y-0',
+			waveTile: WAVE_TILE_Y
+		},
+		vertical: {
+			fillEdge: 'inset-x-0 bottom-0',
+			solidSide: 'top',
+			waveEdge: 'pivi-slider-wave-x inset-x-0',
+			waveTile: WAVE_TILE_X
+		}
+	} as const;
+	const TRACK_SIZE = {
+		horizontal: { sm: 'h-2 w-full min-w-40', md: 'h-11 w-full min-w-40' },
+		vertical: { sm: 'h-56 w-2', md: 'h-56 w-11' }
+	} as const;
+
+	const axis = $derived(AXIS[orientation]);
+	const trackSizeClass = $derived(TRACK_SIZE[orientation][size]);
+	const fillStyle = $derived(
+		orientation === 'horizontal' ? `width: ${fraction * 100}%` : `height: ${fraction * 100}%`
+	);
+	// Pulled back by (a little less than) half a wave band while armed so the
+	// wave straddles the fill's edge rather than stacking on top of a flat one.
+	const solidStyle = $derived(`${axis.solidSide}: ${armed ? wave.back : '0px'}`);
+	const waveStyle = $derived.by(() => {
+		const horizontal = orientation === 'horizontal';
+		const tileSize = horizontal ? `${wave.band} ${wave.len}` : `${wave.len} ${wave.band}`;
+		const place = horizontal
+			? `width: ${wave.band}; right: calc(-1 * ${wave.half})`
+			: `height: ${wave.band}; top: calc(-1 * ${wave.half})`;
+		// Frozen rather than hidden while unarmed, so the fade-out drifts to a
+		// stop instead of snapping back to the start of the loop.
+		const play = armed ? 'running' : 'paused';
+		return `--pivi-wave-len: ${wave.len}; background-image: ${axis.waveTile}; background-size: ${tileSize}; animation-play-state: ${play}; ${place}`;
+	});
 </script>
 
 <div
@@ -339,14 +394,7 @@
 	onclick={onClick}
 	onblur={onBlur}
 	onkeydown={onKeydown}
-	class="relative touch-none overflow-hidden rounded-full bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/20 outline-none {orientation ===
-	'horizontal'
-		? size === 'sm'
-			? 'h-2 w-full min-w-40'
-			: 'h-11 w-full min-w-40'
-		: size === 'sm'
-			? 'h-56 w-2'
-			: 'h-56 w-11'}"
+	class="relative touch-none overflow-hidden rounded-full bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/20 outline-none {trackSizeClass}"
 >
 	<!-- No rounding, inset, or gap of its own -- the track above clips it
 	     (`overflow-hidden` + the same `rounded-full`) into the track's own
@@ -360,39 +408,24 @@
 	     there the fill has to sit exactly under the finger/cursor, and easing
 	     towards it would just read as lag. -->
 	<div
-		class="absolute {orientation === 'horizontal'
-			? 'inset-y-0 left-0'
-			: 'inset-x-0 bottom-0'} {dragging ? '' : 'transition-[width,height] duration-200 ease-out'}"
-		style={orientation === 'horizontal'
-			? `width: ${fraction * 100}%`
-			: `height: ${fraction * 100}%`}
+		class="absolute {axis.fillEdge} {dragging
+			? ''
+			: 'transition-[width,height] duration-200 ease-out'}"
+		style={fillStyle}
 	>
-		<!-- Everything but the leading edge. Pulled back by half a wave band
-		     while armed so the wave below straddles the edge rather than
-		     stacking on top of a flat one. -->
+		<!-- Everything but the leading edge. -->
 		<div
-			class="absolute bg-white transition-all duration-200 {orientation === 'horizontal'
-				? 'inset-y-0 left-0'
-				: 'inset-x-0 bottom-0'}"
-			style="{orientation === 'horizontal' ? 'right' : 'top'}: {armed ? wave.back : '0px'}"
+			class="absolute bg-white transition-all duration-200 {axis.fillEdge}"
+			style={solidStyle}
 		></div>
 		<!-- The leading edge itself. Always rendered (so arming/unarming can
-		     cross-fade it rather than popping), but frozen while unarmed --
-		     the fade-out then drifts to a stop instead of snapping back to
-		     the start of the loop. -->
+		     cross-fade it rather than popping) -- see waveStyle for why it's
+		     frozen rather than removed while unarmed. -->
 		<div
-			class="absolute transition-opacity duration-200 {orientation === 'horizontal'
-				? 'pivi-slider-wave-y inset-y-0'
-				: 'pivi-slider-wave-x inset-x-0'} {armed ? 'opacity-100' : 'opacity-0'}"
-			style="--pivi-wave-len: {wave.len}; background-image: {orientation === 'horizontal'
-				? WAVE_TILE_Y
-				: WAVE_TILE_X}; background-size: {orientation === 'horizontal'
-				? `${wave.band} ${wave.len}`
-				: `${wave.len} ${wave.band}`}; animation-play-state: {armed
-				? 'running'
-				: 'paused'}; {orientation === 'horizontal'
-				? `width: ${wave.band}; right: calc(-1 * ${wave.half})`
-				: `height: ${wave.band}; top: calc(-1 * ${wave.half})`}"
+			class="absolute transition-opacity duration-200 {axis.waveEdge} {armed
+				? 'opacity-100'
+				: 'opacity-0'}"
+			style={waveStyle}
 		></div>
 	</div>
 </div>

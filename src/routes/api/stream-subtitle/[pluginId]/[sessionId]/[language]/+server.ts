@@ -45,6 +45,16 @@ function stripHorizontalSettings(settings: string): string {
 		.trim();
 }
 
+// One cue's timing line, with its end capped at the next cue's start (an
+// auto-caption track's own cues routinely overlap, which renders as two
+// stacked lines) and its horizontal placement settings dropped.
+function rewriteTimingLine(match: RegExpMatchArray, nextStart: string | undefined): string {
+	const [, start, end, settings] = match;
+	const cappedEnd = nextStart && end > nextStart ? nextStart : end;
+	const cleaned = stripHorizontalSettings(settings);
+	return `${start} --> ${cappedEnd}${cleaned ? ` ${cleaned}` : ''}`;
+}
+
 function normalizeVtt(vtt: string): string {
 	// A cue block is itself possibly multiple lines (an optional identifier,
 	// the timing line, one or more text lines); blocks are separated by a
@@ -64,11 +74,7 @@ function normalizeVtt(vtt: string): string {
 
 	for (let i = 0; i < cues.length; i++) {
 		const { blockIndex, lineIndex, match } = cues[i];
-		const [, start, end, settings] = match;
-		const next = cues[i + 1]?.match[1];
-		const cappedEnd = next && end > next ? next : end;
-		const cleaned = stripHorizontalSettings(settings);
-		blocks[blockIndex][lineIndex] = `${start} --> ${cappedEnd}${cleaned ? ` ${cleaned}` : ''}`;
+		blocks[blockIndex][lineIndex] = rewriteTimingLine(match, cues[i + 1]?.match[1]);
 	}
 
 	return blocks.map((lines) => lines.join('\n')).join('\n\n');

@@ -157,83 +157,91 @@
 	// anything revealed later, by actually scrolling to it, appears
 	// immediately instead of waiting on a delay that has nothing to do with
 	// how fast the viewer is scrolling.
-	$effect(() => {
-		if (!expanded || !fullScreen || !root) return;
-		const buttons = [...root.querySelectorAll<HTMLElement>('[role="option"]')];
-		// Duration explicitly zeroed here, not just left unset -- these
-		// buttons already carry Tailwind's own `transition` class (for their
-		// hover state), which comes with its own non-zero default duration
-		// covering opacity/transform among other properties. Leaving duration
-		// unset would still inherit that default, animating this initial hide
-		// as a visible fade-from-default flicker the instant the panel opens
-		// (every option briefly fading out before any of them fade back in).
-		// An explicit inline `0ms` here beats the class's own value the same
-		// way the reveal callback's own explicit `400ms` will later.
+	const REVEAL_MS = 400;
+	// Anything revealed within this window of opening counts as part of the
+	// initial screenful, and gets the index-based stagger; anything revealed
+	// after it (by the viewer actually scrolling there) reveals immediately
+	// instead. A time window rather than "only entries from the very first
+	// observer callback": with enough elements to observe at once (a
+	// hundred-plus-language subtitle list, easily), the browser can split that
+	// very first check across more than one callback invocation, which used to
+	// hand out delay 0 to anything past whichever batch size the first
+	// invocation happened to contain -- visually, the stagger just stopped
+	// partway through the first screenful instead of covering all of it.
+	const INITIAL_WINDOW_MS = 150;
+
+	// Duration explicitly zeroed here, not just left unset -- these buttons
+	// already carry Tailwind's own `transition` class (for their hover state),
+	// which comes with its own non-zero default duration covering
+	// opacity/transform among other properties. Leaving duration unset would
+	// still inherit that default, animating this initial hide as a visible
+	// fade-from-default flicker the instant the panel opens (every option
+	// briefly fading out before any of them fade back in). An explicit inline
+	// `0ms` here beats the class's own value the same way the reveal below
+	// beats it with its own explicit duration.
+	function hideForReveal(buttons: HTMLElement[]) {
 		for (const button of buttons) {
 			button.style.transitionDuration = '0ms';
 			button.style.opacity = '0';
 			button.style.transform = 'translateY(24px)';
 		}
+	}
 
+	// `index` is the option's own fixed position in the list, not a counter of
+	// how many have been revealed so far -- a counter's value depends on which
+	// callback invocation (and in what order within it) delivered this entry,
+	// which isn't guaranteed to line up with visual order once the initial
+	// check is itself split across invocations the way described above. The
+	// list's own DOM order is exactly the on-screen order already, so indexing
+	// into it directly gives every option a stable delay regardless of how the
+	// browser happened to batch the notifications.
+	function revealOption(el: HTMLElement, index: number, openedAt: number) {
+		const initial = performance.now() - openedAt < INITIAL_WINDOW_MS;
+		const delay = initial ? Math.min(index * 20, 300) : 0;
+		// Duration only, not the `transition` shorthand -- these buttons
+		// already carry Tailwind's own `transition` class (for their hover
+		// state), whose property list already covers opacity/transform; a
+		// shorthand override here would silently replace that list with just
+		// these two properties for good, killing the hover transition on
+		// color/background from then on.
+		el.style.transitionDuration = `${REVEAL_MS}ms`;
+		el.style.transitionDelay = `${delay}ms`;
+		el.style.opacity = '1';
+		el.style.transform = 'none';
+		// Clears the duration/delay overrides once this option's own reveal has
+		// actually finished, so its Tailwind `transition` class goes back to
+		// its normal (much shorter) hover timing afterward instead of staying
+		// stuck at this reveal's.
+		setTimeout(() => {
+			el.style.transitionDuration = '';
+			el.style.transitionDelay = '';
+		}, delay + REVEAL_MS);
+	}
+
+	function startRevealOnScroll(container: HTMLElement) {
+		const buttons = [...container.querySelectorAll<HTMLElement>('[role="option"]')];
+		hideForReveal(buttons);
 		const openedAt = performance.now();
-		// Anything revealed within this window of opening counts as part of
-		// the initial screenful, and gets the index-based stagger; anything
-		// revealed after it (by the viewer actually scrolling there) reveals
-		// immediately instead. A time window rather than "only entries from
-		// the very first observer callback": with enough elements to observe
-		// at once (a hundred-plus-language subtitle list, easily), the
-		// browser can split that very first check across more than one
-		// callback invocation, which used to hand out delay 0 to anything
-		// past whichever batch size the first invocation happened to
-		// contain -- visually, the stagger just stopped partway through the
-		// first screenful instead of covering all of it.
-		const INITIAL_WINDOW_MS = 150;
-
 		const observer = new IntersectionObserver(
 			(entries) => {
 				for (const entry of entries) {
 					if (!entry.isIntersecting) continue;
 					const el = entry.target as HTMLElement;
-					// The option's own fixed position in the list, not a
-					// counter of how many have been revealed so far -- a
-					// counter's value depends on which callback invocation (and
-					// in what order within it) delivered this entry, which
-					// isn't guaranteed to line up with visual order once the
-					// initial check is itself split across invocations the way
-					// described above. The list's own DOM order is exactly the
-					// on-screen order already, so indexing into it directly
-					// gives every option a stable delay regardless of how the
-					// browser happened to batch the notifications.
-					const index = buttons.indexOf(el);
-					const delay =
-						performance.now() - openedAt < INITIAL_WINDOW_MS ? Math.min(index * 20, 300) : 0;
-					// Duration only, not the `transition` shorthand -- these
-					// buttons already carry Tailwind's own `transition` class
-					// (for their hover state), whose property list already
-					// covers opacity/transform; a shorthand override here would
-					// silently replace that list with just these two properties
-					// for good, killing the hover transition on color/background
-					// from then on.
-					el.style.transitionDuration = '400ms';
-					el.style.transitionDelay = `${delay}ms`;
-					el.style.opacity = '1';
-					el.style.transform = 'none';
+					revealOption(el, buttons.indexOf(el), openedAt);
 					observer.unobserve(el);
-					// Clears the duration/delay overrides once this option's own
-					// reveal has actually finished, so its Tailwind `transition`
-					// class goes back to its normal (much shorter) hover timing
-					// afterward instead of staying stuck at this reveal's.
-					setTimeout(() => {
-						el.style.transitionDuration = '';
-						el.style.transitionDelay = '';
-					}, delay + 400);
 				}
 			},
 			{ threshold: 0.1 }
 		);
 		for (const button of buttons) observer.observe(button);
-
 		return () => observer.disconnect();
+	}
+
+	$effect(() => {
+		if (!expanded || !fullScreen) return;
+		const container = root;
+		if (!container) return;
+		return startRevealOnScroll(container);
 	});
 
 	// Traps focus inside this control while it's expanded -- without this,
@@ -248,15 +256,19 @@
 	// removes everything else on the page from both focus and pointer
 	// interaction while expanded, which is the standard way to trap focus
 	// for a control that isn't rendered as its own top-level portal.
+	function setChildrenInert(parent: Element, except: Element, isInert: boolean) {
+		for (const sibling of parent.children) {
+			if (sibling !== except) sibling.toggleAttribute('inert', isInert);
+		}
+	}
+
 	function setSiblingsInert(target: Element, isInert: boolean) {
-		let node: Element | null = target;
-		while (node?.parentElement) {
-			const parent: Element = node.parentElement;
-			for (const sibling of parent.children) {
-				if (sibling === node) continue;
-				sibling.toggleAttribute('inert', isInert);
-			}
+		let node: Element = target;
+		let parent = node.parentElement;
+		while (parent) {
+			setChildrenInert(parent, node, isInert);
 			node = parent;
+			parent = node.parentElement;
 		}
 	}
 

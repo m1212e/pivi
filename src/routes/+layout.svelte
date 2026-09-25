@@ -102,10 +102,19 @@
 	// Moving to a deeper screen (e.g. dashboard into an app) reads as
 	// "zooming in"; moving back out (that app's own back button to the
 	// dashboard) is the mirror, "zooming out".
+	// `null` whenever there's nothing to transition between (a fresh load with
+	// no `from`, or a browser without view transitions at all).
+	function transitionPaths(
+		navigation: Parameters<Parameters<typeof onNavigate>[0]>[0]
+	): { from: string; to: string } | null {
+		if (!document.startViewTransition || !navigation.from || !navigation.to) return null;
+		return { from: navigation.from.url.pathname, to: navigation.to.url.pathname };
+	}
+
 	onNavigate((navigation) => {
-		if (!document.startViewTransition || !navigation.from || !navigation.to) return;
-		const from = navigation.from.url.pathname;
-		const to = navigation.to.url.pathname;
+		const paths = transitionPaths(navigation);
+		if (!paths) return;
+		const { from, to } = paths;
 		// Opening the player can take a real network round trip resolving the
 		// session before its own top-level await settles (see
 		// NavigationSpinner.svelte). A view transition only ever renders its
