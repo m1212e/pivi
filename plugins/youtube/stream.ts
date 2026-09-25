@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import YTDlpWrap from 'yt-dlp-wrap';
-import type { ResolvedStream } from '#lib/plugins/host';
+import type { ResolvedStream, SubtitleTrack } from '#lib/plugins/host';
 
 const BINARY_PATH = fileURLToPath(
 	new URL(`../../.cache/yt-dlp${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url)
@@ -40,6 +40,12 @@ function getYtDlp(): Promise<YTDlpWrap> {
 // 360p); otherwise the format it picked already has both, and its own
 // vcodec/acodec/url describe it directly.
 type YtDlpFormat = { url: string; vcodec?: string; acodec?: string; ext: string };
+// `subtitles` (manually authored, uploaded by the channel) and
+// `automatic_captions` (speech-to-text) are both keyed by language code,
+// each holding one entry per format yt-dlp knows the track in (vtt, srv1,
+// srv3, ttml, ...) -- reported here for free as part of the same info dump
+// this file already fetches for the stream itself, no extra request needed.
+type YtDlpSubtitleEntry = { url: string; ext: string; name?: string };
 type YtDlpInfo = {
 	title: string;
 	duration: number;
@@ -48,7 +54,51 @@ type YtDlpInfo = {
 	acodec?: string;
 	ext?: string;
 	requested_formats?: YtDlpFormat[];
+	subtitles?: Record<string, YtDlpSubtitleEntry[]>;
+	automatic_captions?: Record<string, YtDlpSubtitleEntry[]>;
 };
+
+// Only ever picks a `vtt` entry -- the plugin contract restricts
+// SubtitleTrack to that one format (see host.ts's own comment on why), and
+// YouTube reliably offers a vtt variant for every language it lists here, so
+// there's nothing to convert or fall back to.
+function extractSubtitleTracks(info: YtDlpInfo): SubtitleTrack[] {
+	function trackFor(
+		entries: YtDlpSubtitleEntry[] | undefined,
+		kind: SubtitleTrack['kind'],
+		language: string
+	): SubtitleTrack | undefined {
+		const vtt = entries?.find((entry) => entry.ext === 'vtt');
+		return vtt
+			? { language, label: vtt.name, kind, url: vtt.url, format: 'vtt' as const }
+			: undefined;
+	}
+
+	// One entry per language, not one per (language, source) pair -- a
+	// language present in both `subtitles` and `automatic_captions` used to
+	// produce two separate SubtitleTrack entries here, which became two
+	// <track src> elements with the very same srclang in the player, both
+	// switched on together the instant that language was picked (the
+	// player's own mode-sync effect matches every track by language, not by
+	// which source it came from). Two fully independent, simultaneously-
+	// active caption tracks is exactly what rendered as permanently doubled
+	// captions -- not the per-cue timing overlap a real single track's own
+	// "rolling" auto-caption style can separately cause. Manual tracks are
+	// collected first so they win the language when both exist -- a real,
+	// human-authored caption over the same language's auto-generated one.
+	const byLanguage = new Map<string, SubtitleTrack>();
+	for (const [language, entries] of Object.entries(info.subtitles ?? {})) {
+		const track = trackFor(entries, 'caption', language);
+		if (track) byLanguage.set(language, track);
+	}
+	for (const [language, entries] of Object.entries(info.automatic_captions ?? {})) {
+		if (byLanguage.has(language)) continue;
+		const track = trackFor(entries, 'transcription', language);
+		if (track) byLanguage.set(language, track);
+	}
+
+	return [...byLanguage.values()];
+}
 
 // yt-dlp's own reported extension is the only reliable source for this --
 // see host.ts's Container type comment for why the codec string can't be
@@ -126,6 +176,7 @@ export async function resolveStream(videoId: string, maxHeight?: number): Promis
 		videoContainer: containerFrom(video.ext),
 		audioContainer: audio ? containerFrom(audio.ext) : undefined,
 		title: info.title,
-		duration: info.duration
+		duration: info.duration,
+		subtitleTracks: extractSubtitleTracks(info)
 	};
 }

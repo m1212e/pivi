@@ -44,17 +44,40 @@ import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 type ConnState =
-	| { role: 'unauth'; timeout: ReturnType<typeof setTimeout> }
+	| { role: 'unauth'; timeout: ReturnType<typeof setTimeout>; userAgent: string | undefined }
 	| {
 			role: 'awaiting-response';
 			timeout: ReturnType<typeof setTimeout>;
 			deviceId: string;
+			deviceName: string;
 			devicePublicKey: Uint8Array;
 			transcript: Uint8Array;
 			relayEphemeralSecretKey: Uint8Array;
 	  }
 	| { role: 'tv' }
-	| { role: 'phone'; deviceId: string; c2sKey: Uint8Array; s2cKey: Uint8Array };
+	| {
+			role: 'phone';
+			deviceId: string;
+			deviceName: string;
+			c2sKey: Uint8Array;
+			s2cKey: Uint8Array;
+	  };
+
+// Best-effort device name straight off the phone's own User-Agent header —
+// no UA-parsing dependency, just the two fields worth surfacing in a toast.
+// Falls back to a generic label rather than inventing a name when the UA
+// doesn't match anything recognizable.
+function deriveDeviceName(userAgent: string | undefined): string {
+	if (!userAgent) return 'Phone';
+	if (/iPad/.test(userAgent)) return 'iPad';
+	if (/iPhone/.test(userAgent)) return 'iPhone';
+	// Android UAs put the marketing model right before "Build/", e.g.
+	// "...Android 14; Pixel 8 Pro Build/...)" — the only human-readable
+	// device identifier a stock UA string actually carries.
+	const androidModel = userAgent.match(/Android [^;]+;\s*([^;)]+?)\s*(?:Build\/[^)]*)?\)/);
+	if (androidModel) return androidModel[1].trim();
+	return 'Phone';
+}
 
 const connections = new Map<WebSocket, ConnState>();
 
@@ -82,7 +105,11 @@ function phoneSocketsWithKeys() {
 	);
 }
 
-async function handlePairRequest(socket: WebSocket, message: PairRequest) {
+async function handlePairRequest(
+	socket: WebSocket,
+	message: PairRequest,
+	userAgent: string | undefined
+) {
 	const { token, devicePublicKey } = message;
 	if (!isPairingTokenValid(token)) {
 		fail(socket, {
@@ -93,7 +120,10 @@ async function handlePairRequest(socket: WebSocket, message: PairRequest) {
 	}
 
 	const tvIdentity = await getOrCreateTvIdentity();
-	const [row] = await db.insert(pairedDevice).values({ publicKey: devicePublicKey }).returning();
+	const [row] = await db
+		.insert(pairedDevice)
+		.values({ publicKey: devicePublicKey, name: deriveDeviceName(userAgent) })
+		.returning();
 
 	// Only burn the token once pairing has actually succeeded, so a
 	// transient failure above doesn't permanently invalidate the still
@@ -101,7 +131,7 @@ async function handlePairRequest(socket: WebSocket, message: PairRequest) {
 	consumePairingToken(token);
 
 	clearHandshakeTimeout(socket);
-	connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket) });
+	connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket), userAgent });
 
 	send(socket, {
 		type: 'paired',
@@ -134,6 +164,7 @@ async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
 		role: 'awaiting-response',
 		timeout: startHandshakeTimeout(socket),
 		deviceId,
+		deviceName: device.name ?? deriveDeviceName(undefined),
 		devicePublicKey: fromBase64Url(device.publicKey),
 		transcript,
 		relayEphemeralSecretKey: relayEphemeral.secretKey
@@ -169,7 +200,13 @@ async function handleChallengeResponse(
 	const { c2sKey, s2cKey } = deriveSessionKeys(sharedSecret, state.transcript);
 
 	clearHandshakeTimeout(socket);
-	connections.set(socket, { role: 'phone', deviceId: state.deviceId, c2sKey, s2cKey });
+	connections.set(socket, {
+		role: 'phone',
+		deviceId: state.deviceId,
+		deviceName: state.deviceName,
+		c2sKey,
+		s2cKey
+	});
 	await db
 		.update(pairedDevice)
 		.set({ lastSeenAt: new Date() })
@@ -185,7 +222,11 @@ async function handleChallengeResponse(
 	// pairing/remoteProtocol.ts) like every other message on this channel,
 	// even though the relay itself has no stake in the RPC connection.
 	for (const tv of tvSockets()) {
-		send(tv, { jsonrpc: '2.0', method: remoteConnectedNotification.method });
+		send(tv, {
+			jsonrpc: '2.0',
+			method: remoteConnectedNotification.method,
+			params: { name: state.deviceName }
+		});
 	}
 }
 
@@ -212,9 +253,10 @@ export function startPairingRelay() {
 
 	wss.on('connection', (socket, request) => {
 		const remoteAddress = request.socket.remoteAddress;
-		connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket) });
+		const userAgent = request.headers['user-agent'];
+		connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket), userAgent });
 
-		socket.on('message', (data: RawData) => onMessage(socket, remoteAddress, data));
+		socket.on('message', (data: RawData) => onMessage(socket, remoteAddress, userAgent, data));
 		socket.on('close', () => {
 			clearHandshakeTimeout(socket);
 			const state = connections.get(socket);
@@ -224,14 +266,23 @@ export function startPairingRelay() {
 			// dropped socket (e.g. one that never finished the handshake).
 			if (state?.role === 'phone') {
 				for (const tv of tvSockets()) {
-					send(tv, { jsonrpc: '2.0', method: remoteDisconnectedNotification.method });
+					send(tv, {
+						jsonrpc: '2.0',
+						method: remoteDisconnectedNotification.method,
+						params: { name: state.deviceName }
+					});
 				}
 			}
 		});
 	});
 }
 
-async function onMessage(socket: WebSocket, remoteAddress: string | undefined, data: RawData) {
+async function onMessage(
+	socket: WebSocket,
+	remoteAddress: string | undefined,
+	userAgent: string | undefined,
+	data: RawData
+) {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(data.toString());
@@ -280,7 +331,7 @@ async function onMessage(socket: WebSocket, remoteAddress: string | undefined, d
 		}
 
 		if (message.type === 'pair') {
-			await handlePairRequest(socket, message);
+			await handlePairRequest(socket, message, userAgent);
 			return;
 		}
 

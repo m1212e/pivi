@@ -1401,6 +1401,25 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'subtitleTracks',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: {
+										name: 'PluginSubtitleTrack',
+										kind: 'OBJECT',
+										ofType: null,
+										__proto__: null
+									}
+								}
+							}
+						},
+						args: []
+					},
+					{
 						name: 'title',
 						type: {
 							kind: 'NON_NULL',
@@ -1452,6 +1471,34 @@ export const schema = {
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'Float', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'PluginSubtitleTrack',
+				fields: [
+					{
+						name: 'kind',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'label',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'language',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
 						},
 						args: []
 					}

@@ -12,13 +12,16 @@
 		Layers,
 		Server,
 		Info,
-		Check
+		Check,
+		Captions,
+		Sparkles
 	} from '@lucide/svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { browser } from '$app/env';
 	import { page } from '$app/state';
 	import { client } from '#lib/api/rumbleClient/client';
 	import Slider from '#lib/components/Slider.svelte';
+	import Select from '#lib/components/Select.svelte';
 	import {
 		attachDualTrackSource,
 		type DualTrackHandle,
@@ -140,8 +143,64 @@
 		vcodec: true,
 		acodec: true,
 		videoContainer: true,
-		audioContainer: true
+		audioContainer: true,
+		subtitleTracks: { language: true, label: true, kind: true }
 	});
+
+	// See #lib/plugins/host's SubtitleTrack for the plugin-facing side of this
+	// same shape -- `url`/`format` deliberately never cross into this query at
+	// all (see playback.ts's own comment), so this local type is narrower than
+	// the plugin-facing one on purpose, not just a duplicate of it.
+	type SubtitleTrack = {
+		language: string;
+		label: string | null;
+		kind: 'caption' | 'transcription';
+	};
+	const subtitleTracks = $derived<SubtitleTrack[]>(
+		(info?.subtitleTracks ?? []).map((t) => ({
+			language: t.language,
+			label: t.label,
+			kind: t.kind as SubtitleTrack['kind']
+		}))
+	);
+
+	// The Select's own option list -- `null` (Off) always leads, since it's
+	// not a real track and has nowhere else meaningful to sort into.
+	const subtitleOptions = $derived<(string | null)[]>([
+		null,
+		...subtitleTracks.map((t) => t.language)
+	]);
+
+	function subtitleUrlFor(language: string): string {
+		return `/api/stream-subtitle/${encodeURIComponent(pluginId)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(language)}`;
+	}
+
+	// A per-viewer convenience like the volume preference below -- `null`
+	// means captions off. Not defaulted on even when tracks exist: the whole
+	// point of a subtitle picker is opting in, and defaulting to whatever
+	// language happened to be picked for some other, unrelated video would be
+	// a stranger surprise than just starting off.
+	const SUBTITLE_LANGUAGE_STORAGE_KEY = 'pivi:player:subtitleLanguage';
+	function loadStoredSubtitleLanguage(): string | null {
+		if (!browser) return null;
+		try {
+			return localStorage.getItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
+		} catch {
+			return null;
+		}
+	}
+	let subtitleLanguage = $state<string | null>(loadStoredSubtitleLanguage());
+
+	function selectSubtitle(language: string | null) {
+		subtitleLanguage = language;
+		if (!browser) return;
+		try {
+			if (language) localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
+			else localStorage.removeItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
+		} catch {
+			// Private browsing / storage disabled -- nothing to persist to.
+		}
+	}
 
 	// A plugin-provided skippable section (a SponsorBlock segment, for the
 	// YouTube plugin) -- see #lib/plugins/host's SkipSegment for the
@@ -219,6 +278,38 @@
 	let qualityMeta = $state<Partial<Record<QualityOption, QualityMeta>>>({
 		[DEFAULT_QUALITY]: info ? toQualityMeta(info) : undefined
 	});
+
+	type QualityMode = 'direct' | 'mse' | 'ffmpeg';
+
+	// Mirrors setupPlayback's own branching (direct / MSE / ffmpeg fallback),
+	// but MSE specifically can't be predicted from meta alone -- acodec/
+	// audioContainer are present for nearly every tier regardless of whether a
+	// locatable sidx/Cues index actually exists (see probeMse) -- so this
+	// reflects mseAvailability's real, probed answer instead of just guessing
+	// "has an audio track" means MSE will actually work. `undefined` means
+	// still resolving (or never a candidate) -- both the quality list below
+	// and the phone (see qualityModes) show no icon for either case.
+	function qualityModeFor(option: QualityOption): QualityMode | undefined {
+		const meta = qualityMeta[option];
+		if (!meta) return undefined;
+		if (meta.direct) return 'direct';
+		if (!meta.acodec || !meta.audioContainer) return 'ffmpeg';
+		if (mseAvailability[option] === true) return 'mse';
+		if (mseAvailability[option] === false) return 'ffmpeg';
+		return undefined;
+	}
+
+	// Same per-option modes as qualityButton's own icons, keyed by quality so
+	// the phone's quality picker (see RemoteBridge.svelte's sendState) can
+	// show the exact same direct/adaptive/proxied indicator instead of
+	// guessing from the bare quality number alone.
+	const qualityModes = $derived(
+		Object.fromEntries(
+			QUALITY_OPTIONS.map((option) => [option, qualityModeFor(option)]).filter(
+				(entry): entry is [QualityOption, QualityMode] => entry[1] !== undefined
+			)
+		)
+	);
 
 	// The top-level `info` fetch above already resolved DEFAULT_QUALITY, so
 	// this reuses it instead of firing a second, identical request for the
@@ -320,6 +411,36 @@
 	// started from.
 	let seekOffset = $state(0);
 	const position = $derived(seekOffset + currentTime);
+
+	// Where the last seek asked to land, until playback has actually got
+	// there. Two things go wrong without it, and both read as the progress
+	// bar (here and on the phone, which mirrors this same `position`) jumping
+	// around after a scrub:
+	//   - the <video> element keeps reporting the *old* time for a beat after
+	//     a seek is issued -- a native seek isn't instant, and Shaka's is a
+	//     whole buffer switch -- so the bar snaps back to where playback was
+	//     and only then jumps to where it was dragged to;
+	//   - an ffmpeg re-open moves `seekOffset` immediately while the element
+	//     is still reporting the previous request's `currentTime`, which adds
+	//     the two together into a position way past either of them.
+	// So `currentTime` is set optimistically to the target the moment a seek
+	// is issued, and time updates that would contradict it are ignored until
+	// one actually lands near the target (or it's clearly never going to --
+	// a seek past the real end of a stream whose reported duration was too
+	// generous, say -- at which point the reported time wins again).
+	let seekTarget = $state<number | null>(null);
+	let seekTargetAt = 0;
+	const SEEK_LANDED_SECONDS = 1.5;
+	const SEEK_GIVE_UP_MS = 8000;
+
+	function applyTimeUpdate(next: number) {
+		if (seekTarget !== null) {
+			const landed = Math.abs(seekOffset + next - seekTarget) <= SEEK_LANDED_SECONDS;
+			if (!landed && performance.now() - seekTargetAt < SEEK_GIVE_UP_MS) return;
+			seekTarget = null;
+		}
+		currentTime = next;
+	}
 	const duration = info?.duration ?? 0;
 	const title = info?.title ?? '';
 	// The progress slider's own displayed value -- tracks `position` while
@@ -423,6 +544,8 @@
 		mode = 'ffmpeg';
 		buffering = true;
 		seekOffset = Math.max(0, Math.min(duration, resumeSeconds));
+		// Same reset as reloadFfmpegStream below, for the same reason.
+		currentTime = 0;
 		videoEl.src = streamUrlFor(seekOffset);
 		videoEl.load();
 		videoEl.play().catch(() => {});
@@ -492,6 +615,12 @@
 		dualTrackHandle = undefined;
 		buffering = true;
 		seekOffset = 0;
+		// A fresh attach resumes at `resumeSeconds` (the direct/MSE paths seek
+		// there once metadata is in, the ffmpeg one re-opens from there), so
+		// show that straight away instead of the outgoing stream's last
+		// reported time, which belongs to a stream that no longer exists.
+		currentTime = resumeSeconds;
+		seekTarget = null;
 
 		if (meta.direct) {
 			setupDirectPlayback(videoEl, resumeSeconds);
@@ -511,6 +640,11 @@
 	function reloadFfmpegStream(el: HTMLVideoElement, seconds: number) {
 		buffering = true;
 		seekOffset = seconds;
+		// The new request starts at `seconds` on the server side, so this
+		// one's own clock restarts at zero -- reset it here rather than
+		// waiting for the element to get around to it, or `position` reads as
+		// `seconds` plus the *previous* request's elapsed time in between.
+		currentTime = 0;
 		el.src = streamUrlFor(seconds);
 		el.load();
 		el.play().catch(() => {});
@@ -528,6 +662,14 @@
 			ffmpeg: () => reloadFfmpegStream(el, clamped)
 		};
 		seekActions[mode]();
+		// Show the target immediately, and ignore contradicting time updates
+		// until it's actually reached -- see `seekTarget` above. The ffmpeg
+		// path has already put `position` exactly on `clamped` via
+		// reloadFfmpegStream's own offset/reset, so only the two in-place
+		// modes need the optimistic write.
+		seekTarget = clamped;
+		seekTargetAt = performance.now();
+		if (mode !== 'ffmpeg') currentTime = clamped - seekOffset;
 	}
 
 	function seekBy(deltaSeconds: number) {
@@ -583,6 +725,85 @@
 		else videoEl.pause();
 	}
 
+	// The phone's own "player controls" tab drives playback through this
+	// plain DOM event (see RemoteBridge.svelte's playerActionNotification
+	// handler) instead of clicking a specific button, so it works exactly
+	// the same regardless of `locked` -- unlike the trackpad's swipe-driven
+	// focus, which still respects disabled={locked} like every other
+	// control here.
+	const PLAYER_ACTIONS = {
+		playPause: () => togglePlayPause(),
+		seekBack: () => seekBy(-10),
+		seekForward: () => seekBy(10),
+		toggleInfo: () => (diagnosticsOpen = !diagnosticsOpen)
+	} as const;
+	$effect(() => {
+		function onRemoteAction(event: Event) {
+			const { action } = (event as CustomEvent<{ action: keyof typeof PLAYER_ACTIONS }>).detail;
+			PLAYER_ACTIONS[action]?.();
+		}
+		// The phone's own progress-bar drag and quality picker (see
+		// RemoteBridge.svelte's playerSeek/playerQuality handlers) -- both
+		// need to bypass `locked` exactly like PLAYER_ACTIONS above, so they
+		// call straight into `seek`/`selectQuality` rather than clicking an
+		// element.
+		function onRemoteSeek(event: Event) {
+			const { seconds } = (event as CustomEvent<{ seconds: number }>).detail;
+			seek(seconds);
+		}
+		function onRemoteQuality(event: Event) {
+			const { quality: target } = (event as CustomEvent<{ quality: number }>).detail;
+			if ((QUALITY_OPTIONS as readonly number[]).includes(target)) {
+				selectQuality(target as QualityOption);
+			}
+		}
+		function onRemoteSubtitle(event: Event) {
+			const { language } = (event as CustomEvent<{ language: string | null }>).detail;
+			// Only a language the session actually offers (or `null`, Off) --
+			// a stale pick from a phone still showing the previous session's
+			// track list would otherwise point <track> at a URL with nothing
+			// behind it.
+			if (language === null || subtitleTracks.some((t) => t.language === language)) {
+				selectSubtitle(language);
+			}
+		}
+		function onRemoteVolume(event: Event) {
+			const { volume: target } = (event as CustomEvent<{ volume: number }>).detail;
+			volume = Math.min(1, Math.max(0, target));
+		}
+		document.addEventListener('pivi-player-action', onRemoteAction);
+		document.addEventListener('pivi-player-seek', onRemoteSeek);
+		document.addEventListener('pivi-player-quality', onRemoteQuality);
+		document.addEventListener('pivi-player-subtitle', onRemoteSubtitle);
+		document.addEventListener('pivi-player-volume', onRemoteVolume);
+		return () => {
+			document.removeEventListener('pivi-player-action', onRemoteAction);
+			document.removeEventListener('pivi-player-seek', onRemoteSeek);
+			document.removeEventListener('pivi-player-quality', onRemoteQuality);
+			document.removeEventListener('pivi-player-subtitle', onRemoteSubtitle);
+			document.removeEventListener('pivi-player-volume', onRemoteVolume);
+		};
+	});
+
+	// Tells RemoteBridge to re-announce state right away -- quality, the
+	// subtitle pick and the diagnostics panel can change from the TV side
+	// itself (a manual pick, the Info button), and none of them shows up as a
+	// DOM mutation its observer would otherwise catch.
+	$effect(() => {
+		void quality;
+		void subtitleLanguage;
+		void diagnosticsOpen;
+		// Position too: RemoteBridge's own `timeupdate` listener runs before
+		// this page has rendered the new value into its `data-pivi-player-*`
+		// attributes, so that push always carries the previous tick's
+		// position. This effect runs after the DOM is updated, so the push it
+		// triggers is the one that's actually current -- without it the
+		// phone's progress bar trails the TV's by a tick permanently, and by
+		// a whole seek right after scrubbing.
+		void position;
+		document.dispatchEvent(new CustomEvent('pivi-player-state-changed'));
+	});
+
 	// One-way the other direction from `onvolumechange` below: that keeps
 	// `volume` in sync when the element's volume changes on its own (e.g. a
 	// fresh <video> defaulting to 1), this pushes a change made *through* the
@@ -610,6 +831,23 @@
 			localStorage.setItem(SKIP_ACTIVE_STORAGE_KEY, String(skipActive));
 		} catch {
 			// Private browsing / storage disabled -- nothing to persist to.
+		}
+	});
+
+	// Native <track> elements (below) exist independently of `mode`/`videoEl`
+	// -- they're declared once from `subtitleTracks` and stay put across a
+	// quality switch or MSE/direct/ffmpeg fallback (none of those touch the
+	// <video> element's own children, only its src/manifest attachment), so
+	// this effect's only job is keeping their `mode` in sync with which
+	// language (if any) is actually picked. A track's cues are only fetched
+	// once its own mode leaves 'disabled', so switching languages -- or
+	// turning captions off entirely -- costs nothing for every track that
+	// isn't the selected one.
+	$effect(() => {
+		if (!videoEl) return;
+		const tracks = videoEl.textTracks;
+		for (let i = 0; i < tracks.length; i++) {
+			tracks[i].mode = tracks[i].language === subtitleLanguage ? 'showing' : 'disabled';
 		}
 	});
 
@@ -698,6 +936,20 @@
 	// further down), so "locked" and "actually playing" can't drift apart.
 	const locked = $derived(!controlsVisible);
 	let playPauseButton = $state<HTMLButtonElement>();
+
+	// Focused the moment it exists, so arriving on this page (by remote
+	// swipe/select, same as everywhere else) already lands somewhere sane
+	// instead of nothing being focused at all. One-time guard, same idea as
+	// the initial playback attach above -- later focus changes (hideControls,
+	// a viewer moving focus elsewhere) are all deliberate and shouldn't be
+	// fought by this re-running.
+	let focusedOnMount = false;
+	$effect(() => {
+		if (playPauseButton && !focusedOnMount) {
+			focusedOnMount = true;
+			playPauseButton.focus();
+		}
+	});
 
 	// Moving focus onto the play/pause button ourselves, synchronously, at
 	// the exact moment we hide (rather than reactively off `locked`) is what
@@ -955,52 +1207,39 @@
 	</div>
 {/snippet}
 
-{#snippet qualityButton(option: QualityOption)}
-	{@const meta = qualityMeta[option]}
-	<!-- Mirrors setupPlayback's own branching (direct / MSE / ffmpeg
-	     fallback), but MSE specifically can't be predicted from meta alone --
-	     acodec/audioContainer are present for nearly every tier regardless of
-	     whether a locatable sidx/Cues index actually exists (see probeMse) --
-	     so this reflects mseAvailability's real, probed answer instead of
-	     just guessing "has an audio track" means MSE will actually work. -->
-	{@const mode =
-		meta &&
-		(meta.direct
-			? 'direct'
-			: meta.acodec && meta.audioContainer
-				? mseAvailability[option] === true
-					? 'mse'
-					: mseAvailability[option] === false
-						? 'ffmpeg'
-						: undefined
-				: 'ffmpeg')}
-	<button
-		type="button"
-		onclick={() => selectQuality(option)}
-		disabled={locked}
-		aria-pressed={quality === option}
-		class="flex w-28 items-center justify-between gap-2 rounded-full px-3 py-2 text-xs font-medium transition focus:outline-none {quality ===
-		option
-			? 'bg-white text-slate-950 shadow-lg'
-			: 'bg-white/12 text-white/70 ring-1 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 hover:bg-white/20'}"
-	>
-		<span>{option}p</span>
-		{#if mode === 'direct'}
-			<span title="Direct connection — streaming straight from the source">
-				<Zap class="size-4 {quality === option ? 'text-emerald-600' : 'text-emerald-400'}" />
-			</span>
-		{:else if mode === 'mse'}
-			<span
-				title="Adaptive streaming — video and audio buffered separately in the browser, no server-side remuxing"
-			>
-				<Layers class="size-4 {quality === option ? 'text-sky-600' : 'text-sky-400'}" />
-			</span>
-		{:else if mode === 'ffmpeg'}
-			<span title="Proxied — being relayed and remuxed through this server">
-				<Server class="size-4 {quality === option ? 'text-amber-600' : 'text-amber-400'}" />
-			</span>
-		{/if}
-	</button>
+<!-- Content for one Select option/trigger -- see Select.svelte's own comment
+     on `onLight` (renamed here to match the param's actual meaning: whether
+     this particular rendering sits on the selected row's solid white
+     background, not the trigger's own dark translucent one, regardless of
+     whether `option` is the current quality). -->
+{#snippet qualityOption(opt: QualityOption, onLight: boolean)}
+	{@const mode = qualityModeFor(opt)}
+	<span>{opt}p</span>
+	{#if mode === 'direct'}
+		<span title="Direct connection — streaming straight from the source">
+			<Zap class="size-4 {onLight ? 'text-emerald-600' : 'text-emerald-400'}" />
+		</span>
+	{:else if mode === 'mse'}
+		<span
+			title="Adaptive streaming — video and audio buffered separately in the browser, no server-side remuxing"
+		>
+			<Layers class="size-4 {onLight ? 'text-sky-600' : 'text-sky-400'}" />
+		</span>
+	{:else if mode === 'ffmpeg'}
+		<span title="Proxied — being relayed and remuxed through this server">
+			<Server class="size-4 {onLight ? 'text-amber-600' : 'text-amber-400'}" />
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet subtitleOption(language: string | null, onLight: boolean)}
+	{@const track = subtitleTracks.find((t) => t.language === language) ?? null}
+	<span class="min-w-0 truncate">{track ? (track.label ?? track.language) : 'Off'}</span>
+	{#if track?.kind === 'transcription'}
+		<span title="Auto-generated -- not a real, human-authored caption track">
+			<Sparkles class="size-4 shrink-0 {onLight ? 'text-amber-600' : 'text-amber-400'}" />
+		</span>
+	{/if}
 {/snippet}
 
 <!-- Deliberately the one control on this whole page that's NOT
@@ -1042,9 +1281,17 @@
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'}"
 	>
-		<div class="flex items-end justify-between gap-6">
+		<!-- Three equal grid tracks (not a plain flex row) so the middle
+		     column -- playback controls -- sits at the row's true center
+		     regardless of how wide the side columns end up: with a flex
+		     `justify-between` row instead, adding the subtitle picker as a
+		     fourth item (or it not being there at all, for a session with no
+		     tracks) shifted the visual center of the remaining items around,
+		     throwing play/pause off-center depending on what else happened to
+		     be showing. -->
+		<div class="grid grid-cols-3 items-end gap-6">
 			<!-- Volume: vertical, bottom-left -->
-			<div class="flex flex-col items-center gap-2">
+			<div class="flex flex-col items-center gap-2 justify-self-start">
 				<span class="text-xs text-white/60 tabular-nums">{Math.round(volume * 100)}%</span>
 				<Slider
 					bind:value={volume}
@@ -1060,7 +1307,7 @@
 			</div>
 
 			<!-- Playback controls, centered -->
-			<div class="flex flex-wrap items-center justify-center gap-3">
+			<div class="flex flex-wrap items-center justify-center gap-3 justify-self-center">
 				<button
 					type="button"
 					onclick={() => seekBy(-10)}
@@ -1096,19 +1343,53 @@
 				</button>
 			</div>
 
-			<!-- Quality: buttons, bottom-right. A vertical list rather than a
-			     single cycling button so every option (and whether it's direct
-			     or proxied) is visible and individually reachable at once --
-			     swiping the phone remote here moves between them exactly like
-			     any other on-screen list. -->
-			<div class="flex flex-col items-center gap-2">
-				<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
-					<Gauge class="size-4" />
-					Quality
-				</span>
-				{#each QUALITY_OPTIONS as option (option)}
-					{@render qualityButton(option)}
-				{/each}
+			<!-- Subtitles above Quality, bottom-right -- one column, not two
+			     side by side, so this whole group's own width (and therefore
+			     the middle column's centering) doesn't change depending on
+			     whether the subtitle picker happens to be shown at all. -->
+			<div class="flex flex-col items-center gap-3 justify-self-end">
+				<!-- Subtitles: a Select rather than a flat list of buttons -- a
+				     session's caption tracks (manual plus every auto-translated
+				     variant a plugin reports) can run into the dozens, which a
+				     flat always-expanded list turns into an unusable wall of
+				     controls. Only shown at all once a track list has actually
+				     come back -- most sessions have none, and an "Off"-only
+				     picker would just be visual noise for no real choice. -->
+				{#if subtitleTracks.length > 0}
+					<div class="flex flex-col items-center gap-2">
+						<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
+							<Captions class="size-4" />
+							Subtitles
+						</span>
+						<Select
+							value={subtitleLanguage}
+							onChange={selectSubtitle}
+							options={subtitleOptions}
+							label="Subtitles"
+							disabled={locked}
+							option={subtitleOption}
+						/>
+					</div>
+				{/if}
+
+				<!-- Quality: a Select, same reasoning as Subtitles above -- fewer
+				     options here (QUALITY_OPTIONS is a fixed handful), but kept
+				     consistent with the same collapsed-by-default control rather
+				     than the old always-expanded list. -->
+				<div class="flex flex-col items-center gap-2">
+					<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
+						<Gauge class="size-4" />
+						Quality
+					</span>
+					<Select
+						value={quality}
+						onChange={selectQuality}
+						options={QUALITY_OPTIONS}
+						label="Quality"
+						disabled={locked}
+						option={qualityOption}
+					/>
+				</div>
 			</div>
 		</div>
 
@@ -1135,18 +1416,29 @@
 	</div>
 {/snippet}
 
-<div class="fixed inset-0 bg-black">
+<div
+	class="fixed inset-0 bg-black"
+	data-pivi-player
+	data-pivi-player-position={position}
+	data-pivi-player-duration={duration}
+	data-pivi-player-quality={quality}
+	data-pivi-player-quality-options={QUALITY_OPTIONS.join(',')}
+	data-pivi-player-quality-modes={JSON.stringify(qualityModes)}
+	data-pivi-player-subtitle-language={subtitleLanguage ?? ''}
+	data-pivi-player-subtitle-tracks={JSON.stringify(subtitleTracks)}
+	data-pivi-player-diagnostics-open={diagnosticsOpen}
+	data-pivi-player-volume={volume}
+>
 	{#if errorMessage}
 		{@render errorScreen()}
 	{:else}
-		<!-- svelte-ignore a11y_media_has_caption -->
 		<!-- No src/autoplay here -- setupPlayback (see script) owns videoEl.src
 		     imperatively, since which mode it ends up in (direct/mse/ffmpeg)
 		     isn't known until it actually tries. -->
 		<video
 			bind:this={videoEl}
 			class="size-full object-contain"
-			ontimeupdate={() => (currentTime = videoEl?.currentTime ?? 0)}
+			ontimeupdate={() => applyTimeUpdate(videoEl?.currentTime ?? 0)}
 			onplay={() => (playing = true)}
 			onpause={() => (playing = false)}
 			onvolumechange={() => (volume = videoEl?.volume ?? 1)}
@@ -1175,7 +1467,23 @@
 					);
 				}
 			}}
-		></video>
+		>
+			<!-- Independent of `mode` (direct/mse/ffmpeg) entirely -- Shaka only
+			     ever manages the element's src/MediaSource attachment, never its
+			     <track> children, so these render (and the browser's own native
+			     caption rendering layers on top) the exact same way regardless of
+			     which playback path is actually feeding the video itself. `mode`
+			     starts 'disabled' on every one of these by default; the effect
+			     above is what actually turns the selected language on. -->
+			{#each subtitleTracks as track (track.language)}
+				<track
+					kind="subtitles"
+					srclang={track.language}
+					label={track.label ?? track.language}
+					src={subtitleUrlFor(track.language)}
+				/>
+			{/each}
+		</video>
 
 		{#if buffering}
 			<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -1188,3 +1496,15 @@
 		{@render skipSegmentBanner()}
 	{/if}
 </div>
+
+<style>
+	/* A subtitle track (see the <track> elements above) is rendered entirely
+	   by the browser, not this page -- its cue text otherwise keeps whatever
+	   alignment its own VTT file specifies per cue (some plugin-provided
+	   tracks, YouTube's auto-generated ones included, leave that unset or set
+	   it to something other than centered). Forcing it here keeps captions
+	   reading the same way regardless of what a given track's own file says. */
+	video::cue {
+		text-align: center;
+	}
+</style>

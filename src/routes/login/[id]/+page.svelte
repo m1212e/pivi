@@ -81,7 +81,7 @@
 
 		<h1 class="text-2xl font-semibold text-white/95">{m.enter_pin_for({ name: label })}</h1>
 
-		<PinPad bind:value={pin} error={message} showKeypad={false} />
+		<PinPad bind:value={pin} error={message} />
 
 		{#if pairing.remoteUrl}
 			<div

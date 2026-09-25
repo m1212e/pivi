@@ -7,6 +7,7 @@
 	import { Toaster } from 'svelte-sonner';
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
+	import NavigationSpinner from '#lib/components/NavigationSpinner.svelte';
 	import { applyTvScale, clearTvScale } from '#lib/tvScale';
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
@@ -105,6 +106,16 @@
 		if (!document.startViewTransition || !navigation.from || !navigation.to) return;
 		const from = navigation.from.url.pathname;
 		const to = navigation.to.url.pathname;
+		// Opening the player can take a real network round trip resolving the
+		// session before its own top-level await settles (see
+		// NavigationSpinner.svelte). A view transition only ever renders its
+		// before/after snapshots, never whatever the live DOM does in between --
+		// so wrapping that wait in one would hide the spinner behind a frozen
+		// copy of the old screen for the whole delay, then swap straight to the
+		// finished player with no zoom at all. Skipping the transition for this
+		// one destination trades away its zoom-in for the spinner actually
+		// being visible while the session resolves.
+		if (to.startsWith('/play/')) return;
 		applyViewTransitionKind(from, to);
 		// Tags whichever side is currently the picker -- if it's `from`, this
 		// is the only chance to tag it before its DOM is torn down.
@@ -133,6 +144,7 @@
 	     (see layout.css for the rest of its sizing, overridden there since
 	     the library has no props for those). -->
 	<Toaster theme="dark" position="top-right" richColors offset="1.5rem" mobileOffset="1rem" />
+	<NavigationSpinner />
 {/if}
 {@render children()}
 

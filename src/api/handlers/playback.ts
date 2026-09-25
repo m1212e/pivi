@@ -1,7 +1,8 @@
 // Generic playback metadata for the shared player page (src/routes/play) --
-// title, duration, codecs, and whether this session goes direct or proxied,
-// never the raw stream URLs (those stay server-side, consumed directly by
-// src/routes/api/stream and src/routes/api/stream-track). `duration` in
+// title, duration, codecs, whether this session goes direct or proxied, and
+// which subtitle tracks are available -- never the raw stream/subtitle URLs
+// (those stay server-side, consumed directly by src/routes/api/stream,
+// src/routes/api/stream-track, and src/routes/api/stream-subtitle). `duration` in
 // particular has to come from here rather than the eventual <video> element,
 // since a live-remuxed (or MSE-fed) stream can't report its own duration
 // reliably. `vcodec`/`acodec` let the player pick the right MediaSource
@@ -12,6 +13,26 @@ import { getPlugin } from '../plugins/manager';
 import { resolveStreamCached } from '../plugins/streamCache';
 import { resolveSkipSegmentsCached } from '../plugins/skipSegmentsCache';
 
+// A subtitle/caption track's own display metadata -- deliberately missing
+// `url`/`format` (see host.ts's SubtitleTrack), which stay entirely
+// server-side; the player fetches the actual content through
+// src/routes/api/stream-subtitle, naming a track only by its language.
+type PluginSubtitleTrack = {
+	language: string;
+	label: string | null;
+	kind: 'caption' | 'transcription';
+};
+
+const PluginSubtitleTrackRef = schemaBuilder
+	.objectRef<PluginSubtitleTrack>('PluginSubtitleTrack')
+	.implement({
+		fields: (t) => ({
+			language: t.exposeString('language'),
+			label: t.exposeString('label', { nullable: true }),
+			kind: t.exposeString('kind')
+		})
+	});
+
 type PluginPlaybackInfo = {
 	title: string;
 	duration: number;
@@ -20,6 +41,7 @@ type PluginPlaybackInfo = {
 	acodec: string | null;
 	videoContainer: string;
 	audioContainer: string | null;
+	subtitleTracks: PluginSubtitleTrack[];
 };
 
 const PluginPlaybackInfoRef = schemaBuilder
@@ -40,7 +62,11 @@ const PluginPlaybackInfoRef = schemaBuilder
 			// Container type comment), so the player needs this from here
 			// rather than re-deriving it from the codec strings above.
 			videoContainer: t.exposeString('videoContainer'),
-			audioContainer: t.exposeString('audioContainer', { nullable: true })
+			audioContainer: t.exposeString('audioContainer', { nullable: true }),
+			subtitleTracks: t.field({
+				type: [PluginSubtitleTrackRef],
+				resolve: (parent) => parent.subtitleTracks
+			})
 		})
 	});
 
@@ -75,13 +101,21 @@ schemaBuilder.queryFields((t) => ({
 		},
 		resolve: async (_root, args) => {
 			const plugin = await getPlugin(args.pluginId);
-			const { title, duration, audioUrl, vcodec, acodec, videoContainer, audioContainer } =
-				await resolveStreamCached(
-					args.pluginId,
-					args.sessionId,
-					plugin,
-					args.maxHeight ?? undefined
-				);
+			const {
+				title,
+				duration,
+				audioUrl,
+				vcodec,
+				acodec,
+				videoContainer,
+				audioContainer,
+				subtitleTracks
+			} = await resolveStreamCached(
+				args.pluginId,
+				args.sessionId,
+				plugin,
+				args.maxHeight ?? undefined
+			);
 			return {
 				title,
 				duration,
@@ -89,7 +123,12 @@ schemaBuilder.queryFields((t) => ({
 				vcodec,
 				acodec: acodec ?? null,
 				videoContainer,
-				audioContainer: audioContainer ?? null
+				audioContainer: audioContainer ?? null,
+				subtitleTracks: (subtitleTracks ?? []).map(({ language, label, kind }) => ({
+					language,
+					label: label ?? null,
+					kind
+				}))
 			};
 		}
 	}),

@@ -46,6 +46,32 @@ export const publishScreenNotification = new NotificationType<z.infer<typeof plu
 const containerSchema = z.enum(['mp4', 'webm']);
 export type Container = z.infer<typeof containerSchema>;
 
+// A subtitle/caption track a plugin already knows the URL for -- resolving
+// one costs nothing beyond what resolveStream already does (yt-dlp's own
+// info dump reports caption URLs alongside the stream itself, no separate
+// network round trip), so unlike SkipSegment this rides along on
+// ResolvedStream directly rather than needing its own request type. `url`
+// stays server-side just like videoUrl/audioUrl -- never forwarded to the
+// client as-is, only fetched through the streaming proxy (see
+// src/routes/api/stream-subtitle) the same way the actual video/audio bytes
+// are. Restricted to `vtt` (never `srt`/others): every plugin resolving
+// through yt-dlp can ask for a vtt variant directly, so there's no format
+// conversion for the host to own.
+export const subtitleTrackSchema = z.object({
+	language: z.string(),
+	// A plugin-provided display name (yt-dlp reports one for auto-generated
+	// tracks, not always for manual ones) -- falls back to `language` itself
+	// on the client when absent.
+	label: z.string().optional(),
+	// Manually authored (uploaded by the channel) vs. auto-generated
+	// (speech-to-text) -- shown as a hint in the picker so "auto-generated"
+	// tracks don't read as equally reliable as real ones.
+	kind: z.enum(['caption', 'transcription']),
+	url: z.string(),
+	format: z.literal('vtt')
+});
+export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
+
 export const resolvedStreamSchema = z.object({
 	videoUrl: z.string(),
 	audioUrl: z.string().optional(),
@@ -54,7 +80,11 @@ export const resolvedStreamSchema = z.object({
 	videoContainer: containerSchema,
 	audioContainer: containerSchema.optional(),
 	title: z.string(),
-	duration: z.number()
+	duration: z.number(),
+	// Absent (not just empty) for a plugin that has no subtitle source at
+	// all -- same "optional, treated as none" convention resolveSkipSegments
+	// uses for a plugin with no handler registered.
+	subtitleTracks: z.array(subtitleTrackSchema).optional()
 });
 export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
 

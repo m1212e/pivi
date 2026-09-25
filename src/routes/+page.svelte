@@ -48,6 +48,9 @@
 			{@const label = profile.username}
 			<a
 				href="/login/{profile.id}"
+				data-pivi-profile-id={profile.id}
+				data-pivi-profile-username={label}
+				data-pivi-profile-image={profile.image ?? ''}
 				class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
 			>
 				<span

@@ -271,6 +271,17 @@ html[data-view-transition='zoom-in']::view-transition-new(root) {
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/*
+ * The phone remote's trackpad (see remote/[[token]]'s trackpadTab) carries
+ * `view-transition-name: phone-trackpad`, triggered by its own JS-driven
+ * startViewTransition() call rather than a navigation -- morphs its position
+ * and size across a tab switch instead of just cross-fading with the rest.
+ */
+::view-transition-group(phone-trackpad) {
+	animation-duration: 300ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* A card sitting right at a shelf's edge is deliberately only partly
    visible — it's the "there's more, keep scrolling" affordance every TV/
    streaming UI uses. Without this it just looks like it's been chopped off

@@ -22,10 +22,25 @@
 		keyParamsSchema,
 		moveNotification,
 		moveParamsSchema,
+		playerActionNotification,
+		playerActionParamsSchema,
+		playerQualityNotification,
+		playerQualityParamsSchema,
+		playerSubtitleNotification,
+		playerSubtitleParamsSchema,
+		playerSeekNotification,
+		playerSeekParamsSchema,
+		playerVolumeNotification,
+		playerVolumeParamsSchema,
 		remoteConnectedNotification,
+		remoteDeviceParamsSchema,
 		remoteDisconnectedNotification,
 		requestStateNotification,
+		selectAppNotification,
+		selectAppParamsSchema,
 		selectNotification,
+		selectProfileNotification,
+		selectProfileParamsSchema,
 		stateNotification,
 		stateParamsSchema,
 		textNotification,
@@ -94,6 +109,11 @@
 	// gets remote-keyboard support with no extra wiring.
 	function sendState() {
 		if (!connection) return;
+		// Queried once and reused below -- `playing`/position/duration/quality
+		// are only ever meaningful alongside `hasPlayer` anyway (no player, no
+		// video to report on).
+		const playerEl = document.querySelector<HTMLElement>('[data-pivi-player]');
+		const playerVideo = playerEl?.querySelector<HTMLVideoElement>('video');
 		sendNotification(connection, stateNotification, stateParamsSchema, {
 			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
 			hasTextInput: !!focusedTextInput(),
@@ -104,8 +124,94 @@
 			// profile" for the routes that actually go somewhere Home would
 			// usefully return from -- unlike canGoBack, this stays false on
 			// '/home' itself, since Home is already where you are.
-			canGoHome: location.pathname.startsWith('/apps/') || location.pathname.startsWith('/play/')
+			canGoHome: location.pathname.startsWith('/apps/') || location.pathname.startsWith('/play/'),
+			profiles: pickerProfiles(),
+			// Sliced to the first three here (rather than trusting the phone
+			// to do it) so the phone doesn't need to know that limit is even a
+			// thing -- it just renders whatever this sends.
+			apps: dashboardApps().slice(0, 3),
+			hasPlayer: !!playerEl,
+			playing: !!playerVideo && !playerVideo.paused,
+			...playerProgress(playerEl)
 		});
+	}
+
+	// The player page's own position/duration/quality/diagnostics state,
+	// straight off `data-pivi-player-*` attributes (same idea as
+	// pickerProfiles/dashboardApps below) -- this component has no business
+	// knowing how the player itself computes any of these. Zeroed/emptied
+	// when there's no player at all, since the schema requires them
+	// regardless of `hasPlayer`.
+	function playerProgress(playerEl: HTMLElement | null) {
+		if (!playerEl) {
+			return {
+				position: 0,
+				duration: 0,
+				quality: 0,
+				qualityOptions: [],
+				qualityModes: {},
+				subtitleTracks: [],
+				subtitleLanguage: null,
+				diagnosticsOpen: false,
+				volume: 0
+			};
+		}
+		let qualityModes: Record<string, 'direct' | 'mse' | 'ffmpeg'> = {};
+		try {
+			qualityModes = JSON.parse(playerEl.dataset.piviPlayerQualityModes ?? '{}');
+		} catch {
+			// Malformed/stale attribute mid-render -- fall back to no icons
+			// rather than crashing this whole state push.
+		}
+		let subtitleTracks: {
+			language: string;
+			label: string | null;
+			kind: 'caption' | 'transcription';
+		}[] = [];
+		try {
+			subtitleTracks = JSON.parse(playerEl.dataset.piviPlayerSubtitleTracks ?? '[]');
+		} catch {
+			// Same as qualityModes above -- an empty list just means the phone
+			// doesn't show the subtitle picker until the next state push.
+		}
+		return {
+			position: Number(playerEl.dataset.piviPlayerPosition) || 0,
+			duration: Number(playerEl.dataset.piviPlayerDuration) || 0,
+			quality: Number(playerEl.dataset.piviPlayerQuality) || 0,
+			qualityOptions: (playerEl.dataset.piviPlayerQualityOptions ?? '')
+				.split(',')
+				.filter(Boolean)
+				.map(Number),
+			qualityModes,
+			subtitleTracks,
+			// The empty attribute value is how the player page writes "off"
+			// (an attribute can't carry null), so it maps back to null here
+			// rather than to an empty-string language nothing would match.
+			subtitleLanguage: playerEl.dataset.piviPlayerSubtitleLanguage || null,
+			diagnosticsOpen: playerEl.dataset.piviPlayerDiagnosticsOpen === 'true',
+			volume: Number(playerEl.dataset.piviPlayerVolume) || 0
+		};
+	}
+
+	// The pre-login picker's own profiles, read straight from its DOM (see
+	// `+page.svelte`'s `data-pivi-profile-*` attributes) rather than
+	// re-querying them -- this component lives in the root layout and has no
+	// business knowing about that page's own GraphQL query.
+	function pickerProfiles() {
+		return [...document.querySelectorAll<HTMLElement>('[data-pivi-profile-id]')].map((el) => ({
+			id: el.dataset.piviProfileId!,
+			username: el.dataset.piviProfileUsername!,
+			image: el.dataset.piviProfileImage || null
+		}));
+	}
+
+	// The home dashboard's own app shortcuts, same idea (see
+	// AppCard.svelte's `data-pivi-app-*` attributes).
+	function dashboardApps() {
+		return [...document.querySelectorAll<HTMLElement>('[data-pivi-app-id]')].map((el) => ({
+			id: el.dataset.piviAppId!,
+			name: el.dataset.piviAppName!
+		}));
 	}
 
 	function focusableElements() {
@@ -138,7 +244,15 @@
 
 	function handleMove(dx: number, dy: number) {
 		const active = document.activeElement;
-		if (active instanceof HTMLElement && active.hasAttribute('data-pivi-slider')) {
+		// Only an armed slider (a press already activated it -- see
+		// Slider.svelte) claims the swipe; an unarmed one just sits there while
+		// swipes move focus normally, so landing on one and continuing past it
+		// doesn't nudge its value.
+		if (
+			active instanceof HTMLElement &&
+			active.hasAttribute('data-pivi-slider') &&
+			active.getAttribute('data-pivi-slider-armed') === 'true'
+		) {
 			if (trySliderAdjust(active, dx, dy)) return;
 		}
 		moveFocus(dx, dy);
@@ -257,7 +371,13 @@
 	}
 
 	function pressPinKey(key: string) {
-		document.querySelector<HTMLButtonElement>(`[data-pivi-pinpad] [data-key="${key}"]`)?.click();
+		// Not a real .click() -- PinPad listens for this event specifically so
+		// it can register the digit without its usual "which key was pressed"
+		// flash, since that flash is meant for someone entering a PIN directly
+		// on the TV, not for anyone nearby to read off a PIN typed on a phone.
+		document
+			.querySelector('[data-pivi-pinpad]')
+			?.dispatchEvent(new CustomEvent('pivi-remote-press', { detail: { key } }));
 	}
 
 	function setFocusedText(value: string) {
@@ -291,6 +411,26 @@
 	onMount(() => {
 		document.addEventListener('focusin', onFocusChange);
 		document.addEventListener('click', onClick);
+		// `play`/`pause` don't bubble, so a plain (bubbling) document listener
+		// would never see them fire on the player's own <video> -- capture does,
+		// since capturing listeners reach the target on the way down regardless
+		// of whether the event goes on to bubble back up.
+		document.addEventListener('play', scheduleFocusRecheck, true);
+		document.addEventListener('pause', scheduleFocusRecheck, true);
+		// `timeupdate` doesn't bubble either, same as play/pause -- keeps the
+		// phone's progress bar advancing during playback instead of only
+		// updating on the next unrelated state push.
+		document.addEventListener('timeupdate', scheduleFocusRecheck, true);
+		// `volumechange` doesn't bubble either -- keeps the phone's volume
+		// slider in sync with a volume change made on the TV side itself
+		// (its own slider, a remote's volume nudge already routed through
+		// here) instead of only updating on the next unrelated state push.
+		document.addEventListener('volumechange', scheduleFocusRecheck, true);
+		// Dispatched by the player page itself (bubbles normally) whenever its
+		// quality or diagnostics-panel state changes on its own, e.g. from a
+		// quality auto-pick or the TV's own Info button -- neither shows up as
+		// a DOM mutation the observer below would catch.
+		document.addEventListener('pivi-player-state-changed', scheduleFocusRecheck);
 
 		const observer = new MutationObserver(scheduleFocusRecheck);
 		observer.observe(document.body, { childList: true, subtree: true });
@@ -321,6 +461,46 @@
 		connection.onNotification(selectNotification, () => {
 			if (document.activeElement instanceof HTMLElement) document.activeElement.click();
 		});
+		// Clicking the matching profile link (rather than just navigating
+		// directly) reuses its existing view-transition tagging and the
+		// `.pivi-press` feedback animation above, same as every other
+		// remote-driven interaction.
+		onNotification(connection, selectProfileNotification, selectProfileParamsSchema, ({ id }) => {
+			document.querySelector<HTMLElement>(`[data-pivi-profile-id="${CSS.escape(id)}"]`)?.click();
+		});
+		onNotification(connection, selectAppNotification, selectAppParamsSchema, ({ id }) => {
+			document.querySelector<HTMLElement>(`[data-pivi-app-id="${CSS.escape(id)}"]`)?.click();
+		});
+		// A plain DOM event, not a click -- see remoteProtocol.ts's own comment
+		// on why (no single element to click for a volume nudge).
+		onNotification(connection, playerActionNotification, playerActionParamsSchema, ({ action }) => {
+			document.dispatchEvent(new CustomEvent('pivi-player-action', { detail: { action } }));
+		});
+		// Same plain-DOM-event handoff as playerActionNotification above, just
+		// carrying a value the player page needs (the seek target / picked
+		// quality) rather than a fixed action name.
+		onNotification(connection, playerSeekNotification, playerSeekParamsSchema, ({ seconds }) => {
+			document.dispatchEvent(new CustomEvent('pivi-player-seek', { detail: { seconds } }));
+		});
+		onNotification(
+			connection,
+			playerQualityNotification,
+			playerQualityParamsSchema,
+			({ quality }) => {
+				document.dispatchEvent(new CustomEvent('pivi-player-quality', { detail: { quality } }));
+			}
+		);
+		onNotification(
+			connection,
+			playerSubtitleNotification,
+			playerSubtitleParamsSchema,
+			({ language }) => {
+				document.dispatchEvent(new CustomEvent('pivi-player-subtitle', { detail: { language } }));
+			}
+		);
+		onNotification(connection, playerVolumeNotification, playerVolumeParamsSchema, ({ volume }) => {
+			document.dispatchEvent(new CustomEvent('pivi-player-volume', { detail: { volume } }));
+		});
 		connection.onNotification(backNotification, () => history.back());
 		connection.onNotification(goHomeNotification, () => goto('/home'));
 		onNotification(connection, keyNotification, keyParamsSchema, ({ value }) => pressPinKey(value));
@@ -329,12 +509,22 @@
 		);
 		connection.onNotification(enterNotification, () => submitFocusedText());
 		connection.onNotification(requestStateNotification, () => sendState());
-		connection.onNotification(remoteConnectedNotification, () => {
-			toast.success(m.remote_connected_toast(), { icon: Smartphone });
-		});
-		connection.onNotification(remoteDisconnectedNotification, () => {
-			toast(m.remote_disconnected_toast(), { icon: Unplug });
-		});
+		onNotification(
+			connection,
+			remoteConnectedNotification,
+			remoteDeviceParamsSchema,
+			({ name }) => {
+				toast.success(m.remote_connected_toast({ name }), { icon: Smartphone });
+			}
+		);
+		onNotification(
+			connection,
+			remoteDisconnectedNotification,
+			remoteDeviceParamsSchema,
+			({ name }) => {
+				toast(m.remote_disconnected_toast({ name }), { icon: Unplug });
+			}
+		);
 		connection.listen();
 
 		socket.onopen = () => {
@@ -358,6 +548,11 @@
 		return () => {
 			document.removeEventListener('focusin', onFocusChange);
 			document.removeEventListener('click', onClick);
+			document.removeEventListener('play', scheduleFocusRecheck, true);
+			document.removeEventListener('pause', scheduleFocusRecheck, true);
+			document.removeEventListener('timeupdate', scheduleFocusRecheck, true);
+			document.removeEventListener('volumechange', scheduleFocusRecheck, true);
+			document.removeEventListener('pivi-player-state-changed', scheduleFocusRecheck);
 			observer.disconnect();
 			connection?.dispose();
 			socket?.close();

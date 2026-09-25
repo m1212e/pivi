@@ -14,7 +14,12 @@
 	const gradient = $derived(profileGradient(id));
 </script>
 
-<a {href} class="group flex w-28 shrink-0 flex-col items-center gap-2 focus:outline-none sm:w-32">
+<a
+	{href}
+	data-pivi-app-id={id}
+	data-pivi-app-name={name}
+	class="group flex w-28 shrink-0 flex-col items-center gap-2 focus:outline-none sm:w-32"
+>
 	<span
 		data-focus-ring-target
 		class="pivi-card flex size-20 items-center justify-center rounded-2xl text-lg font-semibold text-white/90 uppercase transition group-hover:scale-105 sm:size-24"

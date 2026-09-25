@@ -226,6 +226,7 @@ export type PluginPlaybackInfo = {
 	audioContainer: String | null;
 	direct: Boolean;
 	duration: Float;
+	subtitleTracks: () => PluginSubtitleTrack[];
 	title: String;
 	vcodec: String;
 	videoContainer: String;
@@ -235,6 +236,12 @@ export type PluginSkipSegment = {
 	endSeconds: Float;
 	label: String;
 	startSeconds: Float;
+};
+
+export type PluginSubtitleTrack = {
+	kind: String;
+	label: String | null;
+	language: String;
 };
 
 export type Query = {

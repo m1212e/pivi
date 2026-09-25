@@ -1,8 +1,9 @@
 // Shared by the byte-range proxy and its sibling segment-index route (both
-// under src/routes/api/stream-track) -- resolving which track URL a
-// {pluginId, sessionId, track} triple points at is identical for both, only
-// what they do with that URL differs (forward bytes vs. locate a sidx/Cues
-// index).
+// under src/routes/api/stream-track), and by src/routes/api/stream-subtitle
+// -- resolving a session's stream (and 404ing consistently when the plugin
+// can't) is identical everywhere it's needed, only what each caller does
+// with the result differs (forward video/audio bytes, locate a sidx/Cues
+// index, or fetch a subtitle track's own URL).
 import { error } from '@sveltejs/kit';
 import { getPlugin } from '#api/plugins/manager';
 import { resolveStreamCached } from '#api/plugins/streamCache';
@@ -12,7 +13,7 @@ export function requireTrackName(track: string): 'video' | 'audio' {
 	error(400, 'Invalid track');
 }
 
-async function resolveStreamOrError(
+export async function resolveStreamOrError(
 	pluginId: string,
 	sessionId: string,
 	maxHeight: number | undefined
