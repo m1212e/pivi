@@ -18,8 +18,14 @@ let
   # it runs as a fixed-output derivation instead: network in exchange for the
   # output being pinned by hash.
   #
-  # That hash has to be updated whenever bun.lock changes. `nix build` prints
-  # the correct value in the mismatch error — paste it in below.
+  # One hash per system, because the tree is not portable: the lockfile carries
+  # platform-specific optional packages (@esbuild/linux-x64 vs linux-arm64, the
+  # rolldown bindings, lightningcss), so x86_64 and aarch64 legitimately produce
+  # different bytes. A single hash silently works on whichever machine produced
+  # it and fails everywhere else.
+  #
+  # Update these whenever bun.lock changes: `nix build` prints the value it got,
+  # for the system it ran on.
   nodeModules = stdenvNoCC.mkDerivation {
     pname = "pivi-node-modules";
     inherit version;
@@ -72,7 +78,12 @@ let
 
     outputHashMode = "recursive";
     outputHashAlgo = "sha256";
-    outputHash = "sha256-jKm2tJ7MT5THnVGbJDyH1w2sXi4jYQLIcMSUga5pDto=";
+    outputHash =
+      {
+        x86_64-linux = "sha256-Pek+PWpbOc1oMo06FqBgTUPf4hJiXumotxQ3rJ1X9iM=";
+        aarch64-linux = "sha256-jKm2tJ7MT5THnVGbJDyH1w2sXi4jYQLIcMSUga5pDto=";
+      }
+      .${stdenvNoCC.hostPlatform.system};
   };
 in
 stdenvNoCC.mkDerivation {

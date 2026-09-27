@@ -58,11 +58,14 @@ nix build .#pivi
 
 Two things about the first build:
 
-1. **The dependency hash must match `bun.lock`.** `nix/package.nix` installs
-   dependencies in a fixed-output derivation (`bun install` needs network
-   access, which a normal derivation doesn't get), so its `outputHash` pins the
-   result. Whenever `bun.lock` changes, the build fails with the hash it
-   actually got — paste that in.
+1. **The dependency hashes must match `bun.lock` — one per system.**
+   `nix/package.nix` installs dependencies in a fixed-output derivation (`bun
+install` needs network access, which a normal derivation doesn't get), so its
+   `outputHash` pins the result. There is one per architecture, because the
+   lockfile carries platform-specific optional packages (`@esbuild/linux-x64` vs
+   `linux-arm64`, rolldown bindings), so the two systems legitimately produce
+   different bytes. Whenever `bun.lock` changes, each system's build fails with
+   the hash it actually got — paste both in.
 2. **Flakes only see tracked files.** `vendor/`, `deploy/`, `nix/` and
    `flake.nix` have to be `git add`ed, or the build will fail on missing
    sources even though they're right there on disk.
