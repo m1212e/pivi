@@ -41,22 +41,37 @@ function readU64(data: Uint8Array, offset: number): number {
 // when size===1) looking for `sidx`. Bails out once it hits `moof`/`mdat`
 // with no sidx seen -- a file laid out that way isn't one of these
 // DASH-ready adaptive files, so there's nothing for MSE to index here.
+// One top-level box header: 32-bit size + fourcc, or 64-bit largesize when the
+// 32-bit field is exactly 1.
+function readMp4BoxHeader(data: Uint8Array, pos: number): { type: string; size: number } {
+	const size32 = readU32(data, pos);
+	const type = String.fromCharCode(data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]);
+	const isLargeSize = size32 === 1;
+	const headerSize = isLargeSize ? 16 : 8;
+	const size = isLargeSize ? readU64(data, pos + 8) : size32;
+	if (size < headerSize) error(502, `Malformed mp4 box "${type}" at offset ${pos}`);
+	return { type, size };
+}
+
+// Where the media data starts. Reaching either without having seen a sidx means
+// this file isn't laid out as a DASH-ready adaptive one.
+function isMediaDataBox(type: string): boolean {
+	return type === 'moof' || type === 'mdat';
+}
+
+function sidxRanges(data: Uint8Array, pos: number, size: number): SegmentBaseIndex {
+	const indexEnd = pos + size - 1;
+	if (indexEnd >= data.length) error(502, 'sidx box extends past the scanned window');
+	return { initRange: [0, pos - 1], indexRange: [pos, indexEnd] };
+}
+
 function findMp4SegmentIndex(data: Uint8Array): SegmentBaseIndex {
 	let pos = 0;
 	while (pos + 8 <= data.length) {
-		const size32 = readU32(data, pos);
-		const type = String.fromCharCode(data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]);
-		const headerSize = size32 === 1 ? 16 : 8;
-		const size = size32 === 1 ? readU64(data, pos + 8) : size32;
-		if (size < headerSize) error(502, `Malformed mp4 box "${type}" at offset ${pos}`);
-
-		if (type === 'sidx') {
-			const indexEnd = pos + size - 1;
-			if (indexEnd >= data.length) error(502, 'sidx box extends past the scanned window');
-			return { initRange: [0, pos - 1], indexRange: [pos, indexEnd] };
-		}
-		if (type === 'moof' || type === 'mdat') break;
-		pos += size;
+		const box = readMp4BoxHeader(data, pos);
+		if (box.type === 'sidx') return sidxRanges(data, pos, box.size);
+		if (isMediaDataBox(box.type)) break;
+		pos += box.size;
 	}
 	error(404, 'No sidx box found -- not a DASH-ready mp4, MSE indexing unsupported for this stream');
 }
@@ -111,21 +126,44 @@ const CLUSTER_ID = 0x1f43b675;
 // index parser reads the init segment's Info element for the timecode
 // scale, so this range has to be genuinely fetchable/parseable, not just a
 // placeholder.
-function findWebmSegmentIndex(data: Uint8Array): SegmentBaseIndex {
-	const header = [...ebmlChildren(data, 0, data.length)][0];
-	if (!header || header.id !== EBML_ID) error(502, 'Not an EBML file');
-	const segment = [...ebmlChildren(data, header.bodyStart + header.size, data.length)][0];
-	if (!segment || segment.id !== SEGMENT_ID) error(502, 'No Segment element found');
+// The first child element at `start`, which must be the id the caller expects --
+// both of webm's outer levels (EBML header, then Segment) are a single known
+// element rather than something to search for.
+function expectFirstElement(
+	data: Uint8Array,
+	start: number,
+	id: number,
+	message: string
+): EbmlElement {
+	const element = [...ebmlChildren(data, start, data.length)][0];
+	if (!element || element.id !== id) error(502, message);
+	return element;
+}
 
+// Cues can appear before or after the first Cluster; the scan stops at the
+// Cluster either way, since everything before it is the init segment.
+function findCuesAndFirstCluster(
+	data: Uint8Array,
+	start: number
+): { cues?: EbmlElement; firstCluster?: EbmlElement } {
 	let cues: EbmlElement | undefined;
-	let firstCluster: EbmlElement | undefined;
-	for (const child of ebmlChildren(data, segment.bodyStart, data.length)) {
+	for (const child of ebmlChildren(data, start, data.length)) {
 		if (child.id === CUES_ID) cues = child;
-		if (child.id === CLUSTER_ID) {
-			firstCluster = child;
-			break;
-		}
+		if (child.id === CLUSTER_ID) return { cues, firstCluster: child };
 	}
+	return { cues, firstCluster: undefined };
+}
+
+function findWebmSegmentIndex(data: Uint8Array): SegmentBaseIndex {
+	const header = expectFirstElement(data, 0, EBML_ID, 'Not an EBML file');
+	const segment = expectFirstElement(
+		data,
+		header.bodyStart + header.size,
+		SEGMENT_ID,
+		'No Segment element found'
+	);
+
+	const { cues, firstCluster } = findCuesAndFirstCluster(data, segment.bodyStart);
 	if (!cues) error(404, 'No Cues element found -- MSE indexing unsupported for this stream');
 	if (!firstCluster) error(502, 'No Cluster found after Cues');
 

@@ -5,6 +5,19 @@
 	// runs it directly; see DEPLOYMENT.md), so nothing imports it and the
 	// module graph can only see it as an unreachable file.
 	"entry": ["src/index.{ts,tsx,js,jsx}", "src/main.{ts,tsx,js,jsx}", "deploy/pivi-server.mjs"],
+	// The Tier-1 dashboard component set: src/lib/plugins/dashboard.ts and
+	// SKETCH.md both define plugin contributions as "shaped to match" these, so
+	// they are a deliberate part of the plugin contract waiting on the first
+	// plugin to contribute a dashboard row, not code nobody wanted. They stay in
+	// the module graph (ignoreFindings, not ignorePatterns) so a real break in
+	// them is still reported; only "nothing imports this yet" is hidden.
+	"ignoreFindings": [
+		"src/lib/api/rumbleClient/**",
+		"src/lib/components/ContinueWatchingCard.svelte",
+		"src/lib/components/ContinueWatchingRow.svelte",
+		"src/lib/components/PosterCard.svelte",
+		"src/lib/components/PosterRow.svelte"
+	],
 	// Third-party bundles committed verbatim (see vendor/inlang/README.md).
 	// Not ours to refactor, and loaded by path from project.inlang/settings.json
 	// rather than imported, so the module graph can't see them either.
@@ -22,7 +35,6 @@
 	// reintroduce them). `ignoreFindings`, not `ignorePatterns`, since other
 	// files still genuinely import real symbols from it and need it to stay
 	// part of the module graph.
-	"ignoreFindings": ["src/lib/api/rumbleClient/**"],
 	// Both actually used, just invisible to static import-graph analysis:
 	// `pg` is drizzle-orm/node-postgres's own runtime driver (src/api/db/
 	// index.ts imports the drizzle wrapper, never `pg` by name), and

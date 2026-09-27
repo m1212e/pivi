@@ -28,6 +28,7 @@ import {
 import {
 	encryptedSchema,
 	relayToPhoneSchema,
+	type Challenge,
 	type PhoneToRelay,
 	type RelayToPhone
 } from './protocol';
@@ -173,16 +174,7 @@ async function reconnect(
 		ephemeralPublicKey: toBase64Url(ephemeral.publicKey)
 	});
 
-	const challenge = await nextMessage(socket);
-	if (challenge.type === 'authError') {
-		// The relay only sends this specific message when the deviceId isn't
-		// in its pairedDevice table at all — the one way that happens for a
-		// device we ourselves stored credentials for is the TV's database
-		// having been reset since.
-		if (challenge.message === 'Unknown device') throw new StaleCredentialsError(challenge.message);
-		throw new Error(challenge.message);
-	}
-	if (challenge.type !== 'challenge') throw new Error('Unexpected response to hello');
+	const challenge = expectChallenge(await nextMessage(socket));
 
 	const relayEphemeralPublicKey = fromBase64Url(challenge.ephemeralPublicKey);
 	const transcript = concatBytes(
@@ -207,11 +199,30 @@ async function reconnect(
 		signature: toBase64Url(sign(credentials.deviceSecretKey, transcript))
 	});
 
-	const ready = await nextMessage(socket);
-	if (ready.type === 'authError') throw new Error(ready.message);
-	if (ready.type !== 'ready') throw new Error('Unexpected response to challenge response');
+	expectReady(await nextMessage(socket));
 
 	return { c2sKey, s2cKey };
+}
+
+// The two protocol steps of reconnect(), each of which is mostly "this had
+// better be the message we asked for", split out so neither the checks nor the
+// key exchange they guard have to carry the other's branching.
+function expectChallenge(message: RelayToPhone): Challenge {
+	if (message.type === 'authError') {
+		// The relay only sends this specific message when the deviceId isn't
+		// in its pairedDevice table at all — the one way that happens for a
+		// device we ourselves stored credentials for is the TV's database
+		// having been reset since.
+		if (message.message === 'Unknown device') throw new StaleCredentialsError(message.message);
+		throw new Error(message.message);
+	}
+	if (message.type !== 'challenge') throw new Error('Unexpected response to hello');
+	return message;
+}
+
+function expectReady(message: RelayToPhone): void {
+	if (message.type === 'authError') throw new Error(message.message);
+	if (message.type !== 'ready') throw new Error('Unexpected response to challenge response');
 }
 
 function sendJson(socket: WebSocket, message: PhoneToRelay) {

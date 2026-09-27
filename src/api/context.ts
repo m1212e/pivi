@@ -14,5 +14,3 @@ export function context(event: RequestEvent) {
 		}
 	};
 }
-
-export type Context = ReturnType<typeof context>;

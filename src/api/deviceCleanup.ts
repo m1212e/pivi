@@ -4,7 +4,7 @@ import { db } from './db';
 import { pairedDevice } from './db/schema';
 
 // A phone that hasn't reconnected in a month is treated as lost/abandoned
-export async function expireStaleDevices() {
+async function expireStaleDevices() {
 	const result = await db
 		.delete(pairedDevice)
 		.where(

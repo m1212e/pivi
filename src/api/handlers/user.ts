@@ -17,6 +17,6 @@ abilityBuilder.user.allow(['update', 'delete']).when((context) => {
 	return { where: { id: { eq: context.user.id } } };
 });
 
-export const userRef = object({ table: 'user' });
+object({ table: 'user' });
 query({ table: 'user' });
 export const userPubsub = pubsub({ table: 'user' });
