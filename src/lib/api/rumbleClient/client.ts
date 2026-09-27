@@ -212,6 +212,16 @@ export type Mutation = {
 	youtubeUiEvent: (p: { eventId: String; value?: String | null | undefined }) => Boolean;
 };
 
+export type Network = {
+	available: Boolean;
+	ethernet: Boolean;
+	hotspotPassword: String;
+	hotspotSsid: String;
+	mode: String;
+	online: Boolean;
+	ssid: String | null;
+};
+
 export type Pairing = {
 	pairingToken: String;
 	remoteUrl: String | null;
@@ -245,6 +255,7 @@ export type PluginSubtitleTrack = {
 };
 
 export type Query = {
+	network: () => Network;
 	pairing: () => Pairing;
 	pluginPlaybackInfo: (p: {
 		maxHeight?: Int | null | undefined;

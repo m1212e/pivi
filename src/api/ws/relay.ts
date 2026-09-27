@@ -434,7 +434,52 @@ function relayFromPhone(
 	}
 	const plaintext = decryptFromPhone(socket, state, message);
 	if (plaintext === undefined) return;
+	if (handledHere(plaintext)) return;
 	broadcastToTvs(plaintext);
+}
+
+// A phone's frames are normally opaque to this relay: it decrypts them and
+// hands them to the TV, which is what every remote/* notification wants.
+// Wifi provisioning is the exception -- the server answers those itself (see
+// src/api/wifiCommands.ts, which registers the handler), because joining a
+// network is an OS-level operation that has no business being brokered by
+// whatever page the TV happens to be showing.
+type PhoneFrameHandler = (method: string, params: unknown) => boolean;
+
+const phoneFrameHandlers = new Set<PhoneFrameHandler>();
+
+/** Returns true from the handler to consume the frame, so the TV never sees it. */
+export function registerPhoneFrameHandler(handler: PhoneFrameHandler) {
+	phoneFrameHandlers.add(handler);
+}
+
+// A phone sends remote/move many times a second while a thumb is down, so
+// every frame paying a JSON.parse just to discover it isn't a wifi frame would
+// be waste. This substring test is the cheap pre-filter; only a candidate gets
+// parsed.
+const SERVER_HANDLED_MARKER = '"wifi/';
+
+function handledHere(plaintext: string): boolean {
+	if (!plaintext.includes(SERVER_HANDLED_MARKER)) return false;
+	const frame = parseNotification(plaintext);
+	if (!frame) return false;
+	return [...phoneFrameHandlers].some((handler) => handler(frame.method, frame.params));
+}
+
+function parseFrameObject(plaintext: string): { method?: unknown; params?: unknown } | null {
+	try {
+		const raw: unknown = JSON.parse(plaintext);
+		return raw && typeof raw === 'object' ? raw : null;
+	} catch {
+		return null;
+	}
+}
+
+function parseNotification(plaintext: string): { method: string; params: unknown } | null {
+	const frame = parseFrameObject(plaintext);
+	if (!frame) return null;
+	const { method, params } = frame;
+	return typeof method === 'string' ? { method, params } : null;
 }
 
 // Lets server-side code outside this module (the plugin host, for a

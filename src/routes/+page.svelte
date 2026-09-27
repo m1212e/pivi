@@ -2,8 +2,10 @@
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
+	import NetworkSetup from '#lib/components/NetworkSetup.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { getPairing } from '#lib/state/pairing.svelte';
+	import { getNetworkStatus } from '#lib/state/network.svelte';
 	import * as m from '#lib/paraglide/messages';
 
 	const profiles = await client.liveQuery.users({
@@ -32,9 +34,41 @@
 		}, 60_000);
 		return () => clearInterval(interval);
 	});
+
+	// Polled far more often than the pairing token, because this is what
+	// notices the phone finishing a join: the setup screen should disappear on
+	// its own within a couple of seconds of the device coming online, without
+	// anyone touching the TV.
+	let network = $state(await getNetworkStatus());
+	$effect(() => {
+		const interval = setInterval(async () => {
+			network = await getNetworkStatus();
+		}, 3_000);
+		return () => clearInterval(interval);
+	});
+
+	// Reset on every reload on purpose: dismissing is "let me look around now",
+	// not "stop asking me".
+	let setupDismissed = $state(false);
+
+	// Ethernet counts as connected even when `online` is false (a LAN with no
+	// route out) -- a cabled device has nothing to provision, and the wifi
+	// screen would be a dead end.
+	const needsWifiSetup = $derived(
+		network.available && !network.online && !network.ethernet && !setupDismissed
+	);
 </script>
 
 <svelte:head><title>Pivi</title></svelte:head>
+
+{#if needsWifiSetup}
+	<NetworkSetup
+		hotspotSsid={network.hotspotSsid}
+		hotspotPassword={network.hotspotPassword}
+		remoteUrl={pairing.remoteUrl}
+		onDismiss={() => (setupDismissed = true)}
+	/>
+{/if}
 
 <div
 	class="flex min-h-screen flex-col items-center justify-center gap-16 bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 px-8 py-16 text-white"

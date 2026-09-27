@@ -1350,6 +1350,66 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'Network',
+				fields: [
+					{
+						name: 'available',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'ethernet',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'hotspotPassword',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'hotspotSsid',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'mode',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'online',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'ssid',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'Pairing',
 				fields: [
 					{
@@ -1509,6 +1569,14 @@ export const schema = {
 				kind: 'OBJECT',
 				name: 'Query',
 				fields: [
+					{
+						name: 'network',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Network', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: []
+					},
 					{
 						name: 'pairing',
 						type: {

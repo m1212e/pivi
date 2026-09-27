@@ -5,6 +5,7 @@
 	// The bare package, not a /node or /browser subpath — see rpcRal.ts for
 	// why. ensureRal() below installs the RAL createMessageConnection needs.
 	import { createMessageConnection, type Message, type MessageConnection } from 'vscode-jsonrpc';
+	import type { z } from 'zod';
 	import { page } from '$app/state';
 	import { connectRemoteSession, type RemoteSession } from '#lib/pairing/session';
 	import { ensureRal } from '#lib/rpcRal';
@@ -38,10 +39,17 @@
 		stateNotification,
 		stateParamsSchema,
 		textNotification,
-		textParamsSchema
+		textParamsSchema,
+		wifiConnectNotification,
+		wifiConnectParamsSchema,
+		wifiRequestStateNotification,
+		wifiScanNotification,
+		wifiStateNotification,
+		wifiStateParamsSchema
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import PinPad from '#lib/components/PinPad.svelte';
+	import WifiSetup from '#lib/components/WifiSetup.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
 	import { profileGradient } from '#lib/profileColor';
@@ -61,6 +69,8 @@
 		Sparkles,
 		Users,
 		Volume2,
+		Wifi,
+		WifiOff,
 		Zap
 	} from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
@@ -108,6 +118,48 @@
 	let subtitleLanguage = $state<string | null>(null);
 	let diagnosticsOpen = $state(false);
 	let volume = $state(0);
+
+	// Wifi provisioning state, pushed by the host rather than the TV (see
+	// src/api/wifiCommands.ts). `null` until the first push arrives, which is
+	// also what keeps the sheet from flashing open before anything is known.
+	let wifi = $state<z.infer<typeof wifiStateParamsSchema> | null>(null);
+	let wifiOpen = $state(false);
+	// Opened automatically exactly once per connection, so a device that turns
+	// out to have no network leads with the one screen that can fix it -- but
+	// closing it stays closed, rather than fighting whoever closed it on every
+	// subsequent state push.
+	let wifiAutoOpened = false;
+
+	function openWifi() {
+		wifiOpen = true;
+		connection?.sendNotification(wifiScanNotification);
+	}
+
+	function scanWifi() {
+		connection?.sendNotification(wifiScanNotification);
+	}
+
+	// A device with a working connection has nothing to fix, and one on ethernet
+	// has no reason to care about its radio.
+	function needsWifiSetup(next: z.infer<typeof wifiStateParamsSchema>): boolean {
+		return next.available && !next.online && !next.ethernet;
+	}
+
+	function onWifiState(next: z.infer<typeof wifiStateParamsSchema>) {
+		wifi = next;
+		if (wifiAutoOpened || !needsWifiSetup(next)) return;
+		wifiAutoOpened = true;
+		openWifi();
+	}
+
+	function connectWifi(ssid: string, password: string, hidden: boolean) {
+		if (!connection) return;
+		sendNotification(connection, wifiConnectNotification, wifiConnectParamsSchema, {
+			ssid,
+			password,
+			hidden
+		});
+	}
 
 	const QUALITY_MODE_ICON = { direct: Zap, mse: Layers, ffmpeg: Server } as const;
 
@@ -426,6 +478,9 @@
 		onNotification(connection, openUrlNotification, openUrlParamsSchema, ({ url }) => {
 			window.location.href = url;
 		});
+		// Also from the host directly, for the same reason as openUrl above: wifi
+		// is the device's own state, not the TV page's.
+		onNotification(connection, wifiStateNotification, wifiStateParamsSchema, onWifiState);
 		connection.listen();
 
 		connectRemoteSession(page.params.token ?? null, {
@@ -445,6 +500,7 @@
 				connected = true;
 				phase = 'ready';
 				connection?.sendNotification(requestStateNotification);
+				connection?.sendNotification(wifiRequestStateNotification);
 			})
 			.catch((err: unknown) => {
 				if (cancelled) return;
@@ -509,6 +565,20 @@
 			</button>
 		{/if}
 		<span class="flex items-center gap-2 justify-self-end text-xs text-white/50">
+			{#if wifi?.available}
+				<button
+					type="button"
+					onclick={openWifi}
+					aria-label={m.wifi_open_setup()}
+					class="rounded-full bg-white/12 p-2 text-white/70 transition hover:bg-white/20 focus:outline-none"
+				>
+					{#if wifi.online}
+						<Wifi class="size-4" />
+					{:else}
+						<WifiOff class="size-4 text-amber-300" />
+					{/if}
+				</button>
+			{/if}
 			<span class="size-2 rounded-full {connected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
 			{connected ? m.connected() : m.connecting()}
 		</span>
@@ -817,3 +887,10 @@
 		</main>
 	{/if}
 </div>
+
+<!-- Outside the phase switch above, and a sheet rather than a tab: it covers
+     whatever the remote was showing, and is the one screen here driven by the
+     device's own state instead of by the TV. -->
+{#if wifiOpen && wifi}
+	<WifiSetup {wifi} onScan={scanWifi} onConnect={connectWifi} onClose={() => (wifiOpen = false)} />
+{/if}

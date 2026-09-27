@@ -86,6 +86,29 @@ export const playerVolumeNotification = new NotificationType<
 	z.infer<typeof playerVolumeParamsSchema>
 >('remote/playerVolume');
 
+// Wifi provisioning (phone -> host). Unlike every other notification in this
+// "Phone -> TV" section, these three are handled by the *server* rather than
+// relayed to the TV's browser (see src/api/wifiCommands.ts): joining a network
+// is an OS-level operation, and routing it through the TV page would mean
+// giving that page a privileged endpoint of its own and would break whenever
+// the TV happens to be showing something else.
+
+export const wifiRequestStateNotification = new NotificationType0('wifi/requestState');
+export const wifiScanNotification = new NotificationType0('wifi/scan');
+
+export const wifiConnectParamsSchema = z.object({
+	ssid: z.string().min(1),
+	// Empty for an open network. Never echoed back to the phone, and never
+	// logged — it goes straight to NetworkManager, which owns storing it.
+	password: z.string(),
+	// A network that doesn't broadcast its SSID has to be typed in by hand, and
+	// needs telling NetworkManager to probe for it explicitly.
+	hidden: z.boolean().default(false)
+});
+export const wifiConnectNotification = new NotificationType<
+	z.input<typeof wifiConnectParamsSchema>
+>('wifi/connect');
+
 // TV -> phone
 
 const profileSchema = z.object({
@@ -187,4 +210,42 @@ export const remoteDisconnectedNotification = new NotificationType<
 export const openUrlParamsSchema = z.object({ url: z.string() });
 export const openUrlNotification = new NotificationType<z.infer<typeof openUrlParamsSchema>>(
 	'remote/openUrl'
+);
+
+// Host -> phone, sent directly via relay.ts's sendToPhones (the server answers
+// the three wifi notifications above itself, so these never pass through the
+// TV). Also pushed unprompted when provisioning changes the device's own state
+// — a join succeeding or failing — so the phone doesn't have to poll for the
+// outcome of something it asked for.
+const wifiNetworkSchema = z.object({
+	ssid: z.string(),
+	signal: z.number(),
+	security: z.enum(['open', 'wep', 'wpa', 'enterprise']),
+	saved: z.boolean()
+});
+
+export const wifiStateParamsSchema = z.object({
+	// False when NetworkManager isn't reachable at all (a development machine,
+	// or a deployment without it) — the phone shows "not available here" rather
+	// than an empty network list that looks like a failed scan.
+	available: z.boolean(),
+	mode: z.enum(['client', 'hotspot', 'disconnected']),
+	ssid: z.string().nullable(),
+	online: z.boolean(),
+	ethernet: z.boolean(),
+	// Whether a join is in flight right now. The phone that asked for it
+	// already knows, but a second phone (or the same one after a reload) has no
+	// other way to tell -- which is also why the target SSID travels with it
+	// rather than being remembered client-side.
+	connecting: z.boolean(),
+	connectingSsid: z.string().nullable(),
+	// Result of the last join attempt, cleared when the next one starts. Null
+	// when the last attempt succeeded or none has been made.
+	error: z.string().nullable(),
+	// Null until a scan has completed, which is what distinguishes "no scan yet"
+	// from "scanned and found nothing".
+	networks: z.array(wifiNetworkSchema).nullable()
+});
+export const wifiStateNotification = new NotificationType<z.infer<typeof wifiStateParamsSchema>>(
+	'wifi/state'
 );
