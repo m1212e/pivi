@@ -26,64 +26,97 @@ let
   #
   # Update these whenever bun.lock changes: `nix build` prints the value it got,
   # for the system it ran on.
-  nodeModules = stdenvNoCC.mkDerivation {
-    pname = "pivi-node-modules";
-    inherit version;
+  # Two trees, one definition. The build needs devDependencies (vite, svelte-kit);
+  # the runtime does not, and shipping them anyway put ~1GB of build tooling into
+  # every SD image — enough on its own to push the release asset past GitHub's
+  # 2 GiB limit.
+  #
+  # This is only correct because the runtime dependencies are declared correctly:
+  # svelte, @sveltejs/kit and drizzle-orm are imported by the built server, and
+  # drizzle-kit is run by pivi-db-push, so all four live in `dependencies` rather
+  # than `devDependencies` where they started.
+  mkNodeModules =
+    {
+      name,
+      production,
+      hash,
+    }:
+    stdenvNoCC.mkDerivation {
+      pname = "pivi-${name}";
+      inherit version;
 
-    # Only the files that can affect resolution, so editing app code doesn't
-    # invalidate a ~1GB dependency tree.
-    src = lib.fileset.toSource {
-      root = ../.;
-      fileset = lib.fileset.unions [
-        ../package.json
-        ../bun.lock
-        ../.npmrc
-      ];
+      # Only the files that can affect resolution, so editing app code doesn't
+      # invalidate a large dependency tree.
+      src = lib.fileset.toSource {
+        root = ../.;
+        fileset = lib.fileset.unions [
+          ../package.json
+          ../bun.lock
+          ../.npmrc
+        ];
+      };
+
+      nativeBuildInputs = [ bun ];
+
+      dontConfigure = true;
+      # Fixup would rewrite shebangs and strip binaries inside node_modules,
+      # which changes the output bytes and therefore the hash.
+      dontFixup = true;
+
+      buildPhase = ''
+        runHook preBuild
+
+        export HOME=$TMPDIR
+        export SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt
+
+        # --ignore-scripts: postinstall scripts are the main source of
+        # non-reproducibility here (and of surprise network access). Nothing in
+        # this tree needs one — the platform-specific native binaries
+        # (@esbuild/*, @rolldown/*, lightningcss) come from the lockfile as
+        # their own packages, not from a postinstall download.
+        bun install \
+          --frozen-lockfile \
+          --no-progress \
+          --ignore-scripts \
+          ${lib.optionalString production "--production"}
+
+        runHook postBuild
+      '';
+
+      installPhase = ''
+        runHook preInstall
+        # bun's own cache records absolute paths — it would make the hash
+        # depend on the build directory.
+        rm -rf node_modules/.cache
+        cp -R node_modules $out
+        runHook postInstall
+      '';
+
+      outputHashMode = "recursive";
+      outputHashAlgo = "sha256";
+      outputHash = hash.${stdenvNoCC.hostPlatform.system};
     };
 
-    nativeBuildInputs = [ bun ];
+  # The full tree, used only while building.
+  nodeModules = mkNodeModules {
+    name = "node-modules";
+    production = false;
+    hash = {
+      x86_64-linux = lib.fakeHash;
+      aarch64-linux = lib.fakeHash;
+    };
+  };
 
-    dontConfigure = true;
-    # Fixup would rewrite shebangs and strip binaries inside node_modules,
-    # which changes the output bytes and therefore the hash.
-    dontFixup = true;
-
-    buildPhase = ''
-      runHook preBuild
-
-      export HOME=$TMPDIR
-      export SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt
-
-      # --ignore-scripts: postinstall scripts are the main source of
-      # non-reproducibility here (and of surprise network access). Nothing in
-      # this tree needs one — the platform-specific native binaries
-      # (@esbuild/*, @rolldown/*, lightningcss) come from the lockfile as
-      # their own packages, not from a postinstall download.
-      bun install \
-        --frozen-lockfile \
-        --no-progress \
-        --ignore-scripts
-
-      runHook postBuild
-    '';
-
-    installPhase = ''
-      runHook preInstall
-      # bun's own cache records absolute paths — it would make the hash
-      # depend on the build directory.
-      rm -rf node_modules/.cache
-      cp -R node_modules $out
-      runHook postInstall
-    '';
-
-    outputHashMode = "recursive";
-    outputHashAlgo = "sha256";
-    outputHash =
-      {
-        x86_64-linux = "sha256-Pek+PWpbOc1oMo06FqBgTUPf4hJiXumotxQ3rJ1X9iM=";
-        aarch64-linux = "sha256-jKm2tJ7MT5THnVGbJDyH1w2sXi4jYQLIcMSUga5pDto=";
-      }
-      .${stdenvNoCC.hostPlatform.system};
+  # What actually ships. Still per-system: even a production tree can carry
+  # platform-specific optional packages, and a single hash would pass on
+  # whichever machine minted it and fail on every other.
+  prodNodeModules = mkNodeModules {
+    name = "node-modules-production";
+    production = true;
+    hash = {
+      x86_64-linux = lib.fakeHash;
+      aarch64-linux = lib.fakeHash;
+    };
   };
 in
 stdenvNoCC.mkDerivation {
@@ -178,8 +211,13 @@ stdenvNoCC.mkDerivation {
     #   - src/ + drizzle.config.ts + tsconfig.json are what `pivi-db-push`
     #     needs (the schema is pushed from src/api/db/schema.ts; the repo has
     #     no migration files).
-    cp -R build deploy plugins src node_modules $out/share/pivi/
+    cp -R build deploy plugins src $out/share/pivi/
     cp package.json drizzle.config.ts tsconfig.json $out/share/pivi/
+
+    # The runtime tree, not the one the build just used.
+    cp -R ${prodNodeModules} $out/share/pivi/node_modules
+    chmod -R u+w $out/share/pivi/node_modules
+    patchShebangs $out/share/pivi/node_modules
 
     # Deliberately no --chdir: nothing the server reads is resolved relative
     # to the working directory (the static-asset root included — adapter-node
@@ -202,7 +240,7 @@ stdenvNoCC.mkDerivation {
   '';
 
   passthru = {
-    inherit nodeModules;
+    inherit nodeModules prodNodeModules;
   };
 
   meta = {

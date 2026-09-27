@@ -42,6 +42,19 @@ jobs:
       - name: Evaluate the flake
         run: nix flake check --no-build --print-build-logs
 
+      # Both dependency trees, before the package that needs them. They are
+      # fixed-output derivations, so a lockfile change invalidates their hashes —
+      # and building them separately (rather than letting the package fail on the
+      # first mismatch) means one run reports every hash that needs updating
+      # instead of one per push.
+      - name: Check the dependency hashes
+        run: |
+          status=0
+          for tree in nodeModules prodNodeModules; do
+            nix build ".#pivi.$tree" --no-link --print-build-logs || status=1
+          done
+          exit $status
+
       # The real thing, natively: dependencies, svelte-kit build, wrappers.
       #
       # Note this fails until the fixed-output hash in nix/package.nix is a real
