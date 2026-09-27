@@ -9,22 +9,39 @@
 // PATH — rather than making that a manual install step, this downloads it
 // once (yt-dlp-wrap's own downloadFromGithub helper) into a local cache and
 // reuses it from there on every subsequent call.
+//
+// PIVI_YTDLP_BINARY opts out of that entirely and points at an
+// already-installed binary. Packaged installs need it: the download target is
+// resolved relative to this file, which for the Nix package (see nix/) lives
+// in a read-only store path, and a packaged build would rather pin yt-dlp as
+// a declared dependency than fetch a binary from GitHub at first play.
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import YTDlpWrap from 'yt-dlp-wrap';
 import type { ResolvedStream, SubtitleTrack } from '#lib/plugins/host';
 
-const BINARY_PATH = fileURLToPath(
-	new URL(`../../.cache/yt-dlp${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url)
-);
+const PROVIDED_BINARY = process.env.PIVI_YTDLP_BINARY;
+
+const BINARY_PATH =
+	PROVIDED_BINARY ||
+	fileURLToPath(
+		new URL(`../../.cache/yt-dlp${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url)
+	);
 
 let ytDlp: Promise<YTDlpWrap> | undefined;
 
 function getYtDlp(): Promise<YTDlpWrap> {
 	if (!ytDlp) {
 		ytDlp = (async () => {
-			if (!existsSync(BINARY_PATH)) {
+			if (PROVIDED_BINARY) {
+				// Fail loudly here rather than on the first extraction: a
+				// misconfigured path is a deployment mistake, not a video that
+				// happens not to play.
+				if (!existsSync(PROVIDED_BINARY)) {
+					throw new Error(`PIVI_YTDLP_BINARY is set to ${PROVIDED_BINARY}, which does not exist`);
+				}
+			} else if (!existsSync(BINARY_PATH)) {
 				await mkdir(new URL('../../.cache/', import.meta.url), { recursive: true });
 				await YTDlpWrap.downloadFromGithub(BINARY_PATH);
 			}
