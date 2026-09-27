@@ -72,7 +72,7 @@ let
 
     outputHashMode = "recursive";
     outputHashAlgo = "sha256";
-    outputHash = lib.fakeHash;
+    outputHash = "sha256-jKm2tJ7MT5THnVGbJDyH1w2sXi4jYQLIcMSUga5pDto=";
   };
 in
 stdenvNoCC.mkDerivation {

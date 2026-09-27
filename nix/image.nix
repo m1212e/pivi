@@ -70,11 +70,6 @@
   # stateful defaults apply, and moving it can silently change them.
   system.stateVersion = "25.11";
 
-  # The image's own compression. On by default in the sd-image module; stated
-  # because the release workflow uploads the `.img.zst` it produces and names
-  # the asset after it.
-  sdImage.compressImage = lib.mkDefault true;
-
   assertions = [
     {
       assertion = config.services.pivi.enable;

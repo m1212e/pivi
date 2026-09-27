@@ -58,11 +58,11 @@ nix build .#pivi
 
 Two things about the first build:
 
-1. **The dependency hash is a placeholder.** `nix/package.nix` installs
+1. **The dependency hash must match `bun.lock`.** `nix/package.nix` installs
    dependencies in a fixed-output derivation (`bun install` needs network
-   access, which a normal derivation doesn't get). Its `outputHash` is
-   `lib.fakeHash`, so the first build fails with the real hash — paste that in.
-   Same procedure whenever `bun.lock` changes.
+   access, which a normal derivation doesn't get), so its `outputHash` pins the
+   result. Whenever `bun.lock` changes, the build fails with the hash it
+   actually got — paste that in.
 2. **Flakes only see tracked files.** `vendor/`, `deploy/`, `nix/` and
    `flake.nix` have to be `git add`ed, or the build will fail on missing
    sources even though they're right there on disk.
@@ -156,21 +156,18 @@ private one, which is dramatically slower.
 - **Commit a `flake.lock`.** Without it every build resolves nixpkgs afresh, so
   rebuilding the same tag later can produce a different system. The workflow
   warns about this rather than failing, so a first release isn't blocked on it.
-- **The dependency hash in `nix/package.nix` must be real** (see Building
-  above). CI cannot discover it for you: the first `nix build` has to happen
-  locally, and its error message carries the hash to paste in. Until it does,
-  `.github/workflows/nix.yml` — which builds the package on every PR — fails at
-  that step, as will the image build here.
+- **Keep the dependency hash current** (see Building above). A `bun.lock` change
+  without the matching `outputHash` fails both `.github/workflows/nix.yml` and
+  the image build here.
 
-### Untested
+### Not yet booted
 
-Neither image has been built yet — the packaging was written before a working
-Nix daemon was available here. In particular, combining `nixos-hardware`'s
-per-board module (which pins the Raspberry Pi kernel) with `nixos-generators`'
-`sd-aarch64` format (which assumes mainline u-boot and
-`generic-extlinux-compatible`) is the usual community recipe on Pi 4 but is
-known to be fiddly on Pi 5. If the Pi 5 image won't boot, `nixos-raspberrypi`
-is the flake to reach for instead.
+The images build in CI, but no flashed card has been booted from one. In
+particular, combining `nixos-hardware`'s per-board module (which pins the
+Raspberry Pi kernel) with `nixos-generators`' `sd-aarch64` format (which assumes
+mainline u-boot and `generic-extlinux-compatible`) is the usual community recipe
+on Pi 4 but is known to be fiddly on Pi 5. If the Pi 5 image won't boot,
+`nixos-raspberrypi` is the flake to reach for instead.
 
 ## Wifi provisioning
 
