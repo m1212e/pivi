@@ -9,7 +9,10 @@
 }:
 
 let
-  version = "0.0.1";
+  # Read from package.json rather than restated here, so `npm version` (which is
+  # what tags a release, and therefore what triggers the image build) can't leave
+  # the two disagreeing.
+  version = (lib.importJSON ../package.json).version;
 
   # `bun install` needs the network, which a normal derivation doesn't get. So
   # it runs as a fixed-output derivation instead: network in exchange for the
