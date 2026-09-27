@@ -86,15 +86,24 @@ function readVint(
 ): { value: number; length: number } {
 	const first = data[pos];
 	if (first === 0) error(502, `Invalid EBML vint at offset ${pos}`);
+
+	const { length, mask } = vintWidth(first);
+	let value = keepMarker ? first : first & (mask - 1);
+	for (let i = 1; i < length; i++) value = value * 256 + data[pos + i];
+	return { value, length };
+}
+
+// The leading zero bits of the first byte encode how many bytes the integer
+// occupies; the marker bit that terminates them doubles as the mask separating
+// the length prefix from the value.
+function vintWidth(first: number): { length: number; mask: number } {
 	let length = 1;
 	let mask = 0x80;
 	while (!(first & mask)) {
 		length++;
 		mask >>= 1;
 	}
-	let value = keepMarker ? first : first & (mask - 1);
-	for (let i = 1; i < length; i++) value = value * 256 + data[pos + i];
-	return { value, length };
+	return { length, mask };
 }
 
 type EbmlElement = { id: number; start: number; bodyStart: number; size: number };

@@ -28,4 +28,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
 
+      # Two of this project's import targets do not exist in a fresh checkout:
+      # src/lib/paraglide (compiled from messages/) and build/ (what
+      # deploy/pivi-server.mjs imports its handler from). Both are gitignored
+      # generated output, so without a build fallow reports them as unresolved
+      # imports — error-severity findings that fail the gate and describe nothing
+      # real. This is also what made the gate disagree with a developer machine,
+      # where both directories are simply present.
+      - run: bun run build
+        env:
+          DATABASE_URL: postgres://pivi@localhost:5432/pivi
+          ORIGIN: ''
+
       - uses: fallow-rs/fallow@v3

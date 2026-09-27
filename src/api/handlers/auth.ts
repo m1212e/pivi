@@ -4,10 +4,16 @@ import { AuthError, loginWithPin, logout, registerWithPin } from '../auth';
 import { schemaBuilder } from '../rumble';
 import { credentialsSchema } from '../validation';
 
+// The message a given failure should surface, or undefined to fall back. A
+// ZodError's first issue is the one worth showing; an AuthError is already
+// written for a person to read; anything else is unexpected and says nothing.
+function errorMessage(err: unknown): string | undefined {
+	if (err instanceof ZodError) return err.issues[0]?.message;
+	return err instanceof AuthError ? err.message : undefined;
+}
+
 function toGraphQLError(err: unknown, fallback: string) {
-	if (err instanceof ZodError) return new GraphQLError(err.issues[0]?.message ?? fallback);
-	if (err instanceof AuthError) return new GraphQLError(err.message);
-	return new GraphQLError(fallback);
+	return new GraphQLError(errorMessage(err) ?? fallback);
 }
 
 schemaBuilder.mutationFields((t) => ({
