@@ -129,8 +129,18 @@ stdenvNoCC.mkDerivation {
     export DATABASE_URL=postgres://pivi@localhost/pivi
     export ORIGIN=
 
-    bun run prepare
-    bun run build
+    # `--bun` is load-bearing, not a preference. Both of these scripts invoke a
+    # node_modules/.bin entry whose shebang is `#!/usr/bin/env node`, and
+    # /usr/bin/env does not exist inside the Nix build sandbox — the build failed
+    # with exit 126 without it. `--bun` makes bun run the JavaScript itself
+    # rather than exec'ing the wrapper, so the shebang never matters.
+    #
+    # It matters more for `prepare` than it looks: that script ends in a
+    # swallow-the-error `|| echo` (see package.json), so a failure there is
+    # silent and would have surfaced later as a confusing missing-types error
+    # rather than as itself.
+    bun run --bun prepare
+    bun run --bun build
 
     runHook postBuild
   '';
