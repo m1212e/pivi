@@ -140,18 +140,25 @@ stdenvNoCC.mkDerivation {
     export DATABASE_URL=postgres://pivi@localhost/pivi
     export ORIGIN=
 
-    # `--bun` is load-bearing, not a preference. Both of these scripts invoke a
-    # node_modules/.bin entry whose shebang is `#!/usr/bin/env node`, and
-    # /usr/bin/env does not exist inside the Nix build sandbox — the build failed
-    # with exit 126 without it. `--bun` makes bun run the JavaScript itself
-    # rather than exec'ing the wrapper, so the shebang never matters.
+    # Every node_modules/.bin entry ships `#!/usr/bin/env node`, and
+    # /usr/bin/env does not exist inside the Nix build sandbox:
     #
-    # It matters more for `prepare` than it looks: that script ends in a
-    # swallow-the-error `|| echo` (see package.json), so a failure there is
-    # silent and would have surfaced later as a confusing missing-types error
-    # rather than as itself.
-    bun run --bun prepare
-    bun run --bun build
+    #   bash: node_modules/.bin/vite: /usr/bin/env: bad interpreter
+    #
+    # which surfaces as the build script exiting 126. patchShebangs rewrites them
+    # to the nodejs in nativeBuildInputs. The whole tree rather than just .bin/,
+    # because the entries there are symlinks into the packages (so the shebang
+    # being patched lives elsewhere) and because the build execs further bins of
+    # its own. It costs a minute over a few tens of thousands of files, which is
+    # cheaper than discovering the next unpatched one in CI.
+    #
+    # Note `bun run prepare` cannot report this itself: that script ends in a
+    # swallow-the-error `|| echo` (see package.json), so its failure was silent
+    # and would otherwise resurface later as a confusing missing-types error.
+    patchShebangs node_modules
+
+    bun run prepare
+    bun run build
 
     runHook postBuild
   '';
