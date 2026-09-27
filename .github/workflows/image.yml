@@ -27,12 +27,13 @@ permissions:
 jobs:
   image:
     strategy:
-      # One image per board: Pi 4 and Pi 5 need different kernels and device
-      # trees (see nixos-hardware's own per-generation modules), so neither
-      # image boots the other's hardware.
+      # One image per board: each Pi generation needs its own device trees and
+      # initrd modules (see nixos-hardware's per-generation modules), so no image
+      # boots another's hardware. The Pi 3 is the weakest of the three — see the
+      # note in flake.nix.
       fail-fast: false
       matrix:
-        board: [pi4, pi5]
+        board: [pi3, pi4, pi5]
 
     # A native arm64 runner, so the aarch64 closure builds without emulation —
     # under QEMU this takes hours rather than minutes. These runners are free
@@ -70,6 +71,17 @@ jobs:
       # suddenly needs a kernel or a browser built from source goes from ~10
       # minutes to hours, and this is what says so up front instead of leaving it
       # to be inferred from a job that just sits there.
+      # Same reasoning as in nix.yml: build the fixed-output dependency trees
+      # first so one run reports every aarch64 hash that needs updating, rather
+      # than the image build stopping at the first mismatch.
+      - name: Check the dependency hashes
+        run: |
+          status=0
+          for tree in nodeModules prodNodeModules; do
+            nix build ".#pivi.$tree" --no-link --print-build-logs || status=1
+          done
+          exit $status
+
       - name: Report what must be built vs fetched
         run: |
           nix build .#sd-image-${{ matrix.board }} --dry-run 2>&1 | tail -60

@@ -31,10 +31,16 @@
       forAllSystems =
         f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # The appliance, per board. Pi 4 and Pi 5 differ by more than a flag —
-      # different kernel, different device tree filter — so they are separate
-      # configurations producing separate images, not one image with a runtime
+      # The appliance, per board. The generations differ by more than a flag —
+      # different device trees, different initrd modules — so each is its own
+      # configuration producing its own image, not one image with a runtime
       # switch.
+      #
+      # The Pi 3 is included because it is aarch64 and nixos-hardware supports
+      # it, but it is the weakest target by a distance: 1GB of RAM for Chromium,
+      # PostgreSQL and the plugin host together, and no hardware H.264 block as
+      # capable as the Pi 4's. Treat it as "boots and pairs", not as a playback
+      # target.
       piModules = board: [
         self.nixosModules.default
         ./nix/image.nix
@@ -71,6 +77,7 @@
         # binfmt/QEMU setup, which the workflow sidesteps by running on an
         # arm64 runner instead.
         // nixpkgs.lib.optionalAttrs (system == "aarch64-linux") {
+          sd-image-pi3 = sdImage "3";
           sd-image-pi4 = sdImage "4";
           sd-image-pi5 = sdImage "5";
         }
@@ -79,6 +86,7 @@
       # For updating a Pi in place (`nixos-rebuild switch --flake .#pi4
       # --target-host …`) rather than reflashing it.
       nixosConfigurations = {
+        pi3 = piSystem "3";
         pi4 = piSystem "4";
         pi5 = piSystem "5";
       };
