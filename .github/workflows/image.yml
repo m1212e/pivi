@@ -92,6 +92,16 @@ jobs:
       # The sd-image module writes a compressed image under sd-image/ with a
       # name of its own choosing (it carries the nixpkgs version and
       # architecture), so the path is discovered rather than assumed.
+      # Where the size actually goes. The image has been stuck just over GitHub's
+      # 2 GiB asset limit, and trimming by intuition has a poor record here — the
+      # kernel, not the browser, turned out to be the 90-minute build. This is the
+      # same measurement applied to size.
+      - name: Report the largest closure entries
+        run: |
+          nix path-info -rSh \
+            ".#nixosConfigurations.${{ matrix.board }}.config.system.build.toplevel" \
+            2>/dev/null | sort -hk2 | tail -25 || echo "(closure report unavailable)"
+
       - name: Locate and name the image
         id: image
         run: |

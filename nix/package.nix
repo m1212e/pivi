@@ -114,8 +114,8 @@ let
     name = "node-modules-production";
     production = true;
     hash = {
-      x86_64-linux = "sha256-Wq+/8glRWeu03HZM/m9rNuilc6LNufD7diwXLMATgro=";
-      aarch64-linux = "sha256-PXvaUP0jy5Qg+/4ZrEZ6pc7XPgRpvOv8qATTGEVj7gY=";
+      x86_64-linux = lib.fakeHash;
+      aarch64-linux = lib.fakeHash;
     };
   };
 in
