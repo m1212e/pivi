@@ -65,6 +65,15 @@ jobs:
             echo "::warning::No flake.lock committed — this image is built from whatever nixpkgs resolves to right now, and is not reproducible. Run 'nix flake lock' and commit the result."
           fi
 
+      # Cheap and worth having on every run: nix reports what it would fetch from
+      # the binary cache versus what it has to compile, in seconds. An image that
+      # suddenly needs a kernel or a browser built from source goes from ~10
+      # minutes to hours, and this is what says so up front instead of leaving it
+      # to be inferred from a job that just sits there.
+      - name: Report what must be built vs fetched
+        run: |
+          nix build .#sd-image-${{ matrix.board }} --dry-run 2>&1 | tail -60
+
       - name: Build the image
         run: nix build .#sd-image-${{ matrix.board }} --print-build-logs
 
