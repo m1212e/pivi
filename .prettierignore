@@ -8,3 +8,6 @@ bun.lockb
 # Miscellaneous
 /static/
 /drizzle/
+
+# Third-party bundles, committed verbatim (see vendor/inlang/README.md)
+/vendor/inlang/*.js

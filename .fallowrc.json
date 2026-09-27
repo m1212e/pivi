@@ -1,7 +1,16 @@
 {
 	// This file is JSONC: fallow reads these comments; generic JSON tools may not.
 	"$schema": "./node_modules/fallow/schema.json",
-	"entry": ["src/index.{ts,tsx,js,jsx}", "src/main.{ts,tsx,js,jsx}"],
+	// deploy/pivi-server.mjs is the production entry point (the systemd unit
+	// runs it directly; see DEPLOYMENT.md), so nothing imports it and the
+	// module graph can only see it as an unreachable file.
+	"entry": ["src/index.{ts,tsx,js,jsx}", "src/main.{ts,tsx,js,jsx}", "deploy/pivi-server.mjs"],
+	// Third-party bundles committed verbatim (see vendor/inlang/README.md).
+	// Not ours to refactor, and loaded by path from project.inlang/settings.json
+	// rather than imported, so the module graph can't see them either.
+	// `ignorePatterns` rather than `ignoreFindings`: these should not be
+	// analyzed at all.
+	"ignorePatterns": ["vendor/**"],
 	// Registered by URL string (navigator.serviceWorker.register), not an
 	// import, so the static module graph can't see it's reachable.
 	"dynamicallyLoaded": ["static/remote/sw.js"],
