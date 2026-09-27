@@ -41,20 +41,20 @@
         nixos-hardware.nixosModules."raspberry-pi-${board}"
       ];
 
+      # The sd-aarch64 format module is part of the system, not a wrapper around
+      # it: it supplies the root filesystem (by label, as the flashed card
+      # presents it), which NixOS requires of any bootable configuration. So both
+      # outputs below are built from one configuration rather than the image
+      # being generated from a second, subtly different one — which also means
+      # `nix flake check` validates exactly what gets flashed.
       piSystem =
         board:
         nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
-          modules = piModules board;
+          modules = piModules board ++ [ nixos-generators.nixosModules.sd-aarch64 ];
         };
 
-      sdImage =
-        board:
-        nixos-generators.nixosGenerate {
-          system = "aarch64-linux";
-          format = "sd-aarch64";
-          modules = piModules board;
-        };
+      sdImage = board: (piSystem board).config.system.build.sdImage;
     in
     {
       packages = nixpkgs.lib.genAttrs systems (
