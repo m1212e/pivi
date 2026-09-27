@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 
@@ -20,6 +21,27 @@
     kiosk.enable = true;
     wifi.provisioning = true;
   };
+
+  # nixos-hardware's Pi modules default to the downstream Raspberry Pi kernel
+  # (`linux-rpi`), which no binary cache carries — a CI run spent 90 minutes
+  # compiling it and was still on driver modules when it was cancelled. The
+  # mainline kernel is prebuilt for aarch64, which takes the image build from
+  # hours to minutes.
+  #
+  # This is an anticipated configuration rather than a workaround: nixos-hardware's
+  # own Pi 5 module inspects `boot.kernelPackages.kernel.pname` and picks its
+  # initrd modules accordingly (`rp1_pci`/`pinctrl-rp1` for mainline,
+  # `rp1` for the downstream fork), so both variants are supported by the board
+  # support we import.
+  #
+  # The trade-off is media-related and worth knowing before the first playback
+  # test: the downstream kernel carries Raspberry Pi's own V4L2 codec drivers,
+  # where mainline ships the upstream stateless decoder (HEVC via `rpivid` on Pi
+  # 4) and not the downstream H.264 M2M one. Since playback here is Chromium
+  # decoding in-page, hardware decode is the thing to verify on real hardware
+  # (see DEPLOYMENT.md) — and if it needs the downstream kernel, that means
+  # arranging a binary cache for it rather than compiling it per release.
+  boot.kernelPackages = pkgs.linuxPackages;
 
   networking.hostName = "pivi";
 

@@ -236,6 +236,30 @@ declarative.
 - **Hidden networks aren't reachable from the phone.** The protocol carries a
   `hidden` flag, but nothing in the UI collects a name by hand yet.
 
+### Kernel choice, and why the build is fast
+
+`nix/image.nix` pins the **mainline** kernel rather than the downstream
+`linux-rpi` one that `nixos-hardware`'s Pi modules default to. That is a build-time
+decision with a runtime consequence, so it is worth stating plainly.
+
+No binary cache carries `linux-rpi`: a release build spent 90 minutes compiling
+it and was still working through driver modules when it was cancelled. Mainline
+is prebuilt for aarch64, which is the difference between an image in minutes and
+an image in hours. (Chromium, by contrast, _is_ cached — it was fetched, not
+built, so it costs nothing here.)
+
+`nixos-hardware` supports both: its Pi 5 module reads
+`boot.kernelPackages.kernel.pname` and selects initrd modules accordingly.
+
+The consequence is media support. Raspberry Pi's downstream kernel ships their own
+V4L2 codec drivers; mainline ships the upstream stateless decoder (HEVC via
+`rpivid` on Pi 4) and not the downstream H.264 M2M one. Since playback here is
+Chromium decoding in-page, this is exactly what the check below is for. If
+hardware decode turns out to need the downstream kernel, the answer is to arrange
+a binary cache for it (Cachix, or a remote builder) rather than compiling a kernel
+on every release — drop the `boot.kernelPackages` line and expect a long first
+build otherwise.
+
 ## Hardware video decode is the thing to check first
 
 Playback is MSE/shaka **inside the page** (`src/lib/mse/dualTrackPlayer.ts`) —
