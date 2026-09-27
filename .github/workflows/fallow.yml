@@ -18,4 +18,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Without an installed dependency tree fallow reports
+      # `degraded inputs: node-modules-missing` and analyses an incomplete module
+      # graph — it cannot follow an import into a package, so what it concludes
+      # about reachability and complexity differs from what the same version
+      # concludes locally. That made the gates fail here while passing on a
+      # developer machine, which is worse than either outcome on its own.
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+
       - uses: fallow-rs/fallow@v3
