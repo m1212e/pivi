@@ -100,20 +100,44 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   heavy for Pi 4/5, no Widevine L1 for DRM content anyway, and it would
   throw away the shared navigation model that's the actual point of this
   project.
-- **Video player**: libmpv embedded in the shell, controlled from the Node
-  backend over its JSON IPC socket. Hardware-accelerated decode via
-  V4L2/VAAPI. One playback code path shared by every plugin and the Cast
-  receiver.
+- **Video player**: in-page playback via Media Source Extensions / Shaka
+  Player (`src/lib/mse/dualTrackPlayer.ts`), replacing the original plan of an
+  embedded libmpv driven over its JSON IPC socket — one playback code path
+  shared by every plugin and the Cast receiver either way, but it lives in the
+  shell's own renderer rather than a separate process, which is why the kiosk
+  browser is what needs hardware-accelerated decode (V4L2/VAAPI).
 - **Video quality target**: 1080p as the reliable baseline; 4K/HDR is
   best-effort, expected to work better on Pi 5 than Pi 4.
+- **Wifi provisioning — the phone is the keyboard.** With no known network,
+  the device serves its own WPA2 access point (NetworkManager shared mode); the
+  TV shows a `WIFI:` QR to join it plus the usual pairing QR, and the paired
+  phone's remote gains a scan/pick/password screen. Built into the app rather
+  than adopting comitup or balena wifi-connect: neither is packaged for nixpkgs,
+  and both would add a second web server with its own captive-portal UI
+  duplicating the phone remote this project already has. Wi-Fi Easy Connect
+  (DPP) is a better long-term fit for a device that has a screen — the TV could
+  simply display a DPP QR — but it is Android-10+-only with no iOS support, so
+  it can only ever be an additional fast path, not the mechanism. The Pi's
+  single radio can't reliably be an AP and a station at once (`brcmfmac`), so
+  provisioning is sequential: AP down, join, AP back up on failure.
+- **Network exposure**: two HTTP listeners over one SvelteKit app — the TV
+  shell on loopback for the local kiosk browser only, and a LAN listener that
+  serves nothing but the phone remote's own paths (`deploy/pivi-server.mjs`).
+  The GraphQL endpoint and every TV route stay unreachable from the wifi.
 - **Scope**: single Pi/TV per install for v1. Multi-room/multi-Pi sync is
   explicitly deferred, not designed for yet.
-- **OS/base image**: deferred. Leaning toward NixOS for declarative, minimal
-  config, but Raspberry Pi OS Lite is the fallback if Pi GPU/media driver
-  support in Nix proves too immature. The app itself should stay OS-agnostic
-  (a systemd unit + a documented runtime dependency list — see
-  RUNTIME_DEPENDENCIES.md) so this stays a packaging decision, not an
-  architecture one.
+- **OS/base image**: NixOS. The app is packaged as a Nix flake plus a NixOS
+  module (`flake.nix`, `nix/`, documented in DEPLOYMENT.md) that brings up the
+  server, the database, the firewall rules and the fullscreen kiosk, plus
+  flashable SD images per board (Pi 4 and Pi 5 need separate ones — different
+  kernel, different device tree) built on release by
+  `.github/workflows/image.yml`. Chosen
+  over Raspberry Pi OS Lite because the flashable image this needs next falls
+  out of a declarative config directly. The remaining risk is unchanged and now
+  concentrated in one place: hardware video decode in the kiosk browser on Pi
+  hardware. The app itself stays OS-agnostic (a plain systemd unit + the
+  runtime dependency list in RUNTIME_DEPENDENCIES.md), so this is still a
+  packaging decision rather than an architectural one.
 
 ## Proposed tech stack
 

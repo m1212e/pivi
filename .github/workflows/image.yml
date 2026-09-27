@@ -1,0 +1,105 @@
+name: SD image
+
+# Builds the flashable Raspberry Pi images and attaches them to the release.
+#
+# Release-only, not per-push: each image is a full NixOS system closure plus a
+# SvelteKit build, which is on the order of a gigabyte and tens of minutes. It
+# is not something to pay for on every commit.
+on:
+  release:
+    types: [published]
+  # So an image can be rebuilt without cutting a new release — for a failed
+  # upload, or to test a change to this workflow.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to attach the images to (blank = build only)'
+        required: false
+        type: string
+
+permissions:
+  contents: write # attaching assets to the release
+
+jobs:
+  image:
+    strategy:
+      # One image per board: Pi 4 and Pi 5 need different kernels and device
+      # trees (see nixos-hardware's own per-generation modules), so neither
+      # image boots the other's hardware.
+      fail-fast: false
+      matrix:
+        board: [pi4, pi5]
+
+    # A native arm64 runner, so the aarch64 closure builds without emulation —
+    # under QEMU this takes hours rather than minutes. These runners are free
+    # for public repositories; on a private repo they need a paid plan, in
+    # which case swap in `ubuntu-latest` plus a QEMU step:
+    #
+    #   - uses: docker/setup-qemu-action@v3
+    #   - run: echo "extra-platforms = aarch64-linux" | sudo tee -a /etc/nix/nix.conf
+    #
+    # and expect it to be very slow.
+    runs-on: ubuntu-24.04-arm
+
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # A release built from unpinned inputs isn't reproducible: rebuilding the
+      # same tag later can produce a different system. This warns rather than
+      # fails so a first release isn't blocked on it, but the lock file should
+      # be committed.
+      - name: Check inputs are pinned
+        run: |
+          if [ ! -f flake.lock ]; then
+            echo "::warning::No flake.lock committed — this image is built from whatever nixpkgs resolves to right now, and is not reproducible. Run 'nix flake lock' and commit the result."
+          fi
+
+      - name: Build the image
+        run: nix build .#sd-image-${{ matrix.board }} --print-build-logs
+
+      # The sd-image module writes a compressed image under sd-image/ with a
+      # name of its own choosing (it carries the nixpkgs version and
+      # architecture), so the path is discovered rather than assumed.
+      - name: Locate and name the image
+        id: image
+        run: |
+          set -euo pipefail
+          built=$(find -L result/sd-image -name '*.img.zst' -print -quit)
+          if [ -z "$built" ]; then
+            echo "No .img.zst found under result/sd-image:" >&2
+            find -L result -maxdepth 2 >&2
+            exit 1
+          fi
+
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          name="pivi-${tag:-dev}-${{ matrix.board }}.img.zst"
+          cp "$built" "$name"
+          echo "path=$name" >> "$GITHUB_OUTPUT"
+          ls -lh "$name"
+
+      # Kept even when there's no release to attach to (a plain
+      # workflow_dispatch), so a manual build is still downloadable.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.image.outputs.path }}
+          path: ${{ steps.image.outputs.path }}
+          compression-level: 0 # already zstd-compressed
+          retention-days: 7
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "No release tag given — image left as a workflow artifact only."
+            exit 0
+          fi
+          gh release upload "$TAG" "${{ steps.image.outputs.path }}" --clobber
