@@ -119,6 +119,17 @@ jobs:
           # A bare tag push (what `npm version && git push --follow-tags` does)
           # has no release behind it yet. Both boards run this, so it has to
           # tolerate the other one having just created it.
+          # GitHub rejects release assets over 2 GiB (HTTP 422). The image is
+          # already uploaded as a workflow artifact by the step above, which has
+          # no such limit, so an oversized image is worth a loud warning rather
+          # than failing a build that otherwise succeeded.
+          size=$(stat -c %s "${{ steps.image.outputs.path }}")
+          limit=$((2 * 1024 * 1024 * 1024))
+          if [ "$size" -ge "$limit" ]; then
+            echo "::warning::${{ steps.image.outputs.path }} is $((size / 1024 / 1024)) MiB, over GitHub's 2 GiB release-asset limit — attached to this run as an artifact instead. Shrink the image (see DEPLOYMENT.md) to attach it to the release."
+            exit 0
+          fi
+
           gh release view "$TAG" >/dev/null 2>&1 ||
             gh release create "$TAG" --generate-notes ||
             gh release view "$TAG" >/dev/null

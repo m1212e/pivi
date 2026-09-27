@@ -45,10 +45,13 @@
 
   networking.hostName = "pivi";
 
-  # The Pi's wifi and Bluetooth need the Broadcom firmware blobs, which are
-  # redistributable but not free, and are therefore off unless asked for. Wifi
-  # provisioning cannot work without this: there is no radio to provision.
-  hardware.enableRedistributableFirmware = true;
+  # The Pi's wifi and Bluetooth need Broadcom firmware blobs, without which there
+  # is no radio to provision. `hardware.enableRedistributableFirmware` would pull
+  # the whole linux-firmware set — well over a gigabyte of blobs for hardware a
+  # Raspberry Pi does not have — so name the Pi's own instead. The GPU boot code
+  # is separate again and comes from nixos-hardware's firmware module
+  # (`raspberrypifw`).
+  hardware.firmware = [ pkgs.raspberrypiWirelessFirmware ];
 
   # Chromium on a 2GB Pi 4 with a 1080p video decoded into it is genuinely
   # tight. Compressed swap in RAM costs a little CPU and avoids the OOM killer

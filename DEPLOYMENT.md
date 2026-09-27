@@ -126,6 +126,28 @@ device trees — `nixos-hardware` ships a separate module per generation, and
 neither image boots the other's hardware. Flash with `zstd -d` piped into `dd`,
 or any imager that reads zstd.
 
+### Image size and the 2 GiB ceiling
+
+GitHub refuses release assets over 2 GiB. The first successful build came out at
+2.4 GiB compressed, so the workflow attaches the image to the release only when
+it fits, and otherwise leaves it as a workflow artifact (which has no such limit)
+with a warning naming the size. A release with no `.img.zst` attached but a green
+build means exactly that — check the run's artifacts.
+
+What makes it large, in order: the app's `node_modules` (1.5 GB on disk, shipped
+whole because the adapter-node output is not self-contained), Chromium, and the
+firmware. The firmware part is already narrowed — `nix/image.nix` installs the
+Pi's own wireless blobs rather than `hardware.enableRedistributableFirmware`'s
+entire `linux-firmware` set, which is over a gigabyte of blobs for hardware a Pi
+does not have.
+
+The remaining lever is shipping production-only dependencies. It isn't a one-liner:
+`drizzle-orm`, `svelte` and `@sveltejs/kit` are all declared as devDependencies
+while genuinely being needed at runtime (the built server imports them), so a
+`bun install --production` tree would be missing them. Fixing that means moving
+those declarations first, which changes `bun.lock` and therefore every dependency
+hash.
+
 Locally, the same thing:
 
 ```sh
