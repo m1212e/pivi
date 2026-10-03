@@ -1,4 +1,5 @@
 <script lang="ts" generics="T">
+	import * as m from '#lib/paraglide/messages';
 	// A single collapsed button that expands on click/select and collapses
 	// again the moment one is chosen -- the discrete-choice counterpart to
 	// Slider.svelte's continuous one, for exactly the same reason Slider
@@ -318,7 +319,7 @@
 				<button
 					type="button"
 					onclick={() => (expanded = false)}
-					aria-label="Close"
+					aria-label={m.close()}
 					in:fly|global={{ y: 24, duration: 400 }}
 					class="flex size-12 items-center justify-center rounded-full bg-white/12 text-white shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
 				>

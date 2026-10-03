@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ContentRow from '#lib/components/ContentRow.svelte';
+	import * as m from '#lib/paraglide/messages';
 	import PlaceholderCard from '#lib/components/PlaceholderCard.svelte';
 
 	// Rendered instead of a real content row for an app that hasn't
@@ -17,10 +18,10 @@
 	];
 
 	const cards = $derived([
-		{ title: `Login to ${appName} to see content here`, gradient: GRADIENTS[0] },
-		{ title: 'Here will be your content', gradient: GRADIENTS[1] },
-		{ title: 'Here will be your content', gradient: GRADIENTS[2] },
-		{ title: 'Here will be your content', gradient: GRADIENTS[3] }
+		{ title: m.placeholder_login_to({ app: appName }), gradient: GRADIENTS[0] },
+		{ title: m.placeholder_content_here(), gradient: GRADIENTS[1] },
+		{ title: m.placeholder_content_here(), gradient: GRADIENTS[2] },
+		{ title: m.placeholder_content_here(), gradient: GRADIENTS[3] }
 	]);
 </script>
 

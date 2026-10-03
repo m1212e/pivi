@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '#lib/paraglide/messages';
 	import { fade, fly } from 'svelte/transition';
 	import heroPlaceholder from '#lib/assets/heroPlaceholder.svg';
 
@@ -24,9 +25,9 @@
 		class="absolute inset-x-0 bottom-0 flex flex-col gap-4 px-8 pb-10 sm:px-12 sm:pb-14"
 		in:fly={{ y: 28, duration: 500, delay: 100 }}
 	>
-		<h1 class="max-w-2xl text-3xl font-semibold text-white sm:text-5xl">No content yet</h1>
+		<h1 class="max-w-2xl text-3xl font-semibold text-white sm:text-5xl">{m.hero_empty_title()}</h1>
 		<p class="max-w-xl text-sm text-white/70 sm:text-base">
-			Sign in to one of your apps and your recommendations will show up right here.
+			{m.hero_empty_description()}
 		</p>
 	</div>
 </div>

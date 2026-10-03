@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { client } from '#lib/api/rumbleClient/client';
 	import UiNodeRenderer from '#lib/components/plugins/UiNodeRenderer.svelte';
@@ -82,20 +83,20 @@
 
 	{#if auth && auth.status !== 'complete'}
 		<div class="flex flex-col items-start gap-3 rounded-2xl bg-white/12 p-6">
-			<p class="text-white/80">Sign in at <strong>{auth.verificationUrl}</strong></p>
+			<p class="text-white/80">{m.youtube_sign_in_at({ url: auth.verificationUrl })}</p>
 			<p class="font-mono text-3xl tracking-widest">{auth.userCode}</p>
-			<p class="text-sm text-white/50">Status: {auth.status}</p>
+			<p class="text-sm text-white/50">{m.youtube_status({ status: auth.status })}</p>
 			<button
 				type="button"
 				onclick={openOnPhone}
 				class="rounded-full bg-white px-5 py-2 text-sm font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none"
 			>
-				Open on your phone
+				{m.youtube_open_on_phone()}
 			</button>
 		</div>
 	{:else if screen}
 		<UiNodeRenderer node={screen} {onEvent} pluginId="youtube" appHref={APP_HREF} />
 	{:else}
-		<p class="text-white/50">Loading…</p>
+		<p class="text-white/50">{m.loading()}</p>
 	{/if}
 </div>

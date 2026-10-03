@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { page } from '$app/state';
@@ -211,7 +212,7 @@
 	});
 </script>
 
-<svelte:head><title>Pivi</title></svelte:head>
+<svelte:head><title>{m.app_title()}</title></svelte:head>
 
 <!-- A genuine top-level snippet (fallow scores one of these as its own
      complexity unit, separate from the page's own <template>) rather than
@@ -269,7 +270,7 @@
 					title={heroCard.title}
 					description={heroCard.subtitle}
 					image={heroCard.image}
-					badge="Featured"
+					badge={m.featured()}
 					source={heroCard.appName}
 					href={cardHref(heroCard)}
 				/>
@@ -283,7 +284,7 @@
 		</div>
 
 		<div class="flex flex-col gap-10">
-			<AppsRow title="Apps" items={apps} />
+			<AppsRow title={m.apps()} items={apps} />
 			{#each appRows as row (row.id)}
 				{#if row.loading}
 					<VideoRowSkeleton title={row.name} />
@@ -291,7 +292,7 @@
 					<PlaceholderRow appName={row.name} appHref={row.href} />
 				{:else if row.shelfCards.length > 0}
 					<VideoRow
-						title="Suggested on {row.name}"
+						title={m.suggested_on({ app: row.name })}
 						items={row.shelfCards.map((c) => ({
 							id: c.id,
 							title: c.title,

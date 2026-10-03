@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '#lib/paraglide/messages';
 	import {
 		ArrowLeft,
 		Play,
@@ -1111,18 +1112,18 @@
 	});
 </script>
 
-<svelte:head><title>{title || 'Playing'}</title></svelte:head>
+<svelte:head><title>{title || m.playing()}</title></svelte:head>
 
 {#snippet errorScreen()}
 	<div class="flex size-full flex-col items-center justify-center gap-3 text-white">
-		<p class="text-lg font-medium">Playback failed</p>
+		<p class="text-lg font-medium">{m.playback_failed()}</p>
 		<p class="max-w-sm text-center text-sm text-white/60">{errorMessage}</p>
 		<button
 			type="button"
 			onclick={goBack}
 			class="mt-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-slate-950 hover:bg-white/90 focus:outline-none"
 		>
-			Back
+			{m.back()}
 		</button>
 	</div>
 {/snippet}
@@ -1206,7 +1207,7 @@
 				type="button"
 				onclick={goBack}
 				disabled={locked}
-				aria-label="Back"
+				aria-label={m.back()}
 				class="rounded-full bg-white/12 p-3 text-white shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
 			>
 				<ArrowLeft class="size-5" />
@@ -1216,7 +1217,7 @@
 				type="button"
 				onclick={() => (diagnosticsOpen = !diagnosticsOpen)}
 				disabled={locked}
-				aria-label="Playback diagnostics"
+				aria-label={m.playback_diagnostics()}
 				aria-pressed={diagnosticsOpen}
 				class="rounded-full p-3 shadow-lg ring-1 shadow-black/20 backdrop-blur-2xl backdrop-saturate-150 transition focus:outline-none {diagnosticsOpen
 					? 'bg-white text-slate-950'
@@ -1241,17 +1242,15 @@
 	{@const mode = qualityModeFor(opt)}
 	<span>{opt}p</span>
 	{#if mode === 'direct'}
-		<span title="Direct connection — streaming straight from the source">
+		<span title={m.quality_mode_direct()}>
 			<Zap class="size-4 {onLight ? 'text-emerald-600' : 'text-emerald-400'}" />
 		</span>
 	{:else if mode === 'mse'}
-		<span
-			title="Adaptive streaming — video and audio buffered separately in the browser, no server-side remuxing"
-		>
+		<span title={m.quality_mode_mse()}>
 			<Layers class="size-4 {onLight ? 'text-sky-600' : 'text-sky-400'}" />
 		</span>
 	{:else if mode === 'ffmpeg'}
-		<span title="Proxied — being relayed and remuxed through this server">
+		<span title={m.quality_mode_ffmpeg()}>
 			<Server class="size-4 {onLight ? 'text-amber-600' : 'text-amber-400'}" />
 		</span>
 	{/if}
@@ -1259,9 +1258,10 @@
 
 {#snippet subtitleOption(language: string | null, onLight: boolean)}
 	{@const track = subtitleTracks.find((t) => t.language === language) ?? null}
-	<span class="min-w-0 truncate">{track ? (track.label ?? track.language) : 'Off'}</span>
+	<span class="min-w-0 truncate">{track ? (track.label ?? track.language) : m.subtitles_off()}</span
+	>
 	{#if track?.kind === 'transcription'}
-		<span title="Auto-generated -- not a real, human-authored caption track">
+		<span title={m.subtitles_auto_generated()}>
 			<Sparkles class="size-4 shrink-0 {onLight ? 'text-amber-600' : 'text-amber-400'}" />
 		</span>
 	{/if}
@@ -1324,7 +1324,7 @@
 					max={1}
 					step={0.005}
 					orientation="vertical"
-					label="Volume"
+					label={m.volume()}
 					sensitivity={600}
 					disabled={locked}
 				/>
@@ -1337,7 +1337,7 @@
 					type="button"
 					onclick={() => seekBy(-10)}
 					disabled={locked}
-					aria-label="Back 10 seconds"
+					aria-label={m.seek_back()}
 					class="flex items-center gap-1 rounded-full bg-white/12 px-4 py-3 text-xs font-medium text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
 				>
 					<RotateCcw class="size-5" />
@@ -1347,7 +1347,7 @@
 					bind:this={playPauseButton}
 					type="button"
 					onclick={togglePlayPause}
-					aria-label={playing ? 'Pause' : 'Play'}
+					aria-label={playing ? m.pause() : m.play()}
 					class="rounded-full bg-white p-3 text-slate-950 shadow-lg transition hover:bg-white/90 focus:outline-none"
 				>
 					{#if playing}
@@ -1360,7 +1360,7 @@
 					type="button"
 					onclick={() => seekBy(10)}
 					disabled={locked}
-					aria-label="Forward 10 seconds"
+					aria-label={m.seek_forward()}
 					class="flex items-center gap-1 rounded-full bg-white/12 px-4 py-3 text-xs font-medium text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
 				>
 					10
@@ -1390,7 +1390,7 @@
 							value={subtitleLanguage}
 							onChange={selectSubtitle}
 							options={subtitleOptions}
-							label="Subtitles"
+							label={m.subtitles()}
 							disabled={locked}
 							option={subtitleOption}
 						/>
@@ -1410,7 +1410,7 @@
 						value={quality}
 						onChange={selectQuality}
 						options={QUALITY_OPTIONS}
-						label="Quality"
+						label={m.quality()}
 						disabled={locked}
 						option={qualityOption}
 					/>
@@ -1431,7 +1431,7 @@
 				max={duration}
 				step={1}
 				orientation="horizontal"
-				label="Seek"
+				label={m.seek()}
 				sensitivity={1500}
 				size="sm"
 				disabled={locked}
@@ -1481,7 +1481,7 @@
 				// we're already on the last-resort ffmpeg path is there
 				// nothing left to fall back to.
 				if (mode === 'ffmpeg') {
-					errorMessage = 'The stream stopped unexpectedly.';
+					errorMessage = m.stream_stopped();
 				} else {
 					const mediaError = videoEl?.error;
 					fallbackToFfmpeg(

@@ -59,7 +59,7 @@
 	);
 </script>
 
-<svelte:head><title>Pivi</title></svelte:head>
+<svelte:head><title>{m.app_title()}</title></svelte:head>
 
 {#if needsWifiSetup}
 	<NetworkSetup
