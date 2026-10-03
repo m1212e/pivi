@@ -2,7 +2,6 @@
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { pluginActionSchema, pluginActionHref } from '#lib/plugins/dashboard';
@@ -22,8 +21,7 @@
 	// one plugin to hardcode.
 	const apps = [{ id: 'youtube', name: 'YouTube', href: '/apps/youtube' }];
 
-	const me = await client.liveQuery.user({
-		__args: { id: page.data.userId },
+	const me = await client.liveQuery.me({
 		id: true,
 		username: true,
 		image: true
