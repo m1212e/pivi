@@ -1295,6 +1295,40 @@ export const schema = {
 						]
 					},
 					{
+						name: 'pluginUiEvent',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'eventId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'screenId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'value',
+								type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null }
+							}
+						]
+					},
+					{
 						name: 'register',
 						type: {
 							kind: 'NON_NULL',
@@ -1324,26 +1358,6 @@ export const schema = {
 							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
 						},
 						args: []
-					},
-					{
-						name: 'youtubeUiEvent',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: [
-							{
-								name: 'eventId',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							},
-							{
-								name: 'value',
-								type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null }
-							}
-						]
 					}
 				],
 				interfaces: []
@@ -1432,6 +1446,163 @@ export const schema = {
 			{ kind: 'SCALAR', name: 'PhoneNumber' },
 			{
 				kind: 'OBJECT',
+				name: 'PluginAuthState',
+				fields: [
+					{
+						name: 'status',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'userCode',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'verificationUrl',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'PluginCard',
+				fields: [
+					{
+						name: 'actionJson',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'id',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'image',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'subtitle',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'title',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'PluginDashboard',
+				fields: [
+					{
+						name: 'cards',
+						type: {
+							kind: 'LIST',
+							ofType: {
+								kind: 'NON_NULL',
+								ofType: { name: 'PluginCard', kind: 'OBJECT', ofType: null, __proto__: null }
+							}
+						},
+						args: []
+					},
+					{
+						name: 'pluginId',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'pluginName',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'PluginInfo',
+				fields: [
+					{
+						name: 'entryScreenId',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'features',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'id',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'name',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'PluginPlaybackInfo',
 				fields: [
 					{
@@ -1508,6 +1679,18 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'PluginScreenData',
+				fields: [
+					{
+						name: 'json',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'PluginSkipSegment',
 				fields: [
 					{
@@ -1570,6 +1753,11 @@ export const schema = {
 				name: 'Query',
 				fields: [
 					{
+						name: 'me',
+						type: { kind: 'OBJECT', name: 'User', ofType: null, __proto__: null },
+						args: []
+					},
+					{
 						name: 'network',
 						type: {
 							kind: 'NON_NULL',
@@ -1582,6 +1770,33 @@ export const schema = {
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'Pairing', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'pluginAuth',
+						type: { kind: 'OBJECT', name: 'PluginAuthState', ofType: null, __proto__: null },
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'pluginDashboards',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'PluginDashboard', kind: 'OBJECT', ofType: null, __proto__: null }
+								}
+							}
 						},
 						args: []
 					},
@@ -1605,6 +1820,29 @@ export const schema = {
 							},
 							{
 								name: 'sessionId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'pluginScreen',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'PluginScreenData', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'screenId',
 								type: {
 									kind: 'NON_NULL',
 									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
@@ -1645,6 +1883,20 @@ export const schema = {
 								}
 							}
 						]
+					},
+					{
+						name: 'plugins',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'PluginInfo', kind: 'OBJECT', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
 					},
 					{
 						name: 'user',
@@ -1702,30 +1954,6 @@ export const schema = {
 								}
 							}
 						]
-					},
-					{
-						name: 'youtubeAuth',
-						type: { kind: 'OBJECT', name: 'YoutubeAuth', ofType: null, __proto__: null },
-						args: []
-					},
-					{
-						name: 'youtubeDashboard',
-						type: {
-							kind: 'LIST',
-							ofType: {
-								kind: 'NON_NULL',
-								ofType: { name: 'YoutubeCard', kind: 'OBJECT', ofType: null, __proto__: null }
-							}
-						},
-						args: []
-					},
-					{
-						name: 'youtubeScreen',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'YoutubeScreen', kind: 'OBJECT', ofType: null, __proto__: null }
-						},
-						args: []
 					}
 				],
 				interfaces: []
@@ -1901,6 +2129,70 @@ export const schema = {
 				name: 'Subscription',
 				fields: [
 					{
+						name: 'pluginAuth',
+						type: { kind: 'OBJECT', name: 'PluginAuthState', ofType: null, __proto__: null },
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'pluginDashboards',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'PluginDashboard', kind: 'OBJECT', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'pluginScreen',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'PluginScreenData', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'screenId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'plugins',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'PluginInfo', kind: 'OBJECT', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
 						name: 'user',
 						type: {
 							kind: 'NON_NULL',
@@ -1956,30 +2248,6 @@ export const schema = {
 								}
 							}
 						]
-					},
-					{
-						name: 'youtubeAuth',
-						type: { kind: 'OBJECT', name: 'YoutubeAuth', ofType: null, __proto__: null },
-						args: []
-					},
-					{
-						name: 'youtubeDashboard',
-						type: {
-							kind: 'LIST',
-							ofType: {
-								kind: 'NON_NULL',
-								ofType: { name: 'YoutubeCard', kind: 'OBJECT', ofType: null, __proto__: null }
-							}
-						},
-						args: []
-					},
-					{
-						name: 'youtubeScreen',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'YoutubeScreen', kind: 'OBJECT', ofType: null, __proto__: null }
-						},
-						args: []
 					}
 				],
 				interfaces: []
@@ -2178,104 +2446,6 @@ export const schema = {
 						defaultValue: void 0
 					}
 				]
-			},
-			{
-				kind: 'OBJECT',
-				name: 'YoutubeAuth',
-				fields: [
-					{
-						name: 'status',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'userCode',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'verificationUrl',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					}
-				],
-				interfaces: []
-			},
-			{
-				kind: 'OBJECT',
-				name: 'YoutubeCard',
-				fields: [
-					{
-						name: 'actionJson',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'appName',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'id',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'image',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'subtitle',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					},
-					{
-						name: 'title',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
-						args: []
-					}
-				],
-				interfaces: []
-			},
-			{
-				kind: 'OBJECT',
-				name: 'YoutubeScreen',
-				fields: [
-					{
-						name: 'json',
-						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
-						args: []
-					}
-				],
-				interfaces: []
 			}
 		],
 		directives: []

@@ -4,6 +4,7 @@
 	import { fade } from 'svelte/transition';
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
+	import { stopSubscription } from '#lib/api/subscription';
 	import { pluginActionSchema, pluginActionHref } from '#lib/plugins/dashboard';
 	import PairingQr from '#lib/components/PairingQr.svelte';
 	import HeroBanner from '#lib/components/HeroBanner.svelte';
@@ -15,11 +16,26 @@
 	import AppsRow from '#lib/components/AppsRow.svelte';
 	import { getPairing } from '#lib/state/pairing.svelte';
 
-	// The one real installed plugin — see plugins/youtube/manifest.ts. A
-	// generic plugin registry (listing whatever's actually installed) is the
-	// eventual real source for this; hardcoded here since there's exactly
-	// one plugin to hardcode.
-	const apps = [{ id: 'youtube', name: 'YouTube', href: '/apps/youtube' }];
+	// Every installed plugin, whatever it implements -- one that only provides
+	// a screen (or nothing but playback) still gets its tile in the apps row.
+	// Live, since plugins are installed and removed from the paired phone while
+	// this page is open. Copied into plain objects for the reason explained at
+	// cardsByPluginId below.
+	type InstalledPlugin = { id: string; name: string };
+	const toInstalled = (plugins: readonly InstalledPlugin[]): InstalledPlugin[] =>
+		plugins.map(({ id, name }) => ({ id, name }));
+	const PLUGIN_FIELDS = { id: true, name: true } as const;
+
+	let installedPlugins = $state<InstalledPlugin[]>(
+		toInstalled((await client.liveQuery.plugins(PLUGIN_FIELDS)) ?? [])
+	);
+	const apps = $derived(
+		installedPlugins.map((plugin) => ({
+			id: plugin.id,
+			name: plugin.name,
+			href: appHref(plugin.id)
+		}))
+	);
 
 	const me = await client.liveQuery.me({
 		id: true,
@@ -33,50 +49,48 @@
 	// scope its own type annotation would otherwise need to reference.
 	type Profile = NonNullable<typeof me>;
 
-	// Real plugin-sourced data (see src/api/handlers/youtube.ts), alongside
+	// Real plugin-sourced data (see src/api/handlers/plugins.ts), alongside
 	// the placeholder rows below — proves the Tier 1 dashboard contract
-	// (src/lib/plugins/dashboard.ts) actually reaches the real UI. The
-	// initial value comes from this top-level await (so SSR still renders
-	// real content, not a loading flash); a real push subscription — not a
-	// polling setInterval — keeps it live afterward, since urql's
-	// cache-first default otherwise hides the fact a plain repeated query
-	// never actually sees server-side changes.
-	type YoutubeCard = {
+	// (src/lib/plugins/dashboard.ts) actually reaches the real UI. Only
+	// plugins that declare a dashboard show up here at all. The initial value
+	// comes from this top-level await (so SSR still renders real content, not
+	// a loading flash); a real push subscription — not a polling setInterval
+	// — keeps it live afterward, since urql's cache-first default otherwise
+	// hides the fact a plain repeated query never actually sees server-side
+	// changes.
+	type PluginCard = {
 		id: string;
 		title: string;
 		subtitle: string;
 		image: string;
-		appName: string;
 		actionJson: string;
 	};
-	const YOUTUBE_CARD_FIELDS = {
-		id: true,
-		title: true,
-		subtitle: true,
-		image: true,
-		appName: true,
-		actionJson: true
+	// A card plus which plugin it came from.
+	type AppCard = PluginCard & { pluginId: string; appName: string };
+	const DASHBOARD_FIELDS = {
+		pluginId: true,
+		pluginName: true,
+		cards: { id: true, title: true, subtitle: true, image: true, actionJson: true }
 	} as const;
 
-	// Where a card's own app lives — the same "which app this card is from"
-	// question the source badge already answers, so this doesn't need
-	// generalizing further until a second plugin's cards show up alongside it.
-	const YOUTUBE_APP_HREF = '/apps/youtube';
-	function cardHref(card: YoutubeCard): string {
+	function appHref(pluginId: string): string {
+		return `/apps/${encodeURIComponent(pluginId)}`;
+	}
+	function cardHref(card: AppCard): string {
 		return pluginActionHref(
-			'youtube',
-			YOUTUBE_APP_HREF,
+			card.pluginId,
+			appHref(card.pluginId),
 			pluginActionSchema.parse(JSON.parse(card.actionJson))
 		);
 	}
-	// `null` means the plugin hasn't published a dashboard at all yet (still
-	// activating -- see resolveDashboard's comment in
-	// src/api/handlers/youtube.ts), distinct from `[]` (published, genuinely
-	// nothing to show). That race is real even for this top-level await: SSR
-	// can render before the plugin's first refresh() finishes, same as any
-	// other request.
+
+	// `null` cards means that plugin hasn't published a dashboard at all yet
+	// (still activating -- see PluginDashboard in src/api/handlers/plugins.ts),
+	// distinct from `[]` (published, genuinely nothing to show). That race is
+	// real even for this top-level await: SSR can render before a plugin's
+	// first refresh() finishes, same as any other request.
 	//
-	// Copied into a plain array rather than assigned directly: what
+	// Copied into plain objects/arrays rather than assigned directly: what
 	// liveQuery resolves to (and what .subscribe()'s callback hands back) is
 	// a memoized Proxy over rumble's own internal, mutable "current data"
 	// slot — the SAME object reference on every emission for a given call.
@@ -84,56 +98,72 @@
 	// reactivity, so later pushes through that proxy could silently fail to
 	// invalidate $derived state depending on it (observed: the hero staying
 	// stuck on its very first value while the shelf below kept updating).
-	// Spreading into a fresh array each time guarantees a new reference.
-	const initialYoutubeDashboard = await client.liveQuery.youtubeDashboard(YOUTUBE_CARD_FIELDS);
-	let youtubeCards = $state<YoutubeCard[] | null>(
-		initialYoutubeDashboard ? [...initialYoutubeDashboard] : null
+	// Copying into fresh values each time guarantees a new reference.
+	type DashboardResult = { pluginId: string; pluginName: string; cards?: PluginCard[] | null }[];
+	function cardsByPluginId(dashboards: DashboardResult): Record<string, AppCard[] | null> {
+		return Object.fromEntries(
+			dashboards.map((d) => [
+				d.pluginId,
+				d.cards
+					? d.cards.map((card) => ({
+							...card,
+							pluginId: d.pluginId,
+							appName: d.pluginName
+						}))
+					: null
+			])
+		);
+	}
+
+	const initialDashboards = await client.liveQuery.pluginDashboards(DASHBOARD_FIELDS);
+	let cardsByAppId = $state<Record<string, AppCard[] | null>>(
+		cardsByPluginId(initialDashboards as DashboardResult)
 	);
 	onMount(() => {
 		// .subscribe() returns an ES Observable Subscription object
 		// (.unsubscribe()), not a plain unsubscribe function — returning it
 		// directly as onMount's cleanup throws "not a function" the moment
 		// Svelte actually calls it (client-side navigation away from /home).
-		const subscription = client.liveQuery
-			.youtubeDashboard(YOUTUBE_CARD_FIELDS)
-			.subscribe((value) => {
-				youtubeCards = value ? [...value] : null;
-			});
-		return () => subscription.unsubscribe();
+		const dashboards = client.liveQuery.pluginDashboards(DASHBOARD_FIELDS).subscribe((value) => {
+			cardsByAppId = cardsByPluginId(value as DashboardResult);
+		});
+		const plugins = client.liveQuery.plugins(PLUGIN_FIELDS).subscribe((value) => {
+			installedPlugins = toInstalled(value ?? []);
+		});
+		return () => {
+			stopSubscription(dashboards);
+			stopSubscription(plugins);
+		};
 	});
 
-	// Each app's contributed cards, keyed by app id — the one thing here
-	// that's still hardcoded, since youtubeDashboard is the only per-plugin
-	// query that exists today (see plugins/dashboard.ts's dashboardContributionSchema
-	// comment: a generic aggregator is the eventual real source). Everything
-	// downstream of this map — which rows render skeleton/placeholder/real
-	// content — is generic over however many entries end up in it.
-	const cardsByAppId = $derived<Record<string, YoutubeCard[] | null>>({ youtube: youtubeCards });
-
+	// An app with no entry in cardsByAppId doesn't have a dashboard at all
+	// (never declared the tier), which is different from one that has but
+	// hasn't published yet (entry is null). The former is just left out of
+	// the shelves below instead of showing a skeleton forever.
 	// Whatever the first app-with-cards' top-ranked card happens to be
 	// becomes the hero — generic over whichever plugin's cards these are, so
 	// this doesn't need touching as more plugins start contributing cards.
 	// Pulled out of its row so it isn't shown twice.
 	const heroCard = $derived(apps.map((app) => cardsByAppId[app.id]?.[0]).find(Boolean));
 
-	function isHeroCard(cards: YoutubeCard[] | null, heroCard: YoutubeCard | undefined): boolean {
+	function isHeroCard(cards: AppCard[] | null, heroCard: AppCard | undefined): boolean {
 		if (!cards || cards.length === 0 || !heroCard) return false;
 		return cards[0].id === heroCard.id;
 	}
 
-	function hasCards(cards: YoutubeCard[] | null): boolean {
+	function hasCards(cards: AppCard[] | null): boolean {
 		return !!cards && cards.length > 0;
 	}
 
-	function shelfCardsFor(cards: YoutubeCard[] | null, isHero: boolean): YoutubeCard[] {
+	function shelfCardsFor(cards: AppCard[] | null, isHero: boolean): AppCard[] {
 		if (!cards) return [];
 		return isHero ? cards.slice(1) : cards;
 	}
 
 	function appRowFor(
 		app: (typeof apps)[number],
-		cards: YoutubeCard[] | null,
-		heroCard: YoutubeCard | undefined
+		cards: AppCard[] | null,
+		heroCard: AppCard | undefined
 	) {
 		const isHero = isHeroCard(cards, heroCard);
 		return {
@@ -150,7 +180,11 @@
 	// still loading gets a skeleton; one that settled with zero cards gets an
 	// explanatory placeholder instead of a row titled "Suggested on {app}"
 	// for content that doesn't exist.
-	const appRows = $derived(apps.map((app) => appRowFor(app, cardsByAppId[app.id], heroCard)));
+	const appRows = $derived(
+		apps
+			.filter((app) => app.id in cardsByAppId)
+			.map((app) => appRowFor(app, cardsByAppId[app.id], heroCard))
+	);
 
 	// True once every app has published something (even an empty result) --
 	// used to decide whether a missing hero means "still loading" or "no app
@@ -172,7 +206,7 @@
 		// +layout.svelte tags dynamically), and the picker shows many avatars
 		// at once so it can't just tag one unconditionally the way the PIN and
 		// home pages (each showing only one) already do.
-		window.location.href = `/?from=${encodeURIComponent(me.id)}`;
+		window.location.href = `/?from=${encodeURIComponent(me?.id ?? '')}`;
 	}
 
 	// Same short-lived-token refresh as the profile-select screen — the

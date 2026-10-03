@@ -1,54 +1,32 @@
 // Resolves a video id to a directly playable stream via yt-dlp — the
 // extraction tool SKETCH.md's "YouTube" decision already commits to,
-// reused here through yt-dlp-wrap (a thin wrapper spawning the actual
-// yt-dlp binary) rather than a pure-JS re-implementation of YouTube's
+// reused here as a subprocess rather than a pure-JS re-implementation of YouTube's
 // extraction logic, which is exactly the kind of native tool the "Reuse
 // strategy for plugins" decision calls for.
 //
-// yt-dlp-wrap doesn't ship the binary itself, only expects one already on
-// PATH — rather than making that a manual install step, this downloads it
-// once (yt-dlp-wrap's own downloadFromGithub helper) into a local cache and
-// reuses it from there on every subsequent call.
-//
-// PIVI_YTDLP_BINARY opts out of that entirely and points at an
-// already-installed binary. Packaged installs need it: the download target is
-// resolved relative to this file, which for the Nix package (see nix/) lives
-// in a read-only store path, and a packaged build would rather pin yt-dlp as
-// a declared dependency than fetch a binary from GitHub at first play.
+// The binary is part of the plugin image (see Dockerfile), not downloaded at
+// runtime: the sandbox only lets this plugin reach the domains its manifest
+// lists, and fetching a release from GitHub on first play isn't one of them.
+// PIVI_YTDLP_BINARY overrides where it's found.
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import YTDlpWrap from 'yt-dlp-wrap';
+import { promisify } from 'node:util';
 import type { ResolvedStream, SubtitleTrack } from '#lib/plugins/host';
 
-const PROVIDED_BINARY = process.env.PIVI_YTDLP_BINARY;
+const BINARY = process.env.PIVI_YTDLP_BINARY ?? 'yt-dlp';
 
-const BINARY_PATH =
-	PROVIDED_BINARY ||
-	fileURLToPath(
-		new URL(`../../.cache/yt-dlp${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url)
-	);
+// yt-dlp keeps a cache (extractor state, signature solvers). It goes in the
+// plugin's disposable cache volume when it has one, and nowhere otherwise.
+const CACHE_ARGS = existsSync('/cache') ? ['--cache-dir', '/cache/yt-dlp'] : ['--no-cache-dir'];
 
-let ytDlp: Promise<YTDlpWrap> | undefined;
+const execFileAsync = promisify(execFile);
 
-function getYtDlp(): Promise<YTDlpWrap> {
-	if (!ytDlp) {
-		ytDlp = (async () => {
-			if (PROVIDED_BINARY) {
-				// Fail loudly here rather than on the first extraction: a
-				// misconfigured path is a deployment mistake, not a video that
-				// happens not to play.
-				if (!existsSync(PROVIDED_BINARY)) {
-					throw new Error(`PIVI_YTDLP_BINARY is set to ${PROVIDED_BINARY}, which does not exist`);
-				}
-			} else if (!existsSync(BINARY_PATH)) {
-				await mkdir(new URL('../../.cache/', import.meta.url), { recursive: true });
-				await YTDlpWrap.downloadFromGithub(BINARY_PATH);
-			}
-			return new YTDlpWrap(BINARY_PATH);
-		})();
-	}
-	return ytDlp;
+// yt-dlp's -j output for one video is a few hundred KB of JSON.
+const MAX_OUTPUT_BYTES = 64 << 20;
+
+async function runYtDlp(args: string[]): Promise<string> {
+	const { stdout } = await execFileAsync(BINARY, args, { maxBuffer: MAX_OUTPUT_BYTES });
+	return stdout;
 }
 
 // A subset of yt-dlp's own `-j` (dump single JSON) output — only the fields
@@ -177,8 +155,7 @@ function extractTracks(videoId: string, info: YtDlpInfo) {
 }
 
 export async function resolveStream(videoId: string, maxHeight?: number): Promise<ResolvedStream> {
-	const wrap = await getYtDlp();
-	const output = await wrap.execPromise([
+	const output = await runYtDlp([
 		`https://www.youtube.com/watch?v=${videoId}`,
 		'-f',
 		formatSelector(maxHeight),
@@ -192,8 +169,7 @@ export async function resolveStream(videoId: string, maxHeight?: number): Promis
 		// per-request round trip).
 		'--js-runtimes',
 		'bun',
-		'--remote-components',
-		'ejs:github'
+		...CACHE_ARGS
 	]);
 	const info = JSON.parse(output.trim()) as YtDlpInfo;
 	const { video, audio } = extractTracks(videoId, info);

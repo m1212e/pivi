@@ -43,8 +43,18 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
 - **Plugin depth**: full plugin runtime/SDK (real TypeScript packages with a
   defined API), not a lightweight manifest-pointing-at-a-URL model — required
   because navigation/gestures must be consistent across apps.
-- **Plugin distribution**: local sideload / git-based install for now (like
-  Homebridge or HACS). A real hosted store/registry is a later milestone.
+- **Plugin distribution — an OCI image per plugin.** A plugin is an image
+  reference written like a docker-compose `image:` (bare/`owner/name` is
+  Docker Hub, anything else names its registry: `ghcr.io/owner/name:1.2`).
+  The host never builds anything. The manifest ships as an image label
+  (`dev.pivi.manifest`), readable from the registry before any layer is
+  pulled, so the install screen shows what's being asked for first. Images
+  must be signed (cosign); the signer's identity is pinned at install and an
+  update signed by anyone else isn't applied. Updates re-resolve the tag to
+  a digest; one that adds a permission or a domain waits for the user's
+  approval, anything else is applied (and rolled back by re-pinning the
+  previous digest if it fails to start). Authors publish multi-arch images
+  (arm64 for the Pi). A hosted store is still a later milestone.
 - **Plugin UI composition — three tiers, shell always renders.** Plugins
   never hand the shell raw markup or CSS. Tier 1: typed dashboard data (home
   cards, continue-watching items) rendered by the shell's existing
@@ -63,17 +73,31 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
   focus-visible styling, or exfiltrate data via `url()`. Free-form CSS
   stays out of scope until a concrete plugin needs it, and would need
   sanitization, not blind trust, even then.
-- **Plugin sandboxing — one child process per plugin, RPC boundary,
-  capability manifest.** Plugins run as separate Node/Deno child processes
-  talking to the trusted host over RPC (the VS Code extension-host model),
-  not in-process (`vm`/`vm2`-style sandboxes are too weak — `vm2`
-  specifically has unresolved CVEs). Each plugin declares required
-  capabilities in its manifest (network domains, credential storage,
-  exclusive display/input); the host grants only what's declared. No
-  filesystem capability exists at all — a plugin has no legitimate need to
-  read/write arbitrary paths, so it's not offered as an option to grant.
-  This model also gives crash isolation for free — a broken plugin can't
-  take down the shell or other plugins.
+- **Plugin sandboxing — untrusted OCI image, stdio protocol, user-granted
+  permissions.** Plugins can be written in any language: the contract is
+  JSON-RPC 2.0 over the container entrypoint's stdin/stdout, one JSON
+  message per line (stderr is logs), with schemas published as JSON Schema.
+  No ports and no path back to the host are exposed to the plugin. The
+  manifest requests `permissions` from a fixed enum the user toggles —
+  `network` (all of the manifest's declared domains together, nothing else:
+  not other domains, the LAN, localhost or the host), `storage` (persistent
+  `/storage`, per plugin and profile, not encrypted) and `cache` (disposable
+  `/cache`, host may wipe it) — plus `features` saying what it implements
+  (dashboard, screen, playback, skipSegments, auth), so the host only calls
+  what was declared. The host never fetches a URL a plugin returns unless
+  its host is within that plugin's declared domains and resolves to a public
+  address. Backend: microsandbox (KVM microVMs; libkrun), behind a small
+  `SandboxBackend` interface. Findings that shaped it: domain rules need TLS
+  interception (the Host header is only inspected then — without it a
+  CDN-fronted request to another site passes through an allowed IP), and
+  runtimes that carry their own CA list (certifi, PyInstaller builds) must be
+  made to use the system store; the guest's own DNS is filtered, so raw IPs and
+  unlisted names don't resolve or connect; `/cache` is a disk-backed volume, not
+  tmpfs (RAM); stdin writes are capped at 4 MiB per frame so the host chunks
+  them; a killed VM's stream ends with no `exited` event. Verified on x86_64
+  (including a real signed image end to end); Pi 4/5 KVM and the NixOS package
+  are unverified. Signatures are cosign key-based only — keyless isn't verified.
+  Full reference: `docs/plugins.md`. This model also gives crash isolation for free.
 - **Exclusive/passthrough sessions — a fourth capability, not a UI tier.**
   Some plugins need direct hardware access instead of shell-mediated
   rendering/input: game streaming (Moonlight/Sunshine) and playback itself.
@@ -153,13 +177,14 @@ A fully custom Chromecast/Apple-TV-alternative platform built on Raspberry Pi.
 
 ### Plugin runtime
 
-- Node.js/TypeScript host process, loading plugins as local packages
-  (git-clone/npm-link style install, versioned via package.json)
-- Each plugin runs in its own child process (Node or Deno), talking to the
-  host over an RPC channel — see the sandboxing decision above. Contract
+- Node.js/TypeScript host process, running each plugin as a sandboxed OCI
+  container (see the distribution and sandboxing decisions above; `plugins/youtube`
+  is the first one, built as an image with `bun run plugin:build`)
+- Each plugin talks to the host over JSON-RPC on stdio. Contract
   types for that channel live in `src/lib/plugins/`:
-  - `manifest.ts` — `PluginManifest`/`PluginCapability`, read at install
-    time to decide what a plugin's process is allowed to touch
+  - `manifest.ts` — `PluginManifest`, the permission/feature enums and
+    domain rules, read at install time to decide what a plugin may touch
+  - `imageRef.ts` — compose-style image reference parsing
   - `dashboard.ts` — Tier 1 `HomeCard`/`DashboardContribution`, shaped to
     match the existing `ContinueWatchingRow`/`PosterRow`/`AppsRow`
     components

@@ -1,10 +1,12 @@
 {
   lib,
+  stdenv,
   stdenvNoCC,
   bun,
   nodejs,
   makeWrapper,
-  yt-dlp,
+  autoPatchelfHook,
+  libcap_ng,
   cacert,
 }:
 
@@ -119,7 +121,9 @@ let
     };
   };
 in
-stdenvNoCC.mkDerivation {
+# stdenv rather than stdenvNoCC: autoPatchelfHook needs the toolchain to know which
+# dynamic loader to point binaries at.
+stdenv.mkDerivation {
   pname = "pivi";
   inherit version;
 
@@ -132,7 +136,6 @@ stdenvNoCC.mkDerivation {
       ../vite.config.ts
       ../drizzle.config.ts
       ../src
-      ../plugins
       ../static
       ../messages
       # Referenced by relative path from project.inlang/settings.json — see
@@ -148,6 +151,16 @@ stdenvNoCC.mkDerivation {
     bun
     nodejs
     makeWrapper
+    autoPatchelfHook
+  ];
+
+  # What the prebuilt native binaries in node_modules link against — the
+  # sandbox runtime (microsandbox: `msb`, libkrunfw and the Node addon) is
+  # shipped as platform-specific ELF files built for a conventional Linux, so
+  # they need their interpreter and library paths rewritten to store paths.
+  buildInputs = [
+    stdenv.cc.cc.lib
+    libcap_ng
   ];
 
   dontConfigure = true;
@@ -202,16 +215,16 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out/share/pivi
 
     # Layout is load-bearing, not cosmetic:
-    #   - build/ and plugins/ must stay siblings: the plugin host resolves
-    #     entry points as `../../../plugins/<id>/main.ts` relative to its own
-    #     bundled chunk (src/api/plugins/manager.ts).
     #   - node_modules must sit at share/pivi/: the adapter-node output is not
-    #     a self-contained bundle, and the plugin child processes resolve
-    #     their imports by walking up from plugins/<id>/.
+    #     a self-contained bundle, and resolves its imports by walking up from
+    #     build/.
     #   - src/ + drizzle.config.ts + tsconfig.json are what `pivi-db-push`
     #     needs (the schema is pushed from src/api/db/schema.ts; the repo has
     #     no migration files).
-    cp -R build deploy plugins src $out/share/pivi/
+    #
+    # Plugins are not part of this package: each is an OCI image the user
+    # installs at runtime (see docs/plugins.md), run in a microVM.
+    cp -R build deploy src $out/share/pivi/
     cp package.json drizzle.config.ts tsconfig.json $out/share/pivi/
 
     # The runtime tree, not the one the build just used.
@@ -224,9 +237,7 @@ stdenvNoCC.mkDerivation {
     # resolves that from its own module URL), so the unit is free to point the
     # working directory at a writable state dir instead of the store.
     makeWrapper ${nodejs}/bin/node $out/bin/pivi-server \
-      --add-flags $out/share/pivi/deploy/pivi-server.mjs \
-      --prefix PATH : ${lib.makeBinPath [ bun ]} \
-      --set-default PIVI_YTDLP_BINARY ${yt-dlp}/bin/yt-dlp
+      --add-flags $out/share/pivi/deploy/pivi-server.mjs
 
     # The drizzle-kit binary is addressed by path, not via `bun x`: `bun x`
     # would fall back to fetching the package from the network when resolution

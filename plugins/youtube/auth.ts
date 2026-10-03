@@ -7,7 +7,6 @@
 import type { DeviceAndUserCode } from 'youtubei.js';
 import { publishAuthNotification } from '#lib/plugins/host';
 import { deviceCodeAuthSchema } from '#lib/plugins/auth';
-import { manifest } from './manifest';
 import { connection } from './connection';
 import { innertube } from './innertube';
 
@@ -15,7 +14,6 @@ function publish(data: DeviceAndUserCode, status: 'pending' | 'complete' | 'expi
 	connection.sendNotification(
 		publishAuthNotification,
 		deviceCodeAuthSchema.parse({
-			pluginId: manifest.id,
 			verificationUrl: data.verification_url,
 			userCode: data.user_code,
 			expiresInSeconds: data.expires_in,

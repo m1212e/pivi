@@ -67,8 +67,9 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 	])
 );
 
+// No plugin id: the host knows which plugin it's talking to, and a plugin
+// naming one itself would only be a way to claim to be another.
 export const pluginScreenSchema = z.object({
-	pluginId: z.string(),
 	screenId: z.string(),
 	theme: pluginThemeSchema.optional(),
 	root: uiNodeSchema

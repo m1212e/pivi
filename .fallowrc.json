@@ -40,7 +40,13 @@
 	// index.ts imports the drizzle wrapper, never `pg` by name), and
 	// `@tailwindcss/typography` is pulled in via a CSS `@plugin` directive
 	// (src/routes/layout.css), not a JS/TS import.
-	"ignoreDependencies": ["pg", "@tailwindcss/typography"],
+	//
+	// And `vscode-jsonrpc` / `zod`, which plugins/youtube/package.json lists for
+	// the plugin image's build (see its Dockerfile): they're imported by the
+	// shared protocol code in src/lib that gets bundled into the image, never by
+	// the plugin's own files, so that manifest can't be seen using them. Both are
+	// real dependencies of the app itself too.
+	"ignoreDependencies": ["pg", "@tailwindcss/typography", "vscode-jsonrpc", "zod"],
 	"duplicates": {
 		// Hide pair-only clones; focus on widespread copy-paste
 		// worth refactoring. Lower to 2 to report every duplicate pair.

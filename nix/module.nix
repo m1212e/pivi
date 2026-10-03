@@ -95,6 +95,21 @@ in
       description = "Writable directory for the service's own state.";
     };
 
+    sandbox = {
+      home = lib.mkOption {
+        type = lib.types.path;
+        default = "${cfg.stateDir}/sandbox";
+        defaultText = lib.literalExpression ''"''${config.services.pivi.stateDir}/sandbox"'';
+        description = ''
+          Where the plugin sandbox keeps its downloaded images, volumes (each
+          plugin's storage and cache) and per-sandbox sockets.
+
+          Keep this path short: the sandbox runtime derives unix socket paths
+          from it, and the kernel limits those to 107 bytes.
+        '';
+      };
+    };
+
     database = {
       createLocally = lib.mkOption {
         type = lib.types.bool;
@@ -247,10 +262,18 @@ in
         assertion = cfg.database.createLocally -> cfg.database.name == "pivi";
         message = "services.pivi: database.name must be \"pivi\" when database.createLocally is set; point database.url at an externally managed database to use a different name.";
       }
+      {
+        # The sandbox runtime builds unix socket paths under this directory, and
+        # the kernel rejects any over 107 bytes; the runtime adds roughly 50.
+        assertion = builtins.stringLength (toString cfg.sandbox.home) <= 55;
+        message = "services.pivi: sandbox.home is too long (the sandbox runtime's socket paths would exceed the 107-byte unix socket limit); use a shorter path.";
+      }
     ];
 
     users.users.pivi = {
       isSystemUser = true;
+      # The sandbox runs plugins as KVM guests, which needs /dev/kvm.
+      extraGroups = [ "kvm" ];
       group = "pivi";
       home = cfg.stateDir;
     };
@@ -325,10 +348,12 @@ in
       environment = {
         DATABASE_URL = databaseUrl;
         NODE_ENV = "production";
-        # bun wants a home directory — the plugin host spawns it per plugin
-        # (src/api/plugins/manager.ts) and pivi-db-push runs under it. ProtectHome
+        # bun wants a home directory (pivi-db-push runs under it). ProtectHome
         # makes the real one unreachable, so point it at the state dir.
         HOME = cfg.stateDir;
+        # Plugins run as OCI images in microVMs (src/api/plugins/sandbox); this is
+        # where the runtime keeps its state.
+        PIVI_SANDBOX_HOME = toString cfg.sandbox.home;
         PIVI_HOST = "127.0.0.1";
         PIVI_PORT = toString cfg.port;
         PIVI_REMOTE_PORT = toString cfg.remote.port;

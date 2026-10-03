@@ -454,13 +454,13 @@ export function registerPhoneFrameHandler(handler: PhoneFrameHandler) {
 }
 
 // A phone sends remote/move many times a second while a thumb is down, so
-// every frame paying a JSON.parse just to discover it isn't a wifi frame would
-// be waste. This substring test is the cheap pre-filter; only a candidate gets
-// parsed.
-const SERVER_HANDLED_MARKER = '"wifi/';
+// every frame paying a JSON.parse just to discover it isn't a server-handled
+// one (wifi, plugin management) would be waste. This substring test is the
+// cheap pre-filter; only a candidate gets parsed.
+const SERVER_HANDLED_MARKERS = ['"wifi/', '"plugins/'];
 
 function handledHere(plaintext: string): boolean {
-	if (!plaintext.includes(SERVER_HANDLED_MARKER)) return false;
+	if (!SERVER_HANDLED_MARKERS.some((marker) => plaintext.includes(marker))) return false;
 	const frame = parseNotification(plaintext);
 	if (!frame) return false;
 	return [...phoneFrameHandlers].some((handler) => handler(frame.method, frame.params));

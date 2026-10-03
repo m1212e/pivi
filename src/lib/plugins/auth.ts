@@ -4,7 +4,6 @@
 import { z } from 'zod';
 
 export const deviceCodeAuthSchema = z.object({
-	pluginId: z.string(),
 	verificationUrl: z.string(),
 	// If the service supports it, encode this straight into the QR instead
 	// of the plain verificationUrl, so scanning skips the code-entry step.
@@ -21,9 +20,8 @@ export const deviceCodeAuthSchema = z.object({
 // CSRF nonce (round-tripped through the redirect so it can verify the
 // callback matches the flow it started); the host also uses it to route
 // the resulting code back to the right plugin (see
-// src/api/plugins/pendingAuth.ts) so it's namespaced with the plugin id.
+// src/routes/oauth/callback) so it's namespaced with the plugin id.
 export const phoneAuthHandoffSchema = z.object({
-	pluginId: z.string(),
 	loginUrl: z.string(),
 	redirectUrl: z.string(),
 	state: z.string(),

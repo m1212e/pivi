@@ -71,11 +71,17 @@ install` needs network access, which a normal derivation doesn't get), so its
    sources even though they're right there on disk.
 
 The package installs to `share/pivi/`, where the layout is load-bearing:
-`build/` and `plugins/` must stay siblings (the plugin host resolves entry
-points relative to its own bundled chunk — `src/api/plugins/manager.ts`), and
-`node_modules` must sit beside both, because the adapter-node output is _not_ a
-self-contained bundle and the plugin child processes resolve their imports by
-walking up from `plugins/<id>/`.
+`build/` and `node_modules` must sit beside each other, because the
+adapter-node output is _not_ a self-contained bundle and resolves its imports by
+walking up from `build/`. Plugins are not part of the package at all: each is an
+OCI image installed at runtime from the phone (see `docs/plugins.md`).
+
+The sandbox runtime inside `node_modules` (the `microsandbox` package: `msb`,
+`libkrunfw` and the Node addon) is prebuilt for a conventional Linux, so
+`autoPatchelfHook` in `nix/package.nix` rewrites its interpreter and library
+paths. Running plugins also needs `/dev/kvm` — the module puts the `pivi` user in
+the `kvm` group and points `PIVI_SANDBOX_HOME` at a short directory under the
+state dir. Both are untested on a real Pi 4/5 image.
 
 Two binaries come out: `pivi-server` and `pivi-db-push`.
 

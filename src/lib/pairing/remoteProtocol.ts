@@ -1,5 +1,6 @@
 import { NotificationType, NotificationType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
+import { featureSchema, permissionKeySchema } from '#lib/plugins/manifest';
 
 // Phone -> TV
 
@@ -249,3 +250,118 @@ export const wifiStateParamsSchema = z.object({
 export const wifiStateNotification = new NotificationType<z.infer<typeof wifiStateParamsSchema>>(
 	'wifi/state'
 );
+
+// Plugin management (phone -> host). Like the wifi notifications, these are
+// answered by the *server* (src/api/pluginCommands.ts) rather than relayed to the
+// TV's browser: installing code and deciding what it may do is exactly the kind
+// of operation that must only ever come over the paired, encrypted connection,
+// never from the unauthenticated page on the TV.
+
+export const pluginsRequestStateNotification = new NotificationType0('plugins/requestState');
+
+// Resolve an image and check its signature, without installing anything — the
+// answer is what the phone shows for the user to accept.
+export const pluginsPreviewParamsSchema = z.object({
+	image: z.string().min(1),
+	// The publisher's cosign public key (PEM): what the image has to be signed by.
+	publicKey: z.string().min(1)
+});
+export const pluginsPreviewNotification = new NotificationType<
+	z.infer<typeof pluginsPreviewParamsSchema>
+>('plugins/preview');
+
+export const pluginsInstallParamsSchema = pluginsPreviewParamsSchema.extend({
+	// The permissions the user left switched on.
+	granted: z.array(permissionKeySchema)
+});
+export const pluginsInstallNotification = new NotificationType<
+	z.infer<typeof pluginsInstallParamsSchema>
+>('plugins/install');
+
+export const pluginsDismissPreviewNotification = new NotificationType0('plugins/dismissPreview');
+
+export const pluginIdParamsSchema = z.object({ pluginId: z.string() });
+export const pluginsUninstallNotification = new NotificationType<
+	z.infer<typeof pluginIdParamsSchema>
+>('plugins/uninstall');
+export const pluginsApproveUpdateNotification = new NotificationType<
+	z.infer<typeof pluginIdParamsSchema>
+>('plugins/approveUpdate');
+export const pluginsRejectUpdateNotification = new NotificationType<
+	z.infer<typeof pluginIdParamsSchema>
+>('plugins/rejectUpdate');
+export const pluginsClearCacheNotification = new NotificationType<
+	z.infer<typeof pluginIdParamsSchema>
+>('plugins/clearCache');
+export const pluginsCheckUpdatesNotification = new NotificationType0('plugins/checkUpdates');
+
+export const pluginsSetEnabledParamsSchema = pluginIdParamsSchema.extend({ enabled: z.boolean() });
+export const pluginsSetEnabledNotification = new NotificationType<
+	z.infer<typeof pluginsSetEnabledParamsSchema>
+>('plugins/setEnabled');
+
+export const pluginsSetAutoUpdateParamsSchema = pluginIdParamsSchema.extend({
+	autoUpdate: z.boolean()
+});
+export const pluginsSetAutoUpdateNotification = new NotificationType<
+	z.infer<typeof pluginsSetAutoUpdateParamsSchema>
+>('plugins/setAutoUpdate');
+
+export const pluginsSetPermissionParamsSchema = pluginIdParamsSchema.extend({
+	permission: permissionKeySchema,
+	granted: z.boolean()
+});
+export const pluginsSetPermissionNotification = new NotificationType<
+	z.infer<typeof pluginsSetPermissionParamsSchema>
+>('plugins/setPermission');
+
+// Host -> phone
+
+const pluginPermissionSchema = z.object({ key: permissionKeySchema, granted: z.boolean() });
+
+const pluginUpdateSchema = z.object({
+	version: z.string(),
+	addedPermissions: z.array(permissionKeySchema),
+	addedDomains: z.array(z.string())
+});
+
+const installedPluginSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	version: z.string(),
+	image: z.string(),
+	enabled: z.boolean(),
+	autoUpdate: z.boolean(),
+	features: z.array(featureSchema),
+	permissions: z.array(pluginPermissionSchema),
+	// What the `network` permission covers, verbatim, so the user sees exactly
+	// which domains a single toggle opens up.
+	domains: z.array(z.string()),
+	signerFingerprint: z.string(),
+	// A newer version waiting for the user to approve what it asks for.
+	update: pluginUpdateSchema.nullable(),
+	error: z.string().nullable()
+});
+
+const pluginPreviewSchema = z.object({
+	image: z.string(),
+	name: z.string(),
+	version: z.string(),
+	features: z.array(featureSchema),
+	permissions: z.array(permissionKeySchema),
+	domains: z.array(z.string()),
+	signerFingerprint: z.string(),
+	conflict: z.boolean()
+});
+
+export const pluginsStateParamsSchema = z.object({
+	plugins: z.array(installedPluginSchema),
+	preview: pluginPreviewSchema.nullable(),
+	// What the host is in the middle of, so a phone that reloads (or a second
+	// one) shows the same thing as the one that asked.
+	busy: z.enum(['previewing', 'installing', 'checking', 'working']).nullable(),
+	error: z.string().nullable()
+});
+export const pluginsStateNotification = new NotificationType<
+	z.infer<typeof pluginsStateParamsSchema>
+>('plugins/state');

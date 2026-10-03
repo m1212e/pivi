@@ -40,6 +40,26 @@
 		stateParamsSchema,
 		textNotification,
 		textParamsSchema,
+		pluginIdParamsSchema,
+		pluginsApproveUpdateNotification,
+		pluginsCheckUpdatesNotification,
+		pluginsClearCacheNotification,
+		pluginsDismissPreviewNotification,
+		pluginsInstallNotification,
+		pluginsInstallParamsSchema,
+		pluginsPreviewNotification,
+		pluginsPreviewParamsSchema,
+		pluginsRejectUpdateNotification,
+		pluginsRequestStateNotification,
+		pluginsSetAutoUpdateNotification,
+		pluginsSetAutoUpdateParamsSchema,
+		pluginsSetEnabledNotification,
+		pluginsSetEnabledParamsSchema,
+		pluginsSetPermissionNotification,
+		pluginsSetPermissionParamsSchema,
+		pluginsStateNotification,
+		pluginsStateParamsSchema,
+		pluginsUninstallNotification,
 		wifiConnectNotification,
 		wifiConnectParamsSchema,
 		wifiRequestStateNotification,
@@ -49,6 +69,7 @@
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import PinPad from '#lib/components/PinPad.svelte';
+	import PluginManager, { type PluginActions } from '#lib/components/PluginManager.svelte';
 	import WifiSetup from '#lib/components/WifiSetup.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
@@ -63,6 +84,7 @@
 		Layers,
 		Pause,
 		Play,
+		Puzzle,
 		RotateCcw,
 		RotateCw,
 		Server,
@@ -160,6 +182,79 @@
 			hidden
 		});
 	}
+
+	// Plugin management state, pushed by the host rather than the TV (see
+	// src/api/pluginCommands.ts) — installing code is something only this paired
+	// phone may ask for. `null` until the first push arrives.
+	let plugins = $state<z.infer<typeof pluginsStateParamsSchema> | null>(null);
+	let pluginsOpen = $state(false);
+
+	function openPlugins() {
+		pluginsOpen = true;
+		connection?.sendNotification(pluginsRequestStateNotification);
+	}
+
+	// One entry per thing the sheet can ask for; each is a plain notification the
+	// host answers by pushing fresh state.
+	const pluginActions: PluginActions = {
+		preview: (image, publicKey) =>
+			connection &&
+			sendNotification(connection, pluginsPreviewNotification, pluginsPreviewParamsSchema, {
+				image,
+				publicKey
+			}),
+		install: (image, publicKey, granted) =>
+			connection &&
+			sendNotification(connection, pluginsInstallNotification, pluginsInstallParamsSchema, {
+				image,
+				publicKey,
+				granted
+			}),
+		dismissPreview: () => connection?.sendNotification(pluginsDismissPreviewNotification),
+		uninstall: (pluginId) =>
+			connection &&
+			sendNotification(connection, pluginsUninstallNotification, pluginIdParamsSchema, {
+				pluginId
+			}),
+		setEnabled: (pluginId, enabled) =>
+			connection &&
+			sendNotification(connection, pluginsSetEnabledNotification, pluginsSetEnabledParamsSchema, {
+				pluginId,
+				enabled
+			}),
+		setAutoUpdate: (pluginId, autoUpdate) =>
+			connection &&
+			sendNotification(
+				connection,
+				pluginsSetAutoUpdateNotification,
+				pluginsSetAutoUpdateParamsSchema,
+				{ pluginId, autoUpdate }
+			),
+		setPermission: (pluginId, permission, granted) =>
+			connection &&
+			sendNotification(
+				connection,
+				pluginsSetPermissionNotification,
+				pluginsSetPermissionParamsSchema,
+				{ pluginId, permission, granted }
+			),
+		approveUpdate: (pluginId) =>
+			connection &&
+			sendNotification(connection, pluginsApproveUpdateNotification, pluginIdParamsSchema, {
+				pluginId
+			}),
+		rejectUpdate: (pluginId) =>
+			connection &&
+			sendNotification(connection, pluginsRejectUpdateNotification, pluginIdParamsSchema, {
+				pluginId
+			}),
+		clearCache: (pluginId) =>
+			connection &&
+			sendNotification(connection, pluginsClearCacheNotification, pluginIdParamsSchema, {
+				pluginId
+			}),
+		checkUpdates: () => connection?.sendNotification(pluginsCheckUpdatesNotification)
+	};
 
 	const QUALITY_MODE_ICON = { direct: Zap, mse: Layers, ffmpeg: Server } as const;
 
@@ -481,6 +576,9 @@
 		// Also from the host directly, for the same reason as openUrl above: wifi
 		// is the device's own state, not the TV page's.
 		onNotification(connection, wifiStateNotification, wifiStateParamsSchema, onWifiState);
+		onNotification(connection, pluginsStateNotification, pluginsStateParamsSchema, (next) => {
+			plugins = next;
+		});
 		connection.listen();
 
 		connectRemoteSession(page.params.token ?? null, {
@@ -501,6 +599,7 @@
 				phase = 'ready';
 				connection?.sendNotification(requestStateNotification);
 				connection?.sendNotification(wifiRequestStateNotification);
+				connection?.sendNotification(pluginsRequestStateNotification);
 			})
 			.catch((err: unknown) => {
 				if (cancelled) return;
@@ -565,6 +664,14 @@
 			</button>
 		{/if}
 		<span class="flex items-center gap-2 justify-self-end text-xs text-white/50">
+			<button
+				type="button"
+				onclick={openPlugins}
+				aria-label={m.plugins_open()}
+				class="rounded-full bg-white/12 p-2 text-white/70 transition hover:bg-white/20 focus:outline-none"
+			>
+				<Puzzle class="size-4" />
+			</button>
 			{#if wifi?.available}
 				<button
 					type="button"
@@ -893,4 +1000,9 @@
      device's own state instead of by the TV. -->
 {#if wifiOpen && wifi}
 	<WifiSetup {wifi} onScan={scanWifi} onConnect={connectWifi} onClose={() => (wifiOpen = false)} />
+{/if}
+
+<!-- Same idea as the wifi sheet: driven by the device's own state, not the TV's. -->
+{#if pluginsOpen && plugins}
+	<PluginManager {plugins} actions={pluginActions} onClose={() => (pluginsOpen = false)} />
 {/if}

@@ -207,9 +207,14 @@ export type Locale = unknown;
 export type Mutation = {
 	login: (p: { pin: String; username: String }) => Boolean;
 	openUrlOnPhone: (p: { url: String }) => Boolean;
+	pluginUiEvent: (p: {
+		eventId: String;
+		pluginId: String;
+		screenId: String;
+		value?: String | null | undefined;
+	}) => Boolean;
 	register: (p: { pin: String; username: String }) => Boolean;
 	signOut: Boolean;
-	youtubeUiEvent: (p: { eventId: String; value?: String | null | undefined }) => Boolean;
 };
 
 export type Network = {
@@ -231,6 +236,33 @@ export type PersonName = unknown;
 
 export type PhoneNumber = unknown;
 
+export type PluginAuthState = {
+	status: String;
+	userCode: String;
+	verificationUrl: String;
+};
+
+export type PluginCard = {
+	actionJson: String;
+	id: String;
+	image: String;
+	subtitle: String;
+	title: String;
+};
+
+export type PluginDashboard = {
+	cards: () => PluginCard[];
+	pluginId: String;
+	pluginName: String;
+};
+
+export type PluginInfo = {
+	entryScreenId: String;
+	features: String[];
+	id: String;
+	name: String;
+};
+
 export type PluginPlaybackInfo = {
 	acodec: String | null;
 	audioContainer: String | null;
@@ -240,6 +272,10 @@ export type PluginPlaybackInfo = {
 	title: String;
 	vcodec: String;
 	videoContainer: String;
+};
+
+export type PluginScreenData = {
+	json: String | null;
 };
 
 export type PluginSkipSegment = {
@@ -255,14 +291,19 @@ export type PluginSubtitleTrack = {
 };
 
 export type Query = {
+	me: () => User | null;
 	network: () => Network;
 	pairing: () => Pairing;
+	pluginAuth: (p: { pluginId: String }) => PluginAuthState | null;
+	pluginDashboards: () => PluginDashboard[];
 	pluginPlaybackInfo: (p: {
 		maxHeight?: Int | null | undefined;
 		pluginId: String;
 		sessionId: String;
 	}) => PluginPlaybackInfo;
+	pluginScreen: (p: { pluginId: String; screenId: String }) => PluginScreenData;
 	pluginSkipSegments: (p: { pluginId: String; sessionId: String }) => PluginSkipSegment[];
+	plugins: () => PluginInfo[];
 	user: (p: { id: ID }) => User;
 	users: (p?: {
 		limit?: Int | null | undefined;
@@ -270,9 +311,6 @@ export type Query = {
 		orderBy?: UserOrderInputArgument | null | undefined;
 		where?: UserWhereInputArgument | null | undefined;
 	}) => User[];
-	youtubeAuth: () => YoutubeAuth | null;
-	youtubeDashboard: () => YoutubeCard[];
-	youtubeScreen: () => YoutubeScreen;
 };
 
 export type SortingParameter = 'asc' | 'desc';
@@ -303,6 +341,10 @@ export type StringWhereInputArgument = {
 };
 
 export type Subscription = {
+	pluginAuth: (p: { pluginId: String }) => PluginAuthState | null;
+	pluginDashboards: () => PluginDashboard[];
+	pluginScreen: (p: { pluginId: String; screenId: String }) => PluginScreenData;
+	plugins: () => PluginInfo[];
 	user: (p: { id: ID }) => User;
 	users: (p?: {
 		limit?: Int | null | undefined;
@@ -310,9 +352,6 @@ export type Subscription = {
 		orderBy?: UserOrderInputArgument | null | undefined;
 		where?: UserWhereInputArgument | null | undefined;
 	}) => User[];
-	youtubeAuth: () => YoutubeAuth | null;
-	youtubeDashboard: () => YoutubeCard[];
-	youtubeScreen: () => YoutubeScreen;
 };
 
 export type User = {
@@ -345,25 +384,6 @@ export type UserWhereInputArgument = {
 	username?: StringWhereInputArgument | null | undefined;
 };
 
-export type YoutubeAuth = {
-	status: String;
-	userCode: String;
-	verificationUrl: String;
-};
-
-export type YoutubeCard = {
-	actionJson: String;
-	appName: String;
-	id: String;
-	image: String;
-	subtitle: String;
-	title: String;
-};
-
-export type YoutubeScreen = {
-	json: String | null;
-};
-
 export const defaultOptions: ConstructorParameters<Client>[0] = {
 	url: '/api/graphql',
 	fetchSubscriptions: true,
@@ -386,11 +406,12 @@ export const client = {
 	liveQuery: makeLiveQuery<Query>({
 		urqlClient,
 		availableSubscriptions: new Set([
+			'pluginAuth',
+			'pluginDashboards',
+			'pluginScreen',
+			'plugins',
 			'user',
-			'users',
-			'youtubeAuth',
-			'youtubeDashboard',
-			'youtubeScreen'
+			'users'
 		]),
 		schema
 	}),

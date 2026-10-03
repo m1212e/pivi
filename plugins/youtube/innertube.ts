@@ -12,66 +12,54 @@
 // official integration.
 import { Innertube, UniversalCache } from 'youtubei.js';
 import type { OAuth2Tokens } from 'youtubei.js';
-import {
-	credentialGetRequest,
-	credentialGetResultSchema,
-	credentialSetParamsSchema,
-	credentialSetRequest
-} from '#lib/plugins/host';
-import { connection } from './connection';
+import { readFile, writeFile } from 'node:fs/promises';
+
+// The signed-in session's tokens, in this plugin's own persistent volume (the
+// `storage` permission mounts it at /storage, one per profile — so each pivi
+// profile keeps its own YouTube login). Without the permission there's simply
+// no volume: browsing signed out still works, a login just doesn't survive a
+// restart.
+const TOKEN_FILE = '/storage/oauth-tokens.json';
 
 async function getStoredTokens(): Promise<OAuth2Tokens | null> {
-	const result = credentialGetResultSchema.parse(
-		await connection.sendRequest(credentialGetRequest)
-	);
-	return result.value ? (JSON.parse(result.value) as OAuth2Tokens) : null;
+	try {
+		return JSON.parse(await readFile(TOKEN_FILE, 'utf8')) as OAuth2Tokens;
+	} catch {
+		return null;
+	}
 }
 
 async function storeTokens(tokens: OAuth2Tokens): Promise<void> {
-	await connection.sendRequest(
-		credentialSetRequest,
-		credentialSetParamsSchema.parse({ value: JSON.stringify(tokens) })
-	);
+	try {
+		await writeFile(TOKEN_FILE, JSON.stringify(tokens), { mode: 0o600 });
+	} catch (err) {
+		console.error('[youtube] could not persist the sign-in (is storage allowed?):', String(err));
+	}
 }
 
-// UniversalCache(false) alone is not actually non-persistent: it still
-// writes to a real file on disk (os.tmpdir()/youtubei.js instead of a
-// repo-local dir), just not our OAuth tokens -- those are handled
-// explicitly below through our own credential storage, since that's the
-// contract every plugin uses. What it does write there without
-// enable_session_cache: false is an unscoped, shared-across-all-profiles
-// session blob (visitor id, client config), keyed by a fixed string with
-// no per-user isolation at all. enable_session_cache: false stops that
-// write; the cache instance itself stays, since Player still needs it for
-// signature data (getStreamingData/download, which this plugin doesn't
-// use directly -- playback goes through yt-dlp, see stream.ts).
+// Nothing here writes a cache of its own: UniversalCache(false) is in-memory, and
+// enable_session_cache: false stops youtubei.js persisting its session blob
+// (visitor id, client config) anywhere shared. The only thing kept across runs
+// is the login, in /storage above.
 //
 // This session is used for sign-in/account identity and the real
-// personalized home feed and search (tvHomeFeed.ts/tvSearch.ts, via the TV
-// client — the only one OAuth2 is documented to work with). The WEB client
-// 400s on OAuth-only auth (no cookie), and youtubei.js's typed WEB-oriented
-// parser classes (HomeFeed/Search) can't read TV/ANDROID-shaped responses
-// anyway, which is why tvHomeFeed.ts/tvSearch.ts walk the raw TV response
-// themselves instead of using them. See SKETCH.md's YouTube plugin notes
-// for the full investigation.
+// personalized home feed (tvHomeFeed.ts, via the TV client — the only one
+// OAuth2 is documented to work with). The WEB client 400s on OAuth-only auth
+// (no cookie), and youtubei.js's typed WEB-oriented parser classes (HomeFeed)
+// can't read TV/ANDROID-shaped responses anyway, which is why tvHomeFeed.ts
+// walks the raw TV response itself instead of using them.
 //
-// A `let`, not a `const`: this plugin process is shared across every pivi
-// profile (one process, not one per account), so whichever profile is
-// actually active can change while the process keeps running (see
-// loadSessionForActiveProfile below). Every module that imports `innertube`
-// sees the live binding, so a swap here is picked up everywhere without
-// those modules needing to do anything differently.
+// A `let` so the session can be swapped once the stored login has been loaded
+// (loadStoredSession below); every module importing `innertube` sees the live
+// binding.
 export let innertube = await Innertube.create({
 	cache: new UniversalCache(false),
 	enable_session_cache: false
 });
 
-// Confirmed by reading OAuth2.ts directly: the *first* successful device-code
-// login only ever emits 'auth', never 'update-credentials' — that event is
-// exclusively for later background token refreshes. Listening only for
-// 'update-credentials' (as this used to) meant nothing was ever persisted on
-// the initial sign-in at all, only on a refresh that would never happen
-// without a stored credential to refresh in the first place.
+// The *first* successful device-code login only ever emits 'auth', never
+// 'update-credentials' — that event is exclusively for later background token
+// refreshes. Both have to be persisted, or a fresh sign-in is lost on restart.
 function persist({ credentials }: { credentials: OAuth2Tokens }) {
 	storeTokens(credentials).catch(() => {});
 }
@@ -81,28 +69,13 @@ function wirePersistence(client: Innertube) {
 }
 wirePersistence(innertube);
 
-// NOT run at module load: the host's credentialGetRequest handler only
-// knows which plugin is asking once it's received this plugin's
-// readyNotification (see runtime.ts — it keys credential storage off a
-// `manifest` variable that notification sets). This module's top-level code
-// runs before main.ts gets a chance to send that notification (ES module
-// evaluation order — main.ts can't run its own body until everything it
-// imports, including this file's top-level code, has finished), so calling
-// getStoredTokens() here unconditionally always got `{ value: null }` back,
-// even with a real stored credential — meaning sign-in silently never
-// survived a process restart. main.ts calls this explicitly, after ready,
-// and again every time the host says the active profile changed.
-//
-// Re-invokable (unlike a single memoized promise, which is all this needed
-// back when it only ever ran once at startup): the host already resolves
-// getStoredTokens()/credentialGetRequest against whichever profile is
-// active *right now*, so calling this again after a profile switch loads
-// the new profile's own credential. A fresh Innertube instance rather than
-// reusing/resetting the old one, because Session's own signOut() revokes
-// the credentials at Google — fine for a real "sign out of YouTube" action,
-// wrong here, since switching pivi profiles must never invalidate the
-// *previous* profile's real Google login.
-export async function loadSessionForActiveProfile(): Promise<void> {
+// Not run at module load but from main.ts once the host has activated the
+// plugin. The host runs this plugin once per active pivi profile (it's stopped
+// and started again on a profile switch), with that profile's own /storage
+// mounted — so there's exactly one login to look for here, and no cross-profile
+// state to reset. A fresh Innertube rather than reusing the old one: a Session's
+// own signOut() revokes the credentials at Google, which nothing here should do.
+export async function loadStoredSession(): Promise<void> {
 	const stored = await getStoredTokens();
 
 	const next = await Innertube.create({

@@ -7,10 +7,10 @@ SKETCH.md's "OS/deployment" decision, which calls for exactly this list.
 
 ## Required
 
-| Binary       | Why                                                                                                                                                                                                                              | Debian/Ubuntu (`apt`)                                                                           | Fedora (`dnf`)                                                    |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **bun**      | The runtime the app itself runs under, and what the plugin host (`src/api/plugins/runtime.ts`) spawns each plugin's child process with — plugins won't load without it on `PATH`, even if the main server is started via `node`. | `curl -fsSL https://bun.sh/install \| bash` (no apt package)                                    | same — no official Fedora package, use the install script         |
-| **postgres** | The app's database (`DATABASE_URL`). Not necessarily inside the _app's own_ image — the existing `docker-compose.yaml` runs it as a separate service, which is the pattern to keep for any production compose setup too.         | `apt install postgresql` (or keep it a separate container/service, as in `docker-compose.yaml`) | `dnf install postgresql-server` (or, again, a separate container) |
+| Binary       | Why                                                                                                                                                                                                                      | Debian/Ubuntu (`apt`)                                                                           | Fedora (`dnf`)                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **bun**      | The runtime the app runs under in development, and what `pivi-db-push` runs under. (The packaged server runs under node; plugins are no longer spawned as bun processes — see below.)                                    | `curl -fsSL https://bun.sh/install \| bash` (no apt package)                                    | same — no official Fedora package, use the install script         |
+| **postgres** | The app's database (`DATABASE_URL`). Not necessarily inside the _app's own_ image — the existing `docker-compose.yaml` runs it as a separate service, which is the pattern to keep for any production compose setup too. | `apt install postgresql` (or keep it a separate container/service, as in `docker-compose.yaml`) | `dnf install postgresql-server` (or, again, a separate container) |
 
 ## Required for wifi provisioning
 
@@ -23,21 +23,17 @@ found on `PATH`. A device with no wireless interface at all reports
 provisioning as unavailable rather than offering a setup screen nothing could
 satisfy.
 
-## Provided by the package, or auto-installed
+## Required for plugins
 
-- **yt-dlp** — the Nix package (`nix/package.nix`) pins it as a real
-  dependency and points the plugin at it via `PIVI_YTDLP_BINARY`, since a
-  store path is read-only and the fallback below cannot write into it. That
-  also means a fresh install doesn't fetch a binary from GitHub at first play.
+| Requirement                  | Why                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **KVM** (`/dev/kvm`)         | Every plugin runs in a microVM (`src/api/plugins/sandbox/`, the `microsandbox` npm package, whose native runtime ships inside it for x86_64 and arm64 glibc Linux). The service user needs read/write access to `/dev/kvm` (the NixOS module adds `pivi` to the `kvm` group). Without KVM everything else works; plugins just can't start. |
+| A short `PIVI_SANDBOX_HOME`  | Where the sandbox keeps images, volumes and sockets. Must be short (unix socket path limit) — the NixOS module sets it to `<stateDir>/sandbox`.                                                                                                                                                                                            |
+| Network access to a registry | Only when installing or updating a plugin (Docker Hub, GHCR, or whichever registry the image reference names).                                                                                                                                                                                                                             |
 
-## Auto-installed, no action needed
-
-- **yt-dlp** (`plugins/youtube/stream.ts`) — when `PIVI_YTDLP_BINARY` is
-  unset, downloaded automatically on first use via `yt-dlp-wrap`'s
-  `downloadFromGithub` into `.cache/yt-dlp` (gitignored). This is the
-  development path; any packaged install should set that variable instead, so
-  the binary is a declared dependency rather than a first-play download into
-  a directory that may not be writable.
+Plugins are OCI images; **anything a plugin needs (yt-dlp for the YouTube
+plugin, its JS runtime, certificates) is inside its image**, not installed on
+the host. See `docs/plugins.md`.
 
 ## Recommended, not currently required
 
@@ -52,8 +48,8 @@ satisfy.
 
 ## Explicitly not needed
 
-- **Python** — modern `yt-dlp` releases are self-contained binaries (no
-  separate Python install required).
+- **Python, yt-dlp, deno** — nothing on the host; the YouTube plugin image
+  carries its own yt-dlp and runs it under bun.
 - **googleapis / google-auth-library** or any Google Cloud credentials —
   the YouTube plugin uses `youtubei.js` instead (`plugins/youtube/innertube.ts`),
   which needs no registered OAuth client, API key, or secret of any kind.

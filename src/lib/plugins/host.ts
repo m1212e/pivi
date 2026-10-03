@@ -1,23 +1,31 @@
 // The plugin<->host RPC boundary (see SKETCH.md's "Plugin sandboxing"
-// decision): one child process per plugin, everything it can do or be told
-// crosses this channel as a JSON-RPC 2.0 call over vscode-jsonrpc — the
-// same library (and the same request/notification split) the Language
-// Server Protocol uses for its editor<->language-server child process, which
-// is the model this is copying. Using it instead of a hand-rolled message
-// envelope also means request/response correlation (matching a response
-// back to its request) is handled by the library instead of by us — no more
-// manually-paired httpRequest/httpResponse messages with a requestId to
-// track by hand.
+// decision). A plugin is an OCI image whose entrypoint speaks JSON-RPC 2.0 over
+// its stdin/stdout, one JSON message per line (see ndjson.ts), with logs on
+// stderr — so it can be written in any language, and nothing in this file
+// assumes one. vscode-jsonrpc is only the host's (and the TypeScript SDK's)
+// way of speaking it: request/response correlation is handled by the library
+// instead of by hand. The same method names and schemas are published as JSON
+// Schema (protocolSchema.ts, docs/plugin-protocol.schema.json) for every other
+// language.
 import { NotificationType, NotificationType0, RequestType, RequestType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
-import { pluginManifestSchema } from './manifest';
 import { dashboardContributionSchema } from './dashboard';
 import { pluginScreenSchema, uiEventSchema } from './ui';
 import { deviceCodeAuthSchema, phoneAuthHandoffSchema } from './auth';
 
 // Plugin -> host
 
-export const readyNotification = new NotificationType<z.infer<typeof pluginManifestSchema>>(
+// The version of this protocol; a plugin's manifest names the one it speaks
+// (`protocol`), and the host refuses to run one it doesn't support.
+export const PROTOCOL_VERSION = 1;
+export const SUPPORTED_PROTOCOLS: readonly number[] = [PROTOCOL_VERSION];
+
+// The first message a plugin sends, once it can receive requests. Carries
+// nothing but the protocol version: what the plugin is and what it may do is
+// its manifest, which the host already read from the image and the user
+// already approved — never something a running plugin gets to restate.
+export const readyParamsSchema = z.object({ protocol: z.number().int().positive() });
+export const readyNotification = new NotificationType<z.infer<typeof readyParamsSchema>>(
 	'plugin/ready'
 );
 
@@ -92,8 +100,12 @@ export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
 // stream regardless of what the network/CPU can actually remux and forward
 // in real time is what made playback choppy in practice, so the player page
 // lets the viewer pick a lower cap instead of always maxing this out.
+export const resolveStreamParamsSchema = z.object({
+	sessionId: z.string(),
+	maxHeight: z.number().optional()
+});
 export const resolveStreamRequest = new RequestType<
-	{ sessionId: string; maxHeight?: number },
+	z.infer<typeof resolveStreamParamsSchema>,
 	ResolvedStream,
 	void
 >('plugin/resolveStream');
@@ -102,19 +114,19 @@ export const resolveStreamRequest = new RequestType<
 // segment, for the YouTube plugin) -- generic over whatever the plugin's
 // source for these actually is, the player only ever needs a time range and
 // a label to show on the "prevent skip" button (see the player page).
-export const skipSegmentSchema = z.object({
+const skipSegmentSchema = z.object({
 	startSeconds: z.number(),
 	endSeconds: z.number(),
 	label: z.string()
 });
 export type SkipSegment = z.infer<typeof skipSegmentSchema>;
 
-// Not every plugin has a source for these -- one that doesn't just never
-// implements this request, which runtime.ts's resolveSkipSegments treats the
-// same as "no skippable sections" rather than a hard failure.
+// Only called on a plugin whose manifest lists the `skipSegments` feature.
+export const resolveSkipSegmentsParamsSchema = z.object({ sessionId: z.string() });
+export const resolveSkipSegmentsResultSchema = z.object({ segments: z.array(skipSegmentSchema) });
 export const resolveSkipSegmentsRequest = new RequestType<
-	{ sessionId: string },
-	{ segments: SkipSegment[] },
+	z.infer<typeof resolveSkipSegmentsParamsSchema>,
+	z.infer<typeof resolveSkipSegmentsResultSchema>,
 	void
 >('plugin/resolveSkipSegments');
 
@@ -124,56 +136,11 @@ export const publishAuthNotification = new NotificationType<z.infer<typeof plugi
 	'plugin/publishAuth'
 );
 
-// A plain, JSON-serializable subset of fetch's RequestInit — everything
-// crossing this boundary goes over JSON, so no AbortSignal/streaming body.
-export const httpRequestParamsSchema = z.object({
-	url: z.string(),
-	method: z.string().optional(),
-	headers: z.record(z.string(), z.string()).optional(),
-	body: z.string().optional()
-});
-type HttpRequestParams = z.infer<typeof httpRequestParamsSchema>;
-
-export const httpResponseResultSchema = z.object({
-	status: z.number(),
-	headers: z.record(z.string(), z.string()),
-	body: z.string()
-});
-type HttpResponseResult = z.infer<typeof httpResponseResultSchema>;
-
-// The plugin process has no direct network access beyond what its manifest
-// declares — outbound requests are proxied through the host, which enforces
-// the declared domain allowlist per call.
-export const httpRequestRequest = new RequestType<HttpRequestParams, HttpResponseResult, void>(
-	'plugin/httpRequest'
-);
-
-export const logParamsSchema = z.object({
-	level: z.enum(['info', 'warn', 'error']),
-	message: z.string()
-});
-
-export const logNotification = new NotificationType<z.infer<typeof logParamsSchema>>('plugin/log');
-
-// Opaque to the host — a plugin-defined JSON blob (an OAuth refresh token,
-// for the YouTube plugin). The host stamps the requesting plugin's id and
-// the currently active profile's user id onto the storage key itself; a
-// plugin has no way to name a different plugin or user, so it can only ever
-// reach its own credential for whoever is signed in right now.
-export const credentialSetParamsSchema = z.object({ value: z.string() });
-
-export const credentialSetRequest = new RequestType<
-	z.infer<typeof credentialSetParamsSchema>,
-	void,
-	void
->('plugin/credentialSet');
-
-export const credentialGetResultSchema = z.object({ value: z.string().nullable() });
-
-export const credentialGetRequest = new RequestType0<
-	z.infer<typeof credentialGetResultSchema>,
-	void
->('plugin/credentialGet');
+// Outbound network access isn't an RPC: it's the `network` permission, enforced
+// by the sandbox for exactly the manifest's declared domains (see
+// src/api/plugins/sandbox). Likewise persistent and disposable state are the
+// `storage` and `cache` volumes mounted into the container, and logs are just
+// the process's stderr.
 
 // A plugin building a PhoneAuthHandoff's redirect_uri needs to know a base
 // URL the phone can actually reach (a LAN address, not localhost) — only
@@ -197,20 +164,9 @@ export const uiEventNotification = new NotificationType<z.infer<typeof uiEventSc
 // Delivered once the phone completes a PhoneAuthHandoff and Google (or
 // whatever the plugin's login provider is) redirects back to pivi's own
 // server — see src/routes/oauth/callback and src/api/plugins/pendingAuth.ts.
-// No zod schema behind this one (unlike the rest of the file): the host
-// constructs `{ code, state }` itself from its own already-validated data, so
-// there's nothing to parse here, just a shape to describe.
-export const oauthCodeNotification = new NotificationType<{ code: string; state: string }>(
+export const oauthCodeParamsSchema = z.object({ code: z.string(), state: z.string() });
+export const oauthCodeNotification = new NotificationType<z.infer<typeof oauthCodeParamsSchema>>(
 	'host/oauthCode'
 );
 
 export const shutdownNotification = new NotificationType0('host/shutdown');
-
-// Sent whenever which pivi profile is active changes (login/logout) -- lets
-// a plugin swap any account-bound state (YouTube's signed-in session, for
-// this plugin) over to whichever profile is active now instead of staying
-// stuck on whoever was active when the plugin process started. No payload:
-// a plugin re-derives "whose credential is this" the same way it always
-// does, through credentialGetRequest, which the host already resolves
-// against the current active profile.
-export const profileChangedNotification = new NotificationType0('host/profileChanged');

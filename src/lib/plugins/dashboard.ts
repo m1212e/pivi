@@ -46,7 +46,6 @@ export type HomeCard = z.infer<typeof homeCardSchema>;
 // from every plugin into one set of home-dashboard rails, sorted by
 // recency for resume cards.
 export const dashboardContributionSchema = z.object({
-	pluginId: z.string(),
 	theme: pluginThemeSchema.optional(),
 	cards: z.array(homeCardSchema)
 });
