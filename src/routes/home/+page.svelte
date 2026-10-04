@@ -15,6 +15,8 @@
 	import PlaceholderRow from '#lib/components/PlaceholderRow.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
 	import { getPairing } from '#lib/state/pairing.svelte';
+	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
+	import { Music, VolumeX } from '@lucide/svelte';
 
 	// Every installed plugin, whatever it implements -- one that only provides
 	// a screen (or nothing but playback) still gets its tile in the apps row.
@@ -117,7 +119,7 @@
 
 	const initialDashboards = await client.liveQuery.pluginDashboards(DASHBOARD_FIELDS);
 	let cardsByAppId = $state<Record<string, AppCard[] | null>>(
-		cardsByPluginId(initialDashboards as DashboardResult)
+		cardsByPluginId((initialDashboards ?? []) as DashboardResult)
 	);
 	onMount(() => {
 		// .subscribe() returns an ES Observable Subscription object
@@ -125,10 +127,12 @@
 		// directly as onMount's cleanup throws "not a function" the moment
 		// Svelte actually calls it (client-side navigation away from /home).
 		const dashboards = client.liveQuery.pluginDashboards(DASHBOARD_FIELDS).subscribe((value) => {
-			cardsByAppId = cardsByPluginId(value as DashboardResult);
+			// An emission with no data (before the first result, or on an error) says
+			// nothing about the dashboards, so it must not wipe what's shown.
+			if (value) cardsByAppId = cardsByPluginId(value as DashboardResult);
 		});
 		const plugins = client.liveQuery.plugins(PLUGIN_FIELDS).subscribe((value) => {
-			installedPlugins = toInstalled(value ?? []);
+			if (value) installedPlugins = toInstalled(value);
 		});
 		return () => {
 			stopSubscription(dashboards);
@@ -258,27 +262,43 @@
 		class="absolute inset-x-0 top-0 flex items-start justify-between px-8 pt-6 sm:px-12"
 		transition:fade={{ duration: 400, delay: 150 }}
 	>
-		<button
-			type="button"
-			onclick={signOut}
-			class="flex items-center gap-3 rounded-full bg-white/12 py-2 pr-5 pl-2 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
-		>
-			<span
-				data-focus-ring-target
-				class="flex size-9 items-center justify-center overflow-hidden rounded-full"
-				style="background: {profileGradient(me.username ?? me.id)}"
-				style:view-transition-name="profile-avatar"
+		<div class="flex items-center gap-3">
+			<button
+				type="button"
+				onclick={signOut}
+				class="flex items-center gap-3 rounded-full bg-white/12 py-2 pr-5 pl-2 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
 			>
-				{#if me.image}
-					<img src={me.image} alt="" class="size-full object-cover" />
+				<span
+					data-focus-ring-target
+					class="flex size-9 items-center justify-center overflow-hidden rounded-full"
+					style="background: {profileGradient(me.username ?? me.id)}"
+					style:view-transition-name="profile-avatar"
+				>
+					{#if me.image}
+						<img src={me.image} alt="" class="size-full object-cover" />
+					{:else}
+						<span class="text-sm font-semibold text-white/90 uppercase">
+							{label?.slice(0, 1)}
+						</span>
+					{/if}
+				</span>
+				<span class="text-sm font-medium text-white/90">{label}</span>
+			</button>
+			<button
+				type="button"
+				onclick={toggleAmbientMusic}
+				aria-pressed={ambientMusic.enabled}
+				aria-label={m.background_music()}
+				title={m.background_music()}
+				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+			>
+				{#if ambientMusic.enabled}
+					<Music class="size-5" />
 				{:else}
-					<span class="text-sm font-semibold text-white/90 uppercase">
-						{label?.slice(0, 1)}
-					</span>
+					<VolumeX class="size-5" />
 				{/if}
-			</span>
-			<span class="text-sm font-medium text-white/90">{label}</span>
-		</button>
+			</button>
+		</div>
 
 		<div class="flex flex-col items-end gap-4">
 			{#if pairing.remoteUrl}

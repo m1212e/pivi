@@ -30,23 +30,39 @@ function loadPublicKey(pem: string): KeyObject {
 	if (/PRIVATE KEY/.test(pem)) {
 		throw new SignatureError('That is a private key — paste the public key (cosign.pub)');
 	}
+	let key: KeyObject;
 	try {
-		const key = createPublicKey(pem);
-		if (!['ec', 'rsa', 'ed25519'].includes(key.asymmetricKeyType ?? '')) {
-			throw new Error(`unsupported key type ${key.asymmetricKeyType}`);
-		}
-		return key;
-	} catch (error) {
+		key = createPublicKey(pem);
+	} catch {
+		// OpenSSL's own message ("DECODER routines::unsupported") means nothing to
+		// the person who pasted the wrong thing.
 		throw new SignatureError(
-			`Not a usable public key: ${error instanceof Error ? error.message : error}`
+			'That is not a public key. Paste the contents of cosign.pub, starting with -----BEGIN PUBLIC KEY-----'
 		);
 	}
+	if (!['ec', 'rsa', 'ed25519'].includes(key.asymmetricKeyType ?? '')) {
+		throw new SignatureError(`Unsupported key type: ${key.asymmetricKeyType}`);
+	}
+	return key;
+}
+
+// A key pasted into a single-line field arrives with its line breaks replaced by
+// spaces (or gone), which OpenSSL won't read. Rebuilds the standard layout — the
+// header, the base64 body in 64-character lines, the footer — from whatever
+// whitespace the text came with.
+export function normalizePem(text: string): string {
+	const match = text.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+	if (!match) return text.trim();
+
+	const body = match[2].replace(/\s+/g, '');
+	const lines = body.match(/.{1,64}/g) ?? [];
+	return [`-----BEGIN ${match[1]}-----`, ...lines, `-----END ${match[1]}-----`].join('\n');
 }
 
 // Normalizes a pasted PEM and computes the fingerprint the UI shows (SHA-256 of
 // the key's DER encoding), so the same key always reads the same way.
 export function parsePluginSigner(pem: string): PluginSigner {
-	const key = loadPublicKey(pem.trim());
+	const key = loadPublicKey(normalizePem(pem));
 	const der = key.export({ type: 'spki', format: 'der' });
 	return {
 		publicKeyPem: key.export({ type: 'spki', format: 'pem' }).toString().trim(),

@@ -59,6 +59,12 @@ function parseBearerChallenge(header: string | null): Challenge | null {
 		: null;
 }
 
+// What a failed connection looks like to the person reading it: the network
+// error itself ("fetch failed") says nothing about which registry or why.
+function unreachable(registry: string): never {
+	throw new RegistryError(`Could not reach the registry ${registry}`);
+}
+
 export type RegistryManifest = {
 	digest: string;
 	mediaType: string;
@@ -99,7 +105,7 @@ export class RegistryClient {
 		if (challenge.service) url.searchParams.set('service', challenge.service);
 		if (challenge.scope) url.searchParams.set('scope', challenge.scope);
 
-		const response = await this.fetchImpl(url);
+		const response = await this.fetchImpl(url).catch(() => unreachable(url.host));
 		if (!response.ok) throw new RegistryError(`Registry denied access (${response.status})`);
 		const body = z
 			.object({ token: z.string().optional(), access_token: z.string().optional() })
@@ -122,11 +128,13 @@ export class RegistryClient {
 				redirect: 'follow'
 			});
 
-		let response = await send(this.tokens.get(cacheKey));
+		let response = await send(this.tokens.get(cacheKey)).catch(() => unreachable(ref.registry));
 		if (response.status === 401) {
 			const challenge = parseBearerChallenge(response.headers.get('www-authenticate'));
 			if (!challenge) throw new RegistryError(`${ref.registry} requires authentication`);
-			response = await send(await this.authorize(challenge, cacheKey));
+			response = await send(await this.authorize(challenge, cacheKey)).catch(() =>
+				unreachable(ref.registry)
+			);
 		}
 		if (response.status === 404) {
 			throw new RegistryError(`Not found: ${formatImageRef(ref)} (${path})`);

@@ -1253,8 +1253,278 @@ export const schema = {
 			{ kind: 'SCALAR', name: 'Locale' },
 			{
 				kind: 'OBJECT',
+				name: 'ManagedPlugin',
+				fields: [
+					{
+						name: 'autoUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'domains',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'enabled',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'errorMessage',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'features',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'id',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'image',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'name',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'permissions',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: {
+										name: 'ManagedPluginPermission',
+										kind: 'OBJECT',
+										ofType: null,
+										__proto__: null
+									}
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'signerFingerprint',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'update',
+						type: { kind: 'OBJECT', name: 'ManagedPluginUpdate', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'version',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'ManagedPluginPermission',
+				fields: [
+					{
+						name: 'granted',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'key',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'ManagedPluginUpdate',
+				fields: [
+					{
+						name: 'addedDomains',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'addedPermissions',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'version',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'Mutation',
 				fields: [
+					{
+						name: 'approvePluginUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'checkPluginUpdates',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'clearPluginCache',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'dismissPluginPreview',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'installPlugin',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'granted',
+								type: {
+									kind: 'NON_NULL',
+									ofType: {
+										kind: 'LIST',
+										ofType: {
+											kind: 'NON_NULL',
+											ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+										}
+									}
+								}
+							},
+							{
+								name: 'image',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'publicKey',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
 					{
 						name: 'login',
 						type: {
@@ -1329,6 +1599,29 @@ export const schema = {
 						]
 					},
 					{
+						name: 'previewPluginInstall',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'image',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'publicKey',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
 						name: 'register',
 						type: {
 							kind: 'NON_NULL',
@@ -1352,12 +1645,120 @@ export const schema = {
 						]
 					},
 					{
+						name: 'rejectPluginUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'setPluginAutoUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'autoUpdate',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'setPluginEnabled',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'enabled',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'setPluginPermission',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'granted',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'permission',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
 						name: 'signOut',
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
 						},
 						args: []
+					},
+					{
+						name: 'uninstallPlugin',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'pluginId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
 					}
 				],
 				interfaces: []
@@ -1603,6 +2004,131 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'PluginInstallPreview',
+				fields: [
+					{
+						name: 'conflict',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'domains',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'features',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'image',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'name',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'permissions',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'signerFingerprint',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'version',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'PluginManagement',
+				fields: [
+					{
+						name: 'busy',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'errorMessage',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'plugins',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'ManagedPlugin', kind: 'OBJECT', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
+						name: 'preview',
+						type: { kind: 'OBJECT', name: 'PluginInstallPreview', ofType: null, __proto__: null },
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'PluginPlaybackInfo',
 				fields: [
 					{
@@ -1797,6 +2323,14 @@ export const schema = {
 									ofType: { name: 'PluginDashboard', kind: 'OBJECT', ofType: null, __proto__: null }
 								}
 							}
+						},
+						args: []
+					},
+					{
+						name: 'pluginManagement',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'PluginManagement', kind: 'OBJECT', ofType: null, __proto__: null }
 						},
 						args: []
 					},
@@ -2152,6 +2686,14 @@ export const schema = {
 									ofType: { name: 'PluginDashboard', kind: 'OBJECT', ofType: null, __proto__: null }
 								}
 							}
+						},
+						args: []
+					},
+					{
+						name: 'pluginManagement',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'PluginManagement', kind: 'OBJECT', ofType: null, __proto__: null }
 						},
 						args: []
 					},

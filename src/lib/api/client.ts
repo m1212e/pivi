@@ -1,5 +1,12 @@
-import { Client, CombinedError, cacheExchange, fetchExchange, type Exchange } from '@urql/core';
-import { empty, filter, fromPromise, merge, mergeMap, pipe } from 'wonka';
+import {
+	Client,
+	CombinedError,
+	cacheExchange,
+	fetchExchange,
+	makeOperation,
+	type Exchange
+} from '@urql/core';
+import { empty, filter, fromPromise, map, merge, mergeMap, pipe } from 'wonka';
 import { browser } from '$app/env';
 import { graphqlMutation, graphqlQuery } from '../../api/graphql.remote';
 
@@ -52,9 +59,41 @@ const remoteFunctionsExchange: Exchange = ({ forward }) => {
 	};
 };
 
+// The generated client captures this one Client instance, so it can't be
+// swapped for a fresh one when the active profile changes (login/register),
+// and urql's document cache has no clear() of its own. Instead, after a
+// reset the first execution of every query goes network-only, which both
+// skips whatever the previous profile's cache holds for it and overwrites
+// that entry with the new result.
+let resetPending = false;
+const refreshedSinceReset = new Set<number>();
+
+export function resetClientState() {
+	resetPending = true;
+	refreshedSinceReset.clear();
+}
+
+const freshAfterResetExchange: Exchange =
+	({ forward }) =>
+	(operations) =>
+		forward(
+			pipe(
+				operations,
+				map((operation) => {
+					if (!resetPending || operation.kind !== 'query') return operation;
+					if (refreshedSinceReset.has(operation.key)) return operation;
+					refreshedSinceReset.add(operation.key);
+					return makeOperation(operation.kind, operation, {
+						...operation.context,
+						requestPolicy: 'network-only'
+					});
+				})
+			)
+		);
+
 const exchanges: Exchange[] = [];
 if (!browser) exchanges.push(remoteFunctionsExchange);
-exchanges.push(cacheExchange, fetchExchange);
+exchanges.push(freshAfterResetExchange, cacheExchange, fetchExchange);
 
 export const urqlClient = new Client({
 	url: '/api/graphql',

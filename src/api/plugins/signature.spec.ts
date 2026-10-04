@@ -10,7 +10,7 @@ import {
 	signImage
 } from './fixtures';
 import { RegistryClient } from './registry';
-import { parsePluginSigner, SignatureError, verifyImageSignature } from './signature';
+import { normalizePem, parsePluginSigner, SignatureError, verifyImageSignature } from './signature';
 
 const manifest: PluginManifest = {
 	id: 'demo',
@@ -46,6 +46,7 @@ describe('parsePluginSigner', () => {
 
 	it('rejects things that are not public keys', () => {
 		expect(() => parsePluginSigner('not a key')).toThrow(SignatureError);
+		expect(() => parsePluginSigner('not a key')).toThrow(/Paste the contents of cosign.pub/);
 	});
 
 	it('refuses a private key outright', () => {
@@ -53,6 +54,26 @@ describe('parsePluginSigner', () => {
 		expect(() =>
 			parsePluginSigner(privateKey.export({ type: 'pkcs8', format: 'pem' }).toString())
 		).toThrow(/private key/);
+	});
+});
+
+describe('normalizePem', () => {
+	it('restores the line breaks of a key that was typed into a single-line field', () => {
+		const { publicKeyPem } = generateSigningKey();
+		const flattened = publicKeyPem.replace(/\n/g, ' ');
+		expect(normalizePem(flattened)).toBe(publicKeyPem.trim());
+		expect(parsePluginSigner(flattened)).toEqual(parsePluginSigner(publicKeyPem));
+	});
+
+	it('also copes with the breaks being dropped entirely', () => {
+		const { publicKeyPem } = generateSigningKey();
+		const body = publicKeyPem.split('\n').slice(1, -2).join('');
+		const squashed = `-----BEGIN PUBLIC KEY-----${body}-----END PUBLIC KEY-----`;
+		expect(parsePluginSigner(squashed)).toEqual(parsePluginSigner(publicKeyPem));
+	});
+
+	it('leaves anything that is not a PEM block alone', () => {
+		expect(normalizePem('  not a key ')).toBe('not a key');
 	});
 });
 

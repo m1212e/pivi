@@ -69,7 +69,8 @@
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import PinPad from '#lib/components/PinPad.svelte';
-	import PluginManager, { type PluginActions } from '#lib/components/PluginManager.svelte';
+	import PluginManager from '#lib/components/PluginManager.svelte';
+	import type { PluginActions } from '#lib/components/PluginManagerPanel.svelte';
 	import WifiSetup from '#lib/components/WifiSetup.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';

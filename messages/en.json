@@ -81,6 +81,8 @@
 	"wifi_connect_failed": "Couldn't connect: {error}",
 	"wifi_connected_toast": "Connected to {ssid}",
 	"plugins_title": "Plugins",
+	"plugins_page_title": "Apps",
+	"plugins_refused": "Connect your phone remote to manage apps.",
 	"plugins_open": "Manage plugins",
 	"plugins_none": "No plugins installed yet.",
 	"plugins_install_heading": "Install a plugin",
@@ -121,6 +123,9 @@
 	"close": "Close",
 	"featured": "Featured",
 	"apps": "Apps",
+	"apps_empty_title": "No apps installed yet",
+	"apps_add": "Add app",
+	"apps_empty_hint": "Select + to install your first one.",
 	"suggested_on": "Suggested on {app}",
 	"plugin_sign_in_at": "Sign in at {url}",
 	"plugin_status": "Status: {status}",
@@ -137,5 +142,6 @@
 	"quality_mode_direct": "Direct connection — streaming straight from the source",
 	"quality_mode_mse": "Adaptive streaming — video and audio buffered separately in the browser, no server-side remuxing",
 	"quality_mode_ffmpeg": "Proxied — being relayed and remuxed through this server",
-	"subtitles_auto_generated": "Auto-generated — not a real, human-authored caption track"
+	"subtitles_auto_generated": "Auto-generated — not a real, human-authored caption track",
+	"background_music": "Background music"
 }

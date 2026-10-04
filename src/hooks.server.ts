@@ -25,7 +25,12 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 // Pages no longer gate themselves with a `load` function, so /home's (and
 // any app page's) "must have an active profile" check lives here instead.
 function requiresActiveProfile(pathname: string): boolean {
-	return pathname === '/home' || pathname.startsWith('/apps/') || pathname.startsWith('/play/');
+	return (
+		pathname === '/home' ||
+		pathname === '/plugins' ||
+		pathname.startsWith('/apps/') ||
+		pathname.startsWith('/play/')
+	);
 }
 
 const handleActiveProfile: Handle = async ({ event, resolve }) => {

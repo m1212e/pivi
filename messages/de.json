@@ -81,6 +81,8 @@
 	"wifi_connect_failed": "Verbindung fehlgeschlagen: {error}",
 	"wifi_connected_toast": "Mit {ssid} verbunden",
 	"plugins_title": "Plugins",
+	"plugins_page_title": "Apps",
+	"plugins_refused": "Verbinde deine Handy-Fernbedienung, um Apps zu verwalten.",
 	"plugins_open": "Plugins verwalten",
 	"plugins_none": "Noch keine Plugins installiert.",
 	"plugins_install_heading": "Plugin installieren",
@@ -121,6 +123,9 @@
 	"close": "Schließen",
 	"featured": "Empfohlen",
 	"apps": "Apps",
+	"apps_empty_title": "Noch keine Apps installiert",
+	"apps_add": "App hinzufügen",
+	"apps_empty_hint": "Wähle +, um deine erste zu installieren.",
 	"suggested_on": "Vorgeschlagen auf {app}",
 	"plugin_sign_in_at": "Melde dich an unter {url}",
 	"plugin_status": "Status: {status}",
@@ -137,5 +142,6 @@
 	"quality_mode_direct": "Direkte Verbindung — Streaming direkt von der Quelle",
 	"quality_mode_mse": "Adaptives Streaming — Video und Audio werden getrennt im Browser gepuffert, kein Remuxing auf dem Server",
 	"quality_mode_ffmpeg": "Über Proxy — wird über diesen Server weitergeleitet und neu gemuxt",
-	"subtitles_auto_generated": "Automatisch generiert — keine echte, von Menschen erstellte Untertitelspur"
+	"subtitles_auto_generated": "Automatisch generiert — keine echte, von Menschen erstellte Untertitelspur",
+	"background_music": "Hintergrundmusik"
 }

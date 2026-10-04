@@ -204,7 +204,38 @@ export type JSONWhereInputArgument = {
 
 export type Locale = unknown;
 
+export type ManagedPlugin = {
+	autoUpdate: Boolean;
+	domains: String[];
+	enabled: Boolean;
+	errorMessage: String | null;
+	features: String[];
+	id: String;
+	image: String;
+	name: String;
+	permissions: () => ManagedPluginPermission[];
+	signerFingerprint: String;
+	update: () => ManagedPluginUpdate | null;
+	version: String;
+};
+
+export type ManagedPluginPermission = {
+	granted: Boolean;
+	key: String;
+};
+
+export type ManagedPluginUpdate = {
+	addedDomains: String[];
+	addedPermissions: String[];
+	version: String;
+};
+
 export type Mutation = {
+	approvePluginUpdate: (p: { pluginId: String }) => Boolean;
+	checkPluginUpdates: Boolean;
+	clearPluginCache: (p: { pluginId: String }) => Boolean;
+	dismissPluginPreview: Boolean;
+	installPlugin: (p: { granted: String[]; image: String; publicKey: String }) => Boolean;
 	login: (p: { pin: String; username: String }) => Boolean;
 	openUrlOnPhone: (p: { url: String }) => Boolean;
 	pluginUiEvent: (p: {
@@ -213,8 +244,14 @@ export type Mutation = {
 		screenId: String;
 		value?: String | null | undefined;
 	}) => Boolean;
+	previewPluginInstall: (p: { image: String; publicKey: String }) => Boolean;
 	register: (p: { pin: String; username: String }) => Boolean;
+	rejectPluginUpdate: (p: { pluginId: String }) => Boolean;
+	setPluginAutoUpdate: (p: { autoUpdate: Boolean; pluginId: String }) => Boolean;
+	setPluginEnabled: (p: { enabled: Boolean; pluginId: String }) => Boolean;
+	setPluginPermission: (p: { granted: Boolean; permission: String; pluginId: String }) => Boolean;
 	signOut: Boolean;
+	uninstallPlugin: (p: { pluginId: String }) => Boolean;
 };
 
 export type Network = {
@@ -263,6 +300,24 @@ export type PluginInfo = {
 	name: String;
 };
 
+export type PluginInstallPreview = {
+	conflict: Boolean;
+	domains: String[];
+	features: String[];
+	image: String;
+	name: String;
+	permissions: String[];
+	signerFingerprint: String;
+	version: String;
+};
+
+export type PluginManagement = {
+	busy: String | null;
+	errorMessage: String | null;
+	plugins: () => ManagedPlugin[];
+	preview: () => PluginInstallPreview | null;
+};
+
 export type PluginPlaybackInfo = {
 	acodec: String | null;
 	audioContainer: String | null;
@@ -296,6 +351,7 @@ export type Query = {
 	pairing: () => Pairing;
 	pluginAuth: (p: { pluginId: String }) => PluginAuthState | null;
 	pluginDashboards: () => PluginDashboard[];
+	pluginManagement: () => PluginManagement;
 	pluginPlaybackInfo: (p: {
 		maxHeight?: Int | null | undefined;
 		pluginId: String;
@@ -343,6 +399,7 @@ export type StringWhereInputArgument = {
 export type Subscription = {
 	pluginAuth: (p: { pluginId: String }) => PluginAuthState | null;
 	pluginDashboards: () => PluginDashboard[];
+	pluginManagement: () => PluginManagement;
 	pluginScreen: (p: { pluginId: String; screenId: String }) => PluginScreenData;
 	plugins: () => PluginInfo[];
 	user: (p: { id: ID }) => User;
@@ -408,6 +465,7 @@ export const client = {
 		availableSubscriptions: new Set([
 			'pluginAuth',
 			'pluginDashboards',
+			'pluginManagement',
 			'pluginScreen',
 			'plugins',
 			'user',

@@ -128,6 +128,13 @@ describe('resolveImage', () => {
 		await expect(resolveImage(ref())).rejects.toThrow(/no ENTRYPOINT or CMD/);
 	});
 
+	it('names the registry when it cannot be reached', async () => {
+		const unreachable = parseImageRef('localhost:1/acme/demo:1.0');
+		await expect(resolveImage(unreachable)).rejects.toThrow(
+			'Could not reach the registry localhost:1'
+		);
+	});
+
 	it('reports a missing tag', async () => {
 		await expect(resolveImage(ref('nope'))).rejects.toBeInstanceOf(RegistryError);
 	});

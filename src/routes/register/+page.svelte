@@ -2,6 +2,8 @@
 	import PinPad from '#lib/components/PinPad.svelte';
 	import { usernameError } from '#lib/username';
 	import { client } from '#lib/api/rumbleClient/client';
+	import { resetClientState } from '#lib/api/client';
+	import { goto } from '$app/navigation';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import * as m from '#lib/paraglide/messages';
 
@@ -29,11 +31,10 @@
 	async function submit() {
 		try {
 			await client.mutate.register({ __args: { username: trimmedUsername, pin } });
-			// A full navigation, not goto()'s client-side routing -- the new
-			// profile shouldn't inherit any of the previous session's client-side
-			// state (urql's cache, module-level state elsewhere), and tearing
-			// down the whole JS runtime is the only way to guarantee that.
-			window.location.href = '/home';
+			// The previous profile's cached query results must not leak into the
+			// new one; urql's cache can't be cleared outright (see client.ts).
+			resetClientState();
+			await goto('/home');
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.could_not_create_profile());
 			pin = '';

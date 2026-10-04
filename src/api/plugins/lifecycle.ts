@@ -4,8 +4,7 @@
 import cron from 'node-cron';
 import { defaultPluginDeps } from './deps';
 import { stopAllPlugins } from './manager';
-import { PLUGIN_LIST_EVENT } from './events';
-import { pluginPubSub } from './pubsub';
+import { announcePluginListChanged } from './events';
 import { SANDBOX_PREFIX } from './sandbox/spec';
 import { checkAllForUpdates, type UpdateOutcome } from './updater';
 
@@ -25,7 +24,7 @@ const NOTABLE = new Set<UpdateOutcome>(['applied', 'pending', 'failed']);
 
 async function runUpdateCheck() {
 	const outcomes = await checkAllForUpdates(defaultPluginDeps);
-	pluginPubSub.publish(PLUGIN_LIST_EVENT);
+	announcePluginListChanged();
 	for (const [pluginId, outcome] of Object.entries(outcomes).filter(([, o]) => NOTABLE.has(o))) {
 		console.log(`[plugins] update check: ${pluginId} ${outcome}`);
 	}

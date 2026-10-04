@@ -2,12 +2,15 @@
 	import type { Snippet } from 'svelte';
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
-	import { onNavigate } from '$app/navigation';
+	import { onNavigate, afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Toaster } from 'svelte-sonner';
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import NavigationSpinner from '#lib/components/NavigationSpinner.svelte';
+	import { playSound } from '#lib/sounds';
+	import { startAmbient, stopAmbient } from '#lib/ambient';
+	import { ambientMusic } from '#lib/state/ambient.svelte';
 	import { applyTvScale, clearTvScale } from '#lib/tvScale';
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
@@ -110,6 +113,25 @@
 		if (!document.startViewTransition || !navigation.from || !navigation.to) return null;
 		return { from: navigation.from.url.pathname, to: navigation.to.url.pathname };
 	}
+
+	// Soft background music while sitting on the home screen only; it fades
+	// out when leaving (to an app, the player, the picker) or when switched off
+	// with the toggle in the home screen's top bar.
+	const isHomePage = $derived(page.url.pathname === '/home');
+	$effect(() => {
+		if (!isHomePage || !ambientMusic.enabled) return;
+		startAmbient();
+		return stopAmbient;
+	});
+
+	// Opening the home screen from anywhere else (an app, the player) gets its
+	// own sound. The initial page load has no `from`, so it stays silent.
+	afterNavigate((navigation) => {
+		if (isRemotePage || !navigation.from || !navigation.to) return;
+		if (navigation.to.url.pathname === '/home' && navigation.from.url.pathname !== '/home') {
+			playSound('home');
+		}
+	});
 
 	onNavigate((navigation) => {
 		const paths = transitionPaths(navigation);

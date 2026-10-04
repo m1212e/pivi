@@ -9,6 +9,7 @@ import './user';
 import './pairing';
 import './auth';
 import './plugins';
+import './pluginManagement';
 import './remote';
 import './playback';
 import './network';

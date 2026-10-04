@@ -48,6 +48,7 @@
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import * as m from '#lib/paraglide/messages';
+	import { playSound } from '#lib/sounds';
 
 	let socket: WebSocket | undefined;
 	let connection: MessageConnection | undefined;
@@ -123,7 +124,10 @@
 	function navigationFlags() {
 		return {
 			canGoBack: location.pathname !== '/' && location.pathname !== '/home',
-			canGoHome: location.pathname.startsWith('/apps/') || location.pathname.startsWith('/play/')
+			canGoHome:
+				location.pathname.startsWith('/apps/') ||
+				location.pathname.startsWith('/play/') ||
+				location.pathname === '/plugins'
 		};
 	}
 
@@ -234,7 +238,7 @@
 	function focusableElements() {
 		return [
 			...document.querySelectorAll<HTMLElement>(
-				'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+				'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 			)
 		].filter((el) => el.offsetParent !== null);
 	}
@@ -347,11 +351,15 @@
 		const els = focusableElements();
 		const active = document.activeElement;
 		if (!(active instanceof HTMLElement) || !els.includes(active)) {
+			if (els[0]) playSound('move');
 			els[0]?.focus();
 			return;
 		}
 		const best = bestInDirection(els, active, dx, dy);
-		if (best) focusAndScroll(best, els);
+		if (best) {
+			playSound('move');
+			focusAndScroll(best, els);
+		}
 	}
 
 	// Vertically, center whichever row (title included) or the top bar holds
@@ -409,6 +417,7 @@
 			'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
 		);
 		if (!target) return;
+		playSound('select');
 		target.classList.remove('pivi-press');
 		// Force a reflow so re-adding the class restarts the animation even if
 		// it's clicked again before the previous run finished.

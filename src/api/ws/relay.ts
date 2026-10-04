@@ -112,6 +112,13 @@ function phoneSocketsWithKeys() {
 	);
 }
 
+// Whether a paired phone is connected right now. The TV's own screen uses this
+// to decide whether it may change what's installed: the remote is its only
+// input device, so with no phone connected nobody is steering it.
+export function hasConnectedPhone(): boolean {
+	return phoneSocketsWithKeys().length > 0;
+}
+
 async function handlePairRequest(
 	socket: WebSocket,
 	message: PairRequest,
