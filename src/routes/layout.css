@@ -67,6 +67,60 @@ body {
 }
 
 /*
+ * Home-screen backdrop: three large, heavily blurred colour blobs that drift
+ * very slowly (and at unrelated paces) behind the content. Low opacity and
+ * long durations keep it a barely-there shimmer rather than visible motion.
+ */
+.pivi-aurora {
+	position: fixed;
+	inset: 0;
+	z-index: -10;
+	overflow: hidden;
+	pointer-events: none;
+}
+.pivi-aurora span {
+	position: absolute;
+	width: 60vmax;
+	height: 60vmax;
+	border-radius: 50%;
+	filter: blur(90px);
+	opacity: 0.16;
+	animation: pivi-aurora-drift 26s ease-in-out infinite alternate;
+}
+.pivi-aurora span:nth-child(1) {
+	top: -20%;
+	left: -15%;
+	background: var(--color-indigo-500);
+}
+.pivi-aurora span:nth-child(2) {
+	top: 30%;
+	right: -20%;
+	background: var(--color-fuchsia-500);
+	animation-duration: 35s;
+	animation-delay: -20s;
+}
+.pivi-aurora span:nth-child(3) {
+	bottom: -25%;
+	left: 20%;
+	background: var(--color-cyan-500);
+	animation-duration: 44s;
+	animation-delay: -40s;
+}
+@keyframes pivi-aurora-drift {
+	from {
+		transform: translate3d(-18vw, -12vh, 0) scale(0.92);
+	}
+	to {
+		transform: translate3d(18vw, 14vh, 0) scale(1.28);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.pivi-aurora span {
+		animation: none;
+	}
+}
+
+/*
  * The one and only selection indicator on TV screens — applied/removed
  * directly by RemoteBridge on every focus change (remote swipe, direct tap,
  * Tab key), rather than `:focus-visible`. Chromium suppresses

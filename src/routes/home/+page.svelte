@@ -295,7 +295,10 @@
 {/snippet}
 
 {#if me}
-	<div class="flex min-h-screen flex-col gap-10 bg-slate-950 pb-16 text-white">
+	<div class="relative isolate flex min-h-screen flex-col gap-10 bg-slate-950 pb-16 text-white">
+		<div class="pivi-aurora" aria-hidden="true">
+			<span></span><span></span><span></span>
+		</div>
 		<div class="relative">
 			{#if heroCard}
 				<HeroBanner

@@ -14,12 +14,16 @@
 	class="relative h-[52vh] min-h-80 w-full overflow-hidden sm:h-[60vh]"
 	transition:fade={{ duration: 400 }}
 >
-	<img src={heroPlaceholder} alt="" class="size-full object-cover object-top" />
+	<div class="absolute inset-0 mask-b-from-55% mask-b-to-100%">
+		<img src={heroPlaceholder} alt="" class="size-full object-cover object-top" />
 
-	<div class="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
-	<div
-		class="absolute inset-0 bg-linear-to-r from-slate-950/80 via-slate-950/10 to-transparent"
-	></div>
+		<div
+			class="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/40 to-transparent"
+		></div>
+		<div
+			class="absolute inset-0 bg-linear-to-r from-slate-950/80 via-slate-950/10 to-transparent"
+		></div>
+	</div>
 
 	<div
 		class="absolute inset-x-0 bottom-0 flex flex-col gap-4 px-8 pb-10 sm:px-12 sm:pb-14"

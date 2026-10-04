@@ -36,18 +36,22 @@
 	class="relative h-[52vh] min-h-80 w-full overflow-hidden sm:h-[60vh]"
 	transition:fade={{ duration: 400 }}
 >
-	<div class="absolute inset-0 bg-slate-800" style:background={gradient}>
-		{#if image}
-			<img src={image} alt="" onerror={onImageError} class="size-full object-cover object-top" />
-		{/if}
+	<!-- Artwork and its darkening overlays fade out together at the bottom, so
+	     the page background (and its drifting colours) shows through rather
+	     than ending in a hard edge. -->
+	<div class="absolute inset-0 mask-b-from-55% mask-b-to-100%">
+		<div class="absolute inset-0 bg-slate-800" style:background={gradient}>
+			{#if image}
+				<img src={image} alt="" onerror={onImageError} class="size-full object-cover object-top" />
+			{/if}
+		</div>
+		<div
+			class="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/40 to-transparent"
+		></div>
+		<div
+			class="absolute inset-0 bg-linear-to-r from-slate-950/80 via-slate-950/10 to-transparent"
+		></div>
 	</div>
-
-	<!-- Fades the artwork into the page background so the row below reads as
-	     one continuous surface rather than a hard-edged banner. -->
-	<div class="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
-	<div
-		class="absolute inset-0 bg-linear-to-r from-slate-950/80 via-slate-950/10 to-transparent"
-	></div>
 
 	<div
 		class="absolute inset-x-0 bottom-0 flex flex-col gap-4 px-8 pb-10 sm:px-12 sm:pb-14"
