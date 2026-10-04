@@ -19,7 +19,7 @@
 
 	export type PluginActions = {
 		preview: (image: string, publicKey: string) => void;
-		install: (image: string, publicKey: string, granted: PermissionKey[]) => void;
+		install: (granted: PermissionKey[]) => void;
 		dismissPreview: () => void;
 		uninstall: (pluginId: string) => void;
 		setEnabled: (pluginId: string, enabled: boolean) => void;
@@ -161,7 +161,12 @@
 			<button
 				type="button"
 				disabled={p.conflict || plugins.busy !== null}
-				onclick={() => actions.install(image.trim(), publicKey.trim(), chosen)}
+				onclick={() => {
+					actions.install(chosen);
+					// What was typed has been used; the form starts empty for the next one.
+					image = '';
+					publicKey = '';
+				}}
 				class="flex-1 bg-indigo-500 text-white hover:bg-indigo-400 {buttonBase}"
 			>
 				{m.plugins_install()}

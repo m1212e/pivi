@@ -117,18 +117,10 @@ schemaBuilder.mutationFields((t) => ({
 	}),
 	installPlugin: t.field({
 		type: 'Boolean',
-		args: {
-			image: t.arg.string({ required: true }),
-			publicKey: t.arg.string({ required: true }),
-			granted: t.arg.stringList({ required: true })
-		},
+		args: { granted: t.arg.stringList({ required: true }) },
 		resolve: (_root, args) =>
 			start(() =>
-				pluginManagement.install({
-					image: args.image,
-					publicKey: args.publicKey,
-					granted: args.granted.map((key) => permissionKeySchema.parse(key))
-				})
+				pluginManagement.install(args.granted.map((key) => permissionKeySchema.parse(key)))
 			)
 	}),
 	dismissPluginPreview: t.field({

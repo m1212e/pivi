@@ -51,7 +51,7 @@ const HANDLERS: Record<string, (params: unknown) => Promise<void> | void> = {
 	[pluginsPreviewNotification.method]: (raw) =>
 		pluginManagement.preview(pluginsPreviewParamsSchema.parse(raw)),
 	[pluginsInstallNotification.method]: (raw) =>
-		pluginManagement.install(pluginsInstallParamsSchema.parse(raw)),
+		pluginManagement.install(pluginsInstallParamsSchema.parse(raw).granted),
 	[pluginsDismissPreviewNotification.method]: () => pluginManagement.dismissPreview(),
 	[pluginsUninstallNotification.method]: withPluginId(pluginManagement.uninstall),
 	[pluginsApproveUpdateNotification.method]: withPluginId(pluginManagement.approveUpdate),

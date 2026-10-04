@@ -235,7 +235,7 @@ export type Mutation = {
 	checkPluginUpdates: Boolean;
 	clearPluginCache: (p: { pluginId: String }) => Boolean;
 	dismissPluginPreview: Boolean;
-	installPlugin: (p: { granted: String[]; image: String; publicKey: String }) => Boolean;
+	installPlugin: (p: { granted: String[] }) => Boolean;
 	login: (p: { pin: String; username: String }) => Boolean;
 	openUrlOnPhone: (p: { url: String }) => Boolean;
 	pluginUiEvent: (p: {

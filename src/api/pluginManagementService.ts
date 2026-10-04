@@ -50,6 +50,11 @@ export function createPluginManagement(
 		error: null,
 		preview: null
 	};
+	// What the preview was made from. Install refers to it rather than taking the
+	// image and key again: a preview started on one screen is shown on the other,
+	// and a screen's own fields can't be trusted to still hold what was typed (the
+	// remote clears a field right after Enter).
+	let previewed: InstallRequest | null = null;
 
 	// Runs one operation: marks the service busy for its duration, turns a failure
 	// into state the UI can show, and always ends by announcing the result.
@@ -80,6 +85,7 @@ export function createPluginManagement(
 
 		async preview(request: InstallRequest): Promise<void> {
 			session.preview = null;
+			previewed = null;
 			await run('previewing', async () => {
 				const preview = await previewInstall(deps, request);
 				session.preview = {
@@ -92,17 +98,22 @@ export function createPluginManagement(
 					signerFingerprint: preview.signer.fingerprint,
 					conflict: preview.conflict
 				};
+				previewed = request;
 			});
 		},
 
-		install: (request: InstallRequest & { granted: PermissionKey[] }) =>
+		// Installs what was last previewed, with the permissions the user left on.
+		install: (granted: PermissionKey[]) =>
 			run('installing', async () => {
-				await installPlugin(deps, request);
+				if (!previewed) throw new Error('Review the plugin before installing it');
+				await installPlugin(deps, { ...previewed, granted });
 				session.preview = null;
+				previewed = null;
 			}),
 
 		dismissPreview(): void {
 			session.preview = null;
+			previewed = null;
 			session.error = null;
 			events.stateChanged();
 		},

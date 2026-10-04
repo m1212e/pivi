@@ -117,10 +117,33 @@ describe('previewing', () => {
 });
 
 describe('installing and managing', () => {
+	it('installs what was previewed, not whatever a screen sends along', async () => {
+		publish();
+		await service.preview(request());
+		// A second screen asks to install with nothing but the permissions: the host
+		// already knows which image and key were reviewed.
+		await service.install(['storage']);
+		expect((await service.state()).plugins[0]).toMatchObject({
+			id: 'demo',
+			permissions: expect.arrayContaining([{ key: 'storage', granted: true }])
+		});
+	});
+
+	it('refuses to install without a preview, and forgets the preview afterwards', async () => {
+		await service.install(['network']);
+		expect((await service.state()).error).toMatch(/Review the plugin/);
+
+		publish();
+		await service.preview(request());
+		service.dismissPreview();
+		await service.install(['network']);
+		expect((await service.state()).error).toMatch(/Review the plugin/);
+	});
+
 	it('installs, clears the preview and lists the plugin', async () => {
 		publish();
 		await service.preview(request());
-		await service.install({ ...request(), granted: ['network', 'storage'] });
+		await service.install(['network', 'storage']);
 
 		const state = await service.state();
 		expect(state.preview).toBeNull();
@@ -138,7 +161,8 @@ describe('installing and managing', () => {
 
 	it('toggles settings and uninstalls', async () => {
 		publish();
-		await service.install({ ...request(), granted: ['network'] });
+		await service.preview(request());
+		await service.install(['network']);
 
 		await service.setPermission('demo', 'cache', true);
 		await service.setEnabled('demo', false);
@@ -158,7 +182,8 @@ describe('installing and managing', () => {
 
 	it('clears a plugin cache only for an active profile', async () => {
 		publish();
-		await service.install({ ...request(), granted: ['cache'] });
+		await service.preview(request());
+		await service.install(['cache']);
 
 		await service.clearCache('demo');
 		expect((await service.state()).error).toBeNull();

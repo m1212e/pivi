@@ -204,11 +204,9 @@
 				image,
 				publicKey
 			}),
-		install: (image, publicKey, granted) =>
+		install: (granted) =>
 			connection &&
 			sendNotification(connection, pluginsInstallNotification, pluginsInstallParamsSchema, {
-				image,
-				publicKey,
 				granted
 			}),
 		dismissPreview: () => connection?.sendNotification(pluginsDismissPreviewNotification),

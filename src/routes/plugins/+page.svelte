@@ -94,8 +94,8 @@
 	const actions: PluginActions = {
 		preview: (image, publicKey) =>
 			run(client.mutate.previewPluginInstall({ __args: { image, publicKey } })),
-		install: (image, publicKey, granted: PermissionKey[]) =>
-			run(client.mutate.installPlugin({ __args: { image, publicKey, granted } })),
+		install: (granted: PermissionKey[]) =>
+			run(client.mutate.installPlugin({ __args: { granted } })),
 		dismissPreview: () => run(client.mutate.dismissPluginPreview()),
 		uninstall: (pluginId) => run(client.mutate.uninstallPlugin({ __args: { pluginId } })),
 		setEnabled: (pluginId, enabled) =>

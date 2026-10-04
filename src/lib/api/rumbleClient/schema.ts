@@ -1508,20 +1508,6 @@ export const schema = {
 										}
 									}
 								}
-							},
-							{
-								name: 'image',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
-							},
-							{
-								name: 'publicKey',
-								type: {
-									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-								}
 							}
 						]
 					},

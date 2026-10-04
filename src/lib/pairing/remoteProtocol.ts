@@ -270,8 +270,9 @@ export const pluginsPreviewNotification = new NotificationType<
 	z.infer<typeof pluginsPreviewParamsSchema>
 >('plugins/preview');
 
-export const pluginsInstallParamsSchema = pluginsPreviewParamsSchema.extend({
-	// The permissions the user left switched on.
+// Installs what was last previewed (the host holds it — the preview may have been
+// made on the other screen), with the permissions the user left switched on.
+export const pluginsInstallParamsSchema = z.object({
 	granted: z.array(permissionKeySchema)
 });
 export const pluginsInstallNotification = new NotificationType<
