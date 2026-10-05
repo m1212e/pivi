@@ -1,0 +1,23 @@
+{
+	"id": "youtube",
+	"name": "YouTube",
+	"version": "0.1.1",
+	"protocol": 1,
+	"features": ["dashboard", "screen", "playback", "skipSegments"],
+	"permissions": ["network", "storage", "cache"],
+	"network": {
+		"domains": [
+			"www.youtube.com",
+			"*.googleapis.com",
+			"accounts.google.com",
+			"*.googlevideo.com",
+			"i.ytimg.com",
+			"*.ggpht.com",
+			"sponsor.ajay.app"
+		]
+	},
+	"entryScreenId": "browse",
+	"icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\"><rect width=\"48\" height=\"48\" rx=\"10\" fill=\"#FF0000\"/><path d=\"M20 16L32 24L20 32Z\" fill=\"#FFFFFF\"/></svg>",
+	"primaryColor": "#ff0000",
+	"secondaryColor": "#282828"
+}

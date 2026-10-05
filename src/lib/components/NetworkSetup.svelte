@@ -1,9 +1,10 @@
 <script lang="ts">
 	// The TV half of wifi provisioning: what to show when this device can't
-	// reach the network. It is deliberately just instructions — every action
-	// happens on the phone (see src/api/wifiCommands.ts for why), so this screen
-	// only has to get a phone onto the device's own access point and then into
-	// the remote.
+	// reach the network. It is deliberately just instructions — there's nothing
+	// to type into until a phone is paired as the remote (see
+	// src/api/wifiBootstrap.ts for why), so this screen only has to get a phone
+	// onto the device's own access point and then into the remote; picking a
+	// real network happens on the TV's own /wifi screen once that's done.
 	//
 	// Two QR codes rather than one, because they do genuinely different things
 	// and no single code can do both: the first is a `WIFI:` code, which phone

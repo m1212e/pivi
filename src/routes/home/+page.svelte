@@ -5,37 +5,60 @@
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
-	import { pluginActionSchema, pluginActionHref } from '#lib/plugins/dashboard';
-	import PairingQr from '#lib/components/PairingQr.svelte';
+	import { appActionSchema, appActionHref } from '#lib/apps/dashboard';
 	import HeroBanner from '#lib/components/HeroBanner.svelte';
 	import HeroBannerEmpty from '#lib/components/HeroBannerEmpty.svelte';
 	import HeroBannerSkeleton from '#lib/components/HeroBannerSkeleton.svelte';
 	import VideoRow from '#lib/components/VideoRow.svelte';
 	import VideoRowSkeleton from '#lib/components/VideoRowSkeleton.svelte';
-	import PlaceholderRow from '#lib/components/PlaceholderRow.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
-	import { getPairing } from '#lib/state/pairing.svelte';
+	import { getNetworkStatus } from '#lib/state/network.svelte';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
-	import { Music, VolumeX } from '@lucide/svelte';
+	import { Cable, Music, VolumeX, Wifi } from '@lucide/svelte';
 
-	// Every installed plugin, whatever it implements -- one that only provides
+	// Every installed app, whatever it implements -- one that only provides
 	// a screen (or nothing but playback) still gets its tile in the apps row.
-	// Live, since plugins are installed and removed from the paired phone while
+	// Live, since apps are installed and removed from the paired phone while
 	// this page is open. Copied into plain objects for the reason explained at
-	// cardsByPluginId below.
-	type InstalledPlugin = { id: string; name: string };
-	const toInstalled = (plugins: readonly InstalledPlugin[]): InstalledPlugin[] =>
-		plugins.map(({ id, name }) => ({ id, name }));
-	const PLUGIN_FIELDS = { id: true, name: true } as const;
+	// cardsByAppId below.
+	type InstalledApp = {
+		id: string;
+		name: string;
+		icon: string | null;
+		primaryColor: string | null;
+		secondaryColor: string | null;
+		hasUpdate: boolean;
+	};
+	const toInstalled = (apps: readonly InstalledApp[]): InstalledApp[] =>
+		apps.map(({ id, name, icon, primaryColor, secondaryColor, hasUpdate }) => ({
+			id,
+			name,
+			icon,
+			primaryColor,
+			secondaryColor,
+			hasUpdate
+		}));
+	const APP_FIELDS = {
+		id: true,
+		name: true,
+		icon: true,
+		primaryColor: true,
+		secondaryColor: true,
+		hasUpdate: true
+	} as const;
 
-	let installedPlugins = $state<InstalledPlugin[]>(
-		toInstalled((await client.liveQuery.plugins(PLUGIN_FIELDS)) ?? [])
+	let installedApps = $state<InstalledApp[]>(
+		toInstalled((await client.liveQuery.apps(APP_FIELDS)) ?? [])
 	);
 	const apps = $derived(
-		installedPlugins.map((plugin) => ({
-			id: plugin.id,
-			name: plugin.name,
-			href: appHref(plugin.id)
+		installedApps.map((app) => ({
+			id: app.id,
+			name: app.name,
+			href: appHref(app.id),
+			icon: app.icon,
+			primaryColor: app.primaryColor,
+			secondaryColor: app.secondaryColor,
+			hasUpdate: app.hasUpdate
 		}))
 	);
 
@@ -51,45 +74,45 @@
 	// scope its own type annotation would otherwise need to reference.
 	type Profile = NonNullable<typeof me>;
 
-	// Real plugin-sourced data (see src/api/handlers/plugins.ts), alongside
-	// the placeholder rows below — proves the Tier 1 dashboard contract
-	// (src/lib/plugins/dashboard.ts) actually reaches the real UI. Only
-	// plugins that declare a dashboard show up here at all. The initial value
+	// Real app-sourced data (see src/api/handlers/apps.ts) — proves the
+	// Tier 1 dashboard contract (src/lib/apps/dashboard.ts) actually reaches
+	// the real UI. Only apps that declare a dashboard show up here at all.
+	// The initial value
 	// comes from this top-level await (so SSR still renders real content, not
 	// a loading flash); a real push subscription — not a polling setInterval
 	// — keeps it live afterward, since urql's cache-first default otherwise
 	// hides the fact a plain repeated query never actually sees server-side
 	// changes.
-	type PluginCard = {
+	type DashboardCard = {
 		id: string;
 		title: string;
 		subtitle: string;
 		image: string;
 		actionJson: string;
 	};
-	// A card plus which plugin it came from.
-	type AppCard = PluginCard & { pluginId: string; appName: string };
+	// A card plus which app it came from.
+	type AppCard = DashboardCard & { appId: string; appName: string };
 	const DASHBOARD_FIELDS = {
-		pluginId: true,
-		pluginName: true,
+		appId: true,
+		appName: true,
 		cards: { id: true, title: true, subtitle: true, image: true, actionJson: true }
 	} as const;
 
-	function appHref(pluginId: string): string {
-		return `/apps/${encodeURIComponent(pluginId)}`;
+	function appHref(appId: string): string {
+		return `/apps/${encodeURIComponent(appId)}`;
 	}
 	function cardHref(card: AppCard): string {
-		return pluginActionHref(
-			card.pluginId,
-			appHref(card.pluginId),
-			pluginActionSchema.parse(JSON.parse(card.actionJson))
+		return appActionHref(
+			card.appId,
+			appHref(card.appId),
+			appActionSchema.parse(JSON.parse(card.actionJson))
 		);
 	}
 
-	// `null` cards means that plugin hasn't published a dashboard at all yet
-	// (still activating -- see PluginDashboard in src/api/handlers/plugins.ts),
+	// `null` cards means that app hasn't published a dashboard at all yet
+	// (still activating -- see AppDashboard in src/api/handlers/apps.ts),
 	// distinct from `[]` (published, genuinely nothing to show). That race is
-	// real even for this top-level await: SSR can render before a plugin's
+	// real even for this top-level await: SSR can render before an app's
 	// first refresh() finishes, same as any other request.
 	//
 	// Copied into plain objects/arrays rather than assigned directly: what
@@ -101,42 +124,42 @@
 	// invalidate $derived state depending on it (observed: the hero staying
 	// stuck on its very first value while the shelf below kept updating).
 	// Copying into fresh values each time guarantees a new reference.
-	type DashboardResult = { pluginId: string; pluginName: string; cards?: PluginCard[] | null }[];
-	function cardsByPluginId(dashboards: DashboardResult): Record<string, AppCard[] | null> {
+	type DashboardResult = { appId: string; appName: string; cards?: DashboardCard[] | null }[];
+	function groupCardsByAppId(dashboards: DashboardResult): Record<string, AppCard[] | null> {
 		return Object.fromEntries(
 			dashboards.map((d) => [
-				d.pluginId,
+				d.appId,
 				d.cards
 					? d.cards.map((card) => ({
 							...card,
-							pluginId: d.pluginId,
-							appName: d.pluginName
+							appId: d.appId,
+							appName: d.appName
 						}))
 					: null
 			])
 		);
 	}
 
-	const initialDashboards = await client.liveQuery.pluginDashboards(DASHBOARD_FIELDS);
+	const initialDashboards = await client.liveQuery.appDashboards(DASHBOARD_FIELDS);
 	let cardsByAppId = $state<Record<string, AppCard[] | null>>(
-		cardsByPluginId((initialDashboards ?? []) as DashboardResult)
+		groupCardsByAppId((initialDashboards ?? []) as DashboardResult)
 	);
 	onMount(() => {
 		// .subscribe() returns an ES Observable Subscription object
 		// (.unsubscribe()), not a plain unsubscribe function — returning it
 		// directly as onMount's cleanup throws "not a function" the moment
 		// Svelte actually calls it (client-side navigation away from /home).
-		const dashboards = client.liveQuery.pluginDashboards(DASHBOARD_FIELDS).subscribe((value) => {
+		const dashboards = client.liveQuery.appDashboards(DASHBOARD_FIELDS).subscribe((value) => {
 			// An emission with no data (before the first result, or on an error) says
 			// nothing about the dashboards, so it must not wipe what's shown.
-			if (value) cardsByAppId = cardsByPluginId(value as DashboardResult);
+			if (value) cardsByAppId = groupCardsByAppId(value as DashboardResult);
 		});
-		const plugins = client.liveQuery.plugins(PLUGIN_FIELDS).subscribe((value) => {
-			if (value) installedPlugins = toInstalled(value);
+		const apps = client.liveQuery.apps(APP_FIELDS).subscribe((value) => {
+			if (value) installedApps = toInstalled(value);
 		});
 		return () => {
 			stopSubscription(dashboards);
-			stopSubscription(plugins);
+			stopSubscription(apps);
 		};
 	});
 
@@ -145,18 +168,14 @@
 	// hasn't published yet (entry is null). The former is just left out of
 	// the shelves below instead of showing a skeleton forever.
 	// Whatever the first app-with-cards' top-ranked card happens to be
-	// becomes the hero — generic over whichever plugin's cards these are, so
-	// this doesn't need touching as more plugins start contributing cards.
+	// becomes the hero — generic over whichever app's cards these are, so
+	// this doesn't need touching as more apps start contributing cards.
 	// Pulled out of its row so it isn't shown twice.
 	const heroCard = $derived(apps.map((app) => cardsByAppId[app.id]?.[0]).find(Boolean));
 
 	function isHeroCard(cards: AppCard[] | null, heroCard: AppCard | undefined): boolean {
 		if (!cards || cards.length === 0 || !heroCard) return false;
 		return cards[0].id === heroCard.id;
-	}
-
-	function hasCards(cards: AppCard[] | null): boolean {
-		return !!cards && cards.length > 0;
 	}
 
 	function shelfCardsFor(cards: AppCard[] | null, isHero: boolean): AppCard[] {
@@ -173,17 +192,16 @@
 		return {
 			...app,
 			loading: cards === null,
-			hasContent: hasCards(cards),
 			shelfCards: shelfCardsFor(cards, isHero)
 		};
 	}
 
-	// Per app: whether it's still loading, whether it settled with any
-	// content, and the cards to show in its shelf (with the hero card, if it
-	// came from this app, excluded so it isn't shown twice). An app that's
-	// still loading gets a skeleton; one that settled with zero cards gets an
-	// explanatory placeholder instead of a row titled "Suggested on {app}"
-	// for content that doesn't exist.
+	// Per app: whether it's still loading, and the cards to show in its shelf
+	// (with the hero card, if it came from this app, excluded so it isn't
+	// shown twice). An app that's still loading gets a skeleton; one that
+	// settled with zero cards is left out of the shelves below entirely,
+	// rather than a row titled "Suggested on {app}" for content that
+	// doesn't exist.
 	const appRows = $derived(
 		apps
 			.filter((app) => app.id in cardsByAppId)
@@ -213,19 +231,21 @@
 		window.location.href = `/?from=${encodeURIComponent(me?.id ?? '')}`;
 	}
 
-	// Same short-lived-token refresh as the profile-select screen — the
-	// dashboard can also sit idle long enough for the pairing code to expire.
-	let pairing = $state(await getPairing());
+	// Just enough to pick the wifi button's own icon (see topBar below) --
+	// unlike the pre-login picker's polling, nothing here is waiting on this to
+	// notice a change quickly, so a slow refresh is plenty.
+	let network = $state(await getNetworkStatus());
 	$effect(() => {
 		const interval = setInterval(async () => {
-			pairing = await getPairing();
+			network = await getNetworkStatus();
 		}, 60_000);
 		return () => clearInterval(interval);
 	});
 
 	// If nobody's touched the dashboard in a while, it's likely sitting on a
 	// TV with nobody looking at the current scroll position — scroll back to
-	// the top so the pairing QR code (in the top bar) is there to scan.
+	// the top so the pairing QR overlay (+layout.svelte's PairingOverlay,
+	// while no phone is connected) is there to scan.
 	// `focusin`/`click`/`keydown` cover both a phone remote's swipes/taps
 	// (RemoteBridge turns those into real focus/click events) and any direct
 	// interaction with the TV itself.
@@ -298,18 +318,18 @@
 					<VolumeX class="size-5" />
 				{/if}
 			</button>
-		</div>
-
-		<div class="flex flex-col items-end gap-4">
-			{#if pairing.remoteUrl}
-				<div
-					class="rounded-3xl bg-white/12 p-3 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
-				>
-					<div style:view-transition-name="pairing-qr">
-						<PairingQr url={pairing.remoteUrl} size={220} />
-					</div>
-				</div>
-			{/if}
+			<a
+				href="/wifi"
+				aria-label={m.wifi_open_setup()}
+				title={m.wifi_open_setup()}
+				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+			>
+				{#if network.ethernet}
+					<Cable class="size-5" />
+				{:else}
+					<Wifi class="size-5" />
+				{/if}
+			</a>
 		</div>
 	</div>
 {/snippet}
@@ -343,8 +363,6 @@
 			{#each appRows as row (row.id)}
 				{#if row.loading}
 					<VideoRowSkeleton title={row.name} />
-				{:else if !row.hasContent}
-					<PlaceholderRow appName={row.name} appHref={row.href} />
 				{:else if row.shelfCards.length > 0}
 					<VideoRow
 						title={m.suggested_on({ app: row.name })}

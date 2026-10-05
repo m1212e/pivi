@@ -5,7 +5,7 @@
 // device boundaries need and is deliberately not reinvented per boundary.
 // It doesn't validate payloads on its own, though, so every send/handle
 // still goes through the matching zod schema — that's the actual runtime
-// enforcement point for both the plugin RPC contracts (plugins/*.ts) and
+// enforcement point for both the app RPC contracts (apps/*.ts) and
 // the phone-remote command protocol (pairing/remoteProtocol.ts).
 import type { Disposable, MessageConnection, NotificationType, RequestParam } from 'vscode-jsonrpc';
 import type { z } from 'zod';

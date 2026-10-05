@@ -1,6 +1,5 @@
 import { NotificationType, NotificationType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
-import { featureSchema, permissionKeySchema } from '#lib/plugins/manifest';
 
 // Phone -> TV
 
@@ -9,7 +8,18 @@ export const moveNotification = new NotificationType<z.infer<typeof moveParamsSc
 	'remote/move'
 );
 
-export const selectNotification = new NotificationType0('remote/select');
+// Press and release rather than a single tap-shaped notification, so a
+// genuine hold (see HoldToConfirmButton.svelte) sees real pointerdown and
+// pointerup with its own duration in between, instead of one synthetic click
+// with no duration at all -- which is all a single `select` could ever carry.
+export const selectPressNotification = new NotificationType0('remote/selectPress');
+export const selectReleaseNotification = new NotificationType0('remote/selectRelease');
+// Sent instead of `selectRelease` when a touch that started a press turns
+// out to be a swipe once it crosses the move threshold -- ends the phantom
+// press on the TV (so nothing stays stuck "held") without the `release`
+// handler's `.click()`, which would otherwise fire a real selection on
+// whatever's focused every time a swipe merely started under a finger.
+export const selectCancelNotification = new NotificationType0('remote/selectCancel');
 export const backNotification = new NotificationType0('remote/back');
 // Distinct from `back` (browser history back, only shown when there's
 // somewhere to go back to) — this always jumps straight to /home regardless
@@ -87,29 +97,6 @@ export const playerVolumeNotification = new NotificationType<
 	z.infer<typeof playerVolumeParamsSchema>
 >('remote/playerVolume');
 
-// Wifi provisioning (phone -> host). Unlike every other notification in this
-// "Phone -> TV" section, these three are handled by the *server* rather than
-// relayed to the TV's browser (see src/api/wifiCommands.ts): joining a network
-// is an OS-level operation, and routing it through the TV page would mean
-// giving that page a privileged endpoint of its own and would break whenever
-// the TV happens to be showing something else.
-
-export const wifiRequestStateNotification = new NotificationType0('wifi/requestState');
-export const wifiScanNotification = new NotificationType0('wifi/scan');
-
-export const wifiConnectParamsSchema = z.object({
-	ssid: z.string().min(1),
-	// Empty for an open network. Never echoed back to the phone, and never
-	// logged — it goes straight to NetworkManager, which owns storing it.
-	password: z.string(),
-	// A network that doesn't broadcast its SSID has to be typed in by hand, and
-	// needs telling NetworkManager to probe for it explicitly.
-	hidden: z.boolean().default(false)
-});
-export const wifiConnectNotification = new NotificationType<
-	z.input<typeof wifiConnectParamsSchema>
->('wifi/connect');
-
 // TV -> phone
 
 const profileSchema = z.object({
@@ -118,7 +105,16 @@ const profileSchema = z.object({
 	image: z.string().nullable()
 });
 
-const appSchema = z.object({ id: z.string(), name: z.string() });
+// icon/primaryColor/secondaryColor mirror the manifest's own optional brand
+// identity (manifest.ts) -- null when the app declared none, same as
+// everywhere else it's shown.
+const appSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	icon: z.string().nullable(),
+	primaryColor: z.string().nullable(),
+	secondaryColor: z.string().nullable()
+});
 
 // Mirrors the player page's own SubtitleTrack -- `url`/`format` deliberately
 // stay on the TV side (the phone only ever names a language back, never
@@ -204,8 +200,8 @@ export const remoteDisconnectedNotification = new NotificationType<
 >('remote/remoteDisconnected');
 
 // Host -> phone, sent directly (not via the TV's own connection — see
-// relay.ts's sendToPhones) whenever a plugin publishes a PhoneAuthHandoff
-// (src/lib/plugins/auth.ts). Generic on purpose: any plugin that needs the
+// relay.ts's sendToPhones) whenever an app publishes a PhoneAuthHandoff
+// (src/lib/apps/auth.ts). Generic on purpose: any app that needs the
 // phone to complete a login (or, someday, anything else that needs a real
 // browser tab) gets this for free rather than building its own version.
 export const openUrlParamsSchema = z.object({ url: z.string() });
@@ -213,156 +209,15 @@ export const openUrlNotification = new NotificationType<z.infer<typeof openUrlPa
 	'remote/openUrl'
 );
 
-// Host -> phone, sent directly via relay.ts's sendToPhones (the server answers
-// the three wifi notifications above itself, so these never pass through the
-// TV). Also pushed unprompted when provisioning changes the device's own state
-// — a join succeeding or failing — so the phone doesn't have to poll for the
-// outcome of something it asked for.
-const wifiNetworkSchema = z.object({
-	ssid: z.string(),
-	signal: z.number(),
-	security: z.enum(['open', 'wep', 'wpa', 'enterprise']),
-	saved: z.boolean()
-});
+// Wifi management lives entirely on the TV's own /wifi screen now (see
+// src/lib/wifi/management.ts and handlers/wifi.ts) — the phone only ever
+// contributed the paired connection those mutations require and the keyboard
+// relay that types a password into the TV's own form field, not a UI of its
+// own. The provisioning access point (src/api/wifiBootstrap.ts) is still how
+// a phone gets paired in the first place when the device has no network yet.
 
-export const wifiStateParamsSchema = z.object({
-	// False when NetworkManager isn't reachable at all (a development machine,
-	// or a deployment without it) — the phone shows "not available here" rather
-	// than an empty network list that looks like a failed scan.
-	available: z.boolean(),
-	mode: z.enum(['client', 'hotspot', 'disconnected']),
-	ssid: z.string().nullable(),
-	online: z.boolean(),
-	ethernet: z.boolean(),
-	// Whether a join is in flight right now. The phone that asked for it
-	// already knows, but a second phone (or the same one after a reload) has no
-	// other way to tell -- which is also why the target SSID travels with it
-	// rather than being remembered client-side.
-	connecting: z.boolean(),
-	connectingSsid: z.string().nullable(),
-	// Result of the last join attempt, cleared when the next one starts. Null
-	// when the last attempt succeeded or none has been made.
-	error: z.string().nullable(),
-	// Null until a scan has completed, which is what distinguishes "no scan yet"
-	// from "scanned and found nothing".
-	networks: z.array(wifiNetworkSchema).nullable()
-});
-export const wifiStateNotification = new NotificationType<z.infer<typeof wifiStateParamsSchema>>(
-	'wifi/state'
-);
-
-// Plugin management (phone -> host). Like the wifi notifications, these are
-// answered by the *server* (src/api/pluginCommands.ts) rather than relayed to the
-// TV's browser: installing code and deciding what it may do is exactly the kind
-// of operation that must only ever come over the paired, encrypted connection,
-// never from the unauthenticated page on the TV.
-
-export const pluginsRequestStateNotification = new NotificationType0('plugins/requestState');
-
-// Resolve an image and check its signature, without installing anything — the
-// answer is what the phone shows for the user to accept.
-export const pluginsPreviewParamsSchema = z.object({
-	image: z.string().min(1),
-	// The publisher's cosign public key (PEM): what the image has to be signed by.
-	publicKey: z.string().min(1)
-});
-export const pluginsPreviewNotification = new NotificationType<
-	z.infer<typeof pluginsPreviewParamsSchema>
->('plugins/preview');
-
-// Installs what was last previewed (the host holds it — the preview may have been
-// made on the other screen), with the permissions the user left switched on.
-export const pluginsInstallParamsSchema = z.object({
-	granted: z.array(permissionKeySchema)
-});
-export const pluginsInstallNotification = new NotificationType<
-	z.infer<typeof pluginsInstallParamsSchema>
->('plugins/install');
-
-export const pluginsDismissPreviewNotification = new NotificationType0('plugins/dismissPreview');
-
-export const pluginIdParamsSchema = z.object({ pluginId: z.string() });
-export const pluginsUninstallNotification = new NotificationType<
-	z.infer<typeof pluginIdParamsSchema>
->('plugins/uninstall');
-export const pluginsApproveUpdateNotification = new NotificationType<
-	z.infer<typeof pluginIdParamsSchema>
->('plugins/approveUpdate');
-export const pluginsRejectUpdateNotification = new NotificationType<
-	z.infer<typeof pluginIdParamsSchema>
->('plugins/rejectUpdate');
-export const pluginsClearCacheNotification = new NotificationType<
-	z.infer<typeof pluginIdParamsSchema>
->('plugins/clearCache');
-export const pluginsCheckUpdatesNotification = new NotificationType0('plugins/checkUpdates');
-
-export const pluginsSetEnabledParamsSchema = pluginIdParamsSchema.extend({ enabled: z.boolean() });
-export const pluginsSetEnabledNotification = new NotificationType<
-	z.infer<typeof pluginsSetEnabledParamsSchema>
->('plugins/setEnabled');
-
-export const pluginsSetAutoUpdateParamsSchema = pluginIdParamsSchema.extend({
-	autoUpdate: z.boolean()
-});
-export const pluginsSetAutoUpdateNotification = new NotificationType<
-	z.infer<typeof pluginsSetAutoUpdateParamsSchema>
->('plugins/setAutoUpdate');
-
-export const pluginsSetPermissionParamsSchema = pluginIdParamsSchema.extend({
-	permission: permissionKeySchema,
-	granted: z.boolean()
-});
-export const pluginsSetPermissionNotification = new NotificationType<
-	z.infer<typeof pluginsSetPermissionParamsSchema>
->('plugins/setPermission');
-
-// Host -> phone
-
-const pluginPermissionSchema = z.object({ key: permissionKeySchema, granted: z.boolean() });
-
-const pluginUpdateSchema = z.object({
-	version: z.string(),
-	addedPermissions: z.array(permissionKeySchema),
-	addedDomains: z.array(z.string())
-});
-
-const installedPluginSchema = z.object({
-	id: z.string(),
-	name: z.string(),
-	version: z.string(),
-	image: z.string(),
-	enabled: z.boolean(),
-	autoUpdate: z.boolean(),
-	features: z.array(featureSchema),
-	permissions: z.array(pluginPermissionSchema),
-	// What the `network` permission covers, verbatim, so the user sees exactly
-	// which domains a single toggle opens up.
-	domains: z.array(z.string()),
-	signerFingerprint: z.string(),
-	// A newer version waiting for the user to approve what it asks for.
-	update: pluginUpdateSchema.nullable(),
-	error: z.string().nullable()
-});
-
-const pluginPreviewSchema = z.object({
-	image: z.string(),
-	name: z.string(),
-	version: z.string(),
-	features: z.array(featureSchema),
-	permissions: z.array(permissionKeySchema),
-	domains: z.array(z.string()),
-	signerFingerprint: z.string(),
-	conflict: z.boolean()
-});
-
-export const pluginsStateParamsSchema = z.object({
-	plugins: z.array(installedPluginSchema),
-	preview: pluginPreviewSchema.nullable(),
-	// What the host is in the middle of, so a phone that reloads (or a second
-	// one) shows the same thing as the one that asked.
-	busy: z.enum(['previewing', 'installing', 'checking', 'working']).nullable(),
-	error: z.string().nullable()
-});
-export const pluginsStateNotification = new NotificationType<
-	z.infer<typeof pluginsStateParamsSchema>
->('plugins/state');
+// App management lives entirely on the TV's own /apps screen now (see
+// src/lib/apps/management.ts and handlers/appManagement.ts) — the phone
+// only ever contributed the paired connection those mutations require and the
+// keyboard relay that types into the TV's own form fields (see textNotification
+// above), not a UI of its own.

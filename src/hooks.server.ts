@@ -27,7 +27,7 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 function requiresActiveProfile(pathname: string): boolean {
 	return (
 		pathname === '/home' ||
-		pathname === '/plugins' ||
+		pathname === '/apps' ||
 		pathname.startsWith('/apps/') ||
 		pathname.startsWith('/play/')
 	);

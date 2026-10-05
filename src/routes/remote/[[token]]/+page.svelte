@@ -5,7 +5,6 @@
 	// The bare package, not a /node or /browser subpath — see rpcRal.ts for
 	// why. ensureRal() below installs the RAL createMessageConnection needs.
 	import { createMessageConnection, type Message, type MessageConnection } from 'vscode-jsonrpc';
-	import type { z } from 'zod';
 	import { page } from '$app/state';
 	import { connectRemoteSession, type RemoteSession } from '#lib/pairing/session';
 	import { ensureRal } from '#lib/rpcRal';
@@ -33,48 +32,23 @@
 		requestStateNotification,
 		selectAppNotification,
 		selectAppParamsSchema,
-		selectNotification,
+		selectCancelNotification,
+		selectPressNotification,
+		selectReleaseNotification,
 		selectProfileNotification,
 		selectProfileParamsSchema,
 		stateNotification,
 		stateParamsSchema,
 		textNotification,
-		textParamsSchema,
-		pluginIdParamsSchema,
-		pluginsApproveUpdateNotification,
-		pluginsCheckUpdatesNotification,
-		pluginsClearCacheNotification,
-		pluginsDismissPreviewNotification,
-		pluginsInstallNotification,
-		pluginsInstallParamsSchema,
-		pluginsPreviewNotification,
-		pluginsPreviewParamsSchema,
-		pluginsRejectUpdateNotification,
-		pluginsRequestStateNotification,
-		pluginsSetAutoUpdateNotification,
-		pluginsSetAutoUpdateParamsSchema,
-		pluginsSetEnabledNotification,
-		pluginsSetEnabledParamsSchema,
-		pluginsSetPermissionNotification,
-		pluginsSetPermissionParamsSchema,
-		pluginsStateNotification,
-		pluginsStateParamsSchema,
-		pluginsUninstallNotification,
-		wifiConnectNotification,
-		wifiConnectParamsSchema,
-		wifiRequestStateNotification,
-		wifiScanNotification,
-		wifiStateNotification,
-		wifiStateParamsSchema
+		textParamsSchema
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import PinPad from '#lib/components/PinPad.svelte';
-	import PluginManager from '#lib/components/PluginManager.svelte';
-	import type { PluginActions } from '#lib/components/PluginManagerPanel.svelte';
-	import WifiSetup from '#lib/components/WifiSetup.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
 	import { profileGradient } from '#lib/profileColor';
+	import { appAccentGradient } from '#lib/appAccent';
+	import { appIconDataUrl } from '#lib/apps/manifest';
 	import {
 		Captions,
 		Gauge,
@@ -85,15 +59,12 @@
 		Layers,
 		Pause,
 		Play,
-		Puzzle,
 		RotateCcw,
 		RotateCw,
 		Server,
 		Sparkles,
 		Users,
 		Volume2,
-		Wifi,
-		WifiOff,
 		Zap
 	} from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
@@ -115,7 +86,15 @@
 	// The home dashboard's own first few app shortcuts -- shown above the
 	// trackpad rather than as a tab of their own, since the dashboard is
 	// still the trackpad's own home turf.
-	let apps = $state<{ id: string; name: string }[]>([]);
+	let apps = $state<
+		{
+			id: string;
+			name: string;
+			icon: string | null;
+			primaryColor: string | null;
+			secondaryColor: string | null;
+		}[]
+	>([]);
 	// Whether the TV is on /play/* -- unlike apps/profiles, the player's
 	// controls are their own exclusive tab (there's no natural "above the
 	// trackpad" spot for them), same as the PIN pad and keyboard.
@@ -141,119 +120,6 @@
 	let subtitleLanguage = $state<string | null>(null);
 	let diagnosticsOpen = $state(false);
 	let volume = $state(0);
-
-	// Wifi provisioning state, pushed by the host rather than the TV (see
-	// src/api/wifiCommands.ts). `null` until the first push arrives, which is
-	// also what keeps the sheet from flashing open before anything is known.
-	let wifi = $state<z.infer<typeof wifiStateParamsSchema> | null>(null);
-	let wifiOpen = $state(false);
-	// Opened automatically exactly once per connection, so a device that turns
-	// out to have no network leads with the one screen that can fix it -- but
-	// closing it stays closed, rather than fighting whoever closed it on every
-	// subsequent state push.
-	let wifiAutoOpened = false;
-
-	function openWifi() {
-		wifiOpen = true;
-		connection?.sendNotification(wifiScanNotification);
-	}
-
-	function scanWifi() {
-		connection?.sendNotification(wifiScanNotification);
-	}
-
-	// A device with a working connection has nothing to fix, and one on ethernet
-	// has no reason to care about its radio.
-	function needsWifiSetup(next: z.infer<typeof wifiStateParamsSchema>): boolean {
-		return next.available && !next.online && !next.ethernet;
-	}
-
-	function onWifiState(next: z.infer<typeof wifiStateParamsSchema>) {
-		wifi = next;
-		if (wifiAutoOpened || !needsWifiSetup(next)) return;
-		wifiAutoOpened = true;
-		openWifi();
-	}
-
-	function connectWifi(ssid: string, password: string, hidden: boolean) {
-		if (!connection) return;
-		sendNotification(connection, wifiConnectNotification, wifiConnectParamsSchema, {
-			ssid,
-			password,
-			hidden
-		});
-	}
-
-	// Plugin management state, pushed by the host rather than the TV (see
-	// src/api/pluginCommands.ts) — installing code is something only this paired
-	// phone may ask for. `null` until the first push arrives.
-	let plugins = $state<z.infer<typeof pluginsStateParamsSchema> | null>(null);
-	let pluginsOpen = $state(false);
-
-	function openPlugins() {
-		pluginsOpen = true;
-		connection?.sendNotification(pluginsRequestStateNotification);
-	}
-
-	// One entry per thing the sheet can ask for; each is a plain notification the
-	// host answers by pushing fresh state.
-	const pluginActions: PluginActions = {
-		preview: (image, publicKey) =>
-			connection &&
-			sendNotification(connection, pluginsPreviewNotification, pluginsPreviewParamsSchema, {
-				image,
-				publicKey
-			}),
-		install: (granted) =>
-			connection &&
-			sendNotification(connection, pluginsInstallNotification, pluginsInstallParamsSchema, {
-				granted
-			}),
-		dismissPreview: () => connection?.sendNotification(pluginsDismissPreviewNotification),
-		uninstall: (pluginId) =>
-			connection &&
-			sendNotification(connection, pluginsUninstallNotification, pluginIdParamsSchema, {
-				pluginId
-			}),
-		setEnabled: (pluginId, enabled) =>
-			connection &&
-			sendNotification(connection, pluginsSetEnabledNotification, pluginsSetEnabledParamsSchema, {
-				pluginId,
-				enabled
-			}),
-		setAutoUpdate: (pluginId, autoUpdate) =>
-			connection &&
-			sendNotification(
-				connection,
-				pluginsSetAutoUpdateNotification,
-				pluginsSetAutoUpdateParamsSchema,
-				{ pluginId, autoUpdate }
-			),
-		setPermission: (pluginId, permission, granted) =>
-			connection &&
-			sendNotification(
-				connection,
-				pluginsSetPermissionNotification,
-				pluginsSetPermissionParamsSchema,
-				{ pluginId, permission, granted }
-			),
-		approveUpdate: (pluginId) =>
-			connection &&
-			sendNotification(connection, pluginsApproveUpdateNotification, pluginIdParamsSchema, {
-				pluginId
-			}),
-		rejectUpdate: (pluginId) =>
-			connection &&
-			sendNotification(connection, pluginsRejectUpdateNotification, pluginIdParamsSchema, {
-				pluginId
-			}),
-		clearCache: (pluginId) =>
-			connection &&
-			sendNotification(connection, pluginsClearCacheNotification, pluginIdParamsSchema, {
-				pluginId
-			}),
-		checkUpdates: () => connection?.sendNotification(pluginsCheckUpdatesNotification)
-	};
 
 	const QUALITY_MODE_ICON = { direct: Zap, mse: Layers, ffmpeg: Server } as const;
 
@@ -290,14 +156,6 @@
 	// back on whichever side of that toggle was last chosen, rather than
 	// always resetting to the TV's current requirement.
 	const OVERRIDE_STORAGE_KEY = 'pivi-remote-manual-override';
-
-	// Only these two genuinely block using the trackpad at all -- there's no
-	// way to type a PIN or fill a text field with swipes, so a fresh one of
-	// these always wins over a stale override (see the stateNotification
-	// handler below). `profiles`/`player` reappearing is just ordinary
-	// navigation (e.g. leaving and returning to the video) and shouldn't
-	// itself undo a toggle the person made on purpose.
-	const URGENT_TABS = new Set<RequiredTab>(['pin', 'keyboard']);
 
 	function loadStoredOverride(): 'trackpad' | null {
 		return browser && localStorage.getItem(OVERRIDE_STORAGE_KEY) === 'trackpad' ? 'trackpad' : null;
@@ -391,12 +249,21 @@
 		const t = event.touches[0];
 		touchOrigin = { x: t.clientX, y: t.clientY };
 		touchMoved = false;
+		// Sent immediately, before it's known whether this settles into a tap,
+		// a hold, or turns into a swipe -- reportMove below cancels it right
+		// away if it turns out to be the latter, so the TV never sees a press
+		// it doesn't also get a release or cancel for.
+		connection?.sendNotification(selectPressNotification);
 	}
 
 	function reportMove(conn: MessageConnection, t: Touch) {
 		const dx = t.clientX - touchOrigin!.x;
 		const dy = t.clientY - touchOrigin!.y;
 		if (Math.abs(dx) <= MOVE_THRESHOLD && Math.abs(dy) <= MOVE_THRESHOLD) return;
+		// A cancel, not a release -- this was never a selection, just a press
+		// that turned out to be the start of a swipe, so the TV shouldn't
+		// click whatever's focused because of it.
+		if (!touchMoved) conn.sendNotification(selectCancelNotification);
 		sendNotification(conn, moveNotification, moveParamsSchema, { dx, dy });
 		navigator.vibrate?.(2);
 		touchOrigin = { x: t.clientX, y: t.clientY };
@@ -410,9 +277,20 @@
 
 	function onTouchEnd() {
 		if (!touchMoved) {
-			connection?.sendNotification(selectNotification);
+			connection?.sendNotification(selectReleaseNotification);
 			navigator.vibrate?.(8);
 		}
+		touchOrigin = null;
+		touchMoved = false;
+	}
+
+	// The OS interrupting the touch (another gesture claiming it, the
+	// browser's own scroll/back-swipe detection, ...) rather than the user
+	// actually lifting their finger on a completed tap -- never a real
+	// selection, so this cancels any still-pending press instead of ending it
+	// with onTouchEnd's release/click.
+	function onTouchCancel() {
+		if (!touchMoved) connection?.sendNotification(selectCancelNotification);
 		touchOrigin = null;
 		touchMoved = false;
 	}
@@ -553,17 +431,8 @@
 			subtitleLanguage = state.subtitleLanguage;
 			diagnosticsOpen = state.diagnosticsOpen;
 			volume = state.volume;
-			// Checked on every push, not just a change -- there's no "first call"
-			// special case to worry about now that only pin/keyboard ever clear
-			// the override (see URGENT_TABS above): if one of those is actually
-			// needed right now, the override should never have stood in front of
-			// it in the first place, connecting-for-the-first-time included.
-			if (URGENT_TABS.has(requiredTab)) {
-				manualOverride = null;
-				storeOverride(null);
-			}
 		});
-		// Sent directly by the host (not the TV) when a plugin hands off a
+		// Sent directly by the host (not the TV) when an app hands off a
 		// login — see relay.ts's sendToPhones and SKETCH.md's "Login"
 		// decision. A full navigation, not a popup: Google's login page
 		// refuses to load in an iframe/embedded context anyway, and this is a
@@ -571,12 +440,6 @@
 		// ourselves.
 		onNotification(connection, openUrlNotification, openUrlParamsSchema, ({ url }) => {
 			window.location.href = url;
-		});
-		// Also from the host directly, for the same reason as openUrl above: wifi
-		// is the device's own state, not the TV page's.
-		onNotification(connection, wifiStateNotification, wifiStateParamsSchema, onWifiState);
-		onNotification(connection, pluginsStateNotification, pluginsStateParamsSchema, (next) => {
-			plugins = next;
 		});
 		connection.listen();
 
@@ -597,8 +460,6 @@
 				connected = true;
 				phase = 'ready';
 				connection?.sendNotification(requestStateNotification);
-				connection?.sendNotification(wifiRequestStateNotification);
-				connection?.sendNotification(pluginsRequestStateNotification);
 			})
 			.catch((err: unknown) => {
 				if (cancelled) return;
@@ -645,7 +506,7 @@
 				onclick={goHome}
 				aria-label={m.home()}
 				transition:fade={{ duration: 200 }}
-				class="justify-self-center rounded-full bg-white/12 p-3 text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
+				class="justify-self-center rounded-full bg-white/12 p-4 text-white/80 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -655,7 +516,7 @@
 					stroke-width="2"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					class="size-5"
+					class="size-7"
 				>
 					<path d="M3 10.5 12 3l9 7.5" />
 					<path d="M5.5 9.5V20a1 1 0 0 0 1 1h4v-6h3v6h4a1 1 0 0 0 1-1V9.5" />
@@ -663,28 +524,6 @@
 			</button>
 		{/if}
 		<span class="flex items-center gap-2 justify-self-end text-xs text-white/50">
-			<button
-				type="button"
-				onclick={openPlugins}
-				aria-label={m.plugins_open()}
-				class="rounded-full bg-white/12 p-2 text-white/70 transition hover:bg-white/20 focus:outline-none"
-			>
-				<Puzzle class="size-4" />
-			</button>
-			{#if wifi?.available}
-				<button
-					type="button"
-					onclick={openWifi}
-					aria-label={m.wifi_open_setup()}
-					class="rounded-full bg-white/12 p-2 text-white/70 transition hover:bg-white/20 focus:outline-none"
-				>
-					{#if wifi.online}
-						<Wifi class="size-4" />
-					{:else}
-						<WifiOff class="size-4 text-amber-300" />
-					{/if}
-				</button>
-			{/if}
 			<span class="size-2 rounded-full {connected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
 			{connected ? m.connected() : m.connecting()}
 		</span>
@@ -698,6 +537,7 @@
 		ontouchstart={onTouchStart}
 		ontouchmove={onTouchMove}
 		ontouchend={onTouchEnd}
+		ontouchcancel={onTouchCancel}
 		style:view-transition-name="phone-trackpad"
 		class="flex size-full max-h-96 w-full max-w-sm touch-none items-center justify-center rounded-3xl bg-white/12 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 select-none"
 	>
@@ -766,9 +606,13 @@
 				>
 					<span
 						class="flex size-14 items-center justify-center rounded-2xl text-lg font-semibold text-white/90 uppercase"
-						style="background: {profileGradient(app.id)}"
+						style="background: {appAccentGradient(app.id, app.primaryColor, app.secondaryColor)}"
 					>
-						{app.name.slice(0, 1)}
+						{#if app.icon}
+							<img src={appIconDataUrl(app.icon)} alt="" class="size-8 object-contain" />
+						{:else}
+							{app.name.slice(0, 1)}
+						{/if}
 					</span>
 					<span class="max-w-full truncate text-xs font-medium text-white/70">{app.name}</span>
 				</button>
@@ -993,15 +837,3 @@
 		</main>
 	{/if}
 </div>
-
-<!-- Outside the phase switch above, and a sheet rather than a tab: it covers
-     whatever the remote was showing, and is the one screen here driven by the
-     device's own state instead of by the TV. -->
-{#if wifiOpen && wifi}
-	<WifiSetup {wifi} onScan={scanWifi} onConnect={connectWifi} onClose={() => (wifiOpen = false)} />
-{/if}
-
-<!-- Same idea as the wifi sheet: driven by the device's own state, not the TV's. -->
-{#if pluginsOpen && plugins}
-	<PluginManager {plugins} actions={pluginActions} onClose={() => (pluginsOpen = false)} />
-{/if}

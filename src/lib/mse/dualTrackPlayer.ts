@@ -34,7 +34,7 @@
 // aren't plain progressive downloads, they're already DASH-ready containers
 // with a real segment index baked in by the encoder (an ISOBMFF `sidx` box
 // for mp4, a Matroska `Cues` element for webm -- see
-// src/api/plugins/containerIndex.ts). Pointing `<SegmentBase indexRange>`
+// src/api/apps/containerIndex.ts). Pointing `<SegmentBase indexRange>`
 // at that existing index lets Shaka fetch and buffer real, independently-
 // decodable chunks (a few seconds each) instead of downloading the entire
 // track in one request before anything can play.
@@ -113,7 +113,7 @@ function buildManifestUrl(opts: DualTrackOptions): string {
 	return URL.createObjectURL(new Blob([mpd], { type: 'application/dash+xml' }));
 }
 
-// Mirrors src/api/plugins/containerIndex.ts's exported type -- duplicated
+// Mirrors src/api/apps/containerIndex.ts's exported type -- duplicated
 // (not imported) since that module does real Node byte-fetching/parsing and
 // has no business being pulled into the browser bundle; only the shape
 // needs to cross that boundary, via the segment-index endpoint's JSON.

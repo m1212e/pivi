@@ -2,11 +2,11 @@
 // reach the network, and if not, what to put on screen so a phone can join the
 // provisioning access point.
 //
-// Read-only on purpose. Every operation that *changes* the network (scan, join)
-// is driven by the paired phone over the relay instead (src/api/wifiCommands.ts)
-// — the TV page is rendered from an unauthenticated local browser, and giving
-// it a mutation that reconfigures the device's network would make that page the
-// weakest link in the chain.
+// Read-only on purpose, and reachable with no active profile: this is what the
+// pre-login picker polls to decide whether to show NetworkSetup.svelte at all,
+// before anything else (a profile, a paired phone) necessarily exists yet.
+// Scanning and joining a network live in handlers/wifi.ts instead, gated on a
+// paired phone being connected rather than on this query's own result.
 import { getNetworkState, isAvailable } from '../wifi';
 import { schemaBuilder } from '../rumble';
 
@@ -56,17 +56,22 @@ schemaBuilder.queryFields((t) => ({
 	network: t.field({
 		type: NetworkRef,
 		resolve: async () => {
-			// NetworkManager missing is the normal case in development. The TV
-			// should carry on as if everything is fine rather than showing a
-			// provisioning prompt nobody can act on, so this reports
-			// `available: false` with `online: true`.
-			if (!(await isAvailable())) return { ...UNAVAILABLE, online: true };
+			// Asked regardless of `available`: ethernet and internet connectivity
+			// are independent of whether this device can also manage wifi, and a
+			// wired-only box (or one with no wifi radio at all) still has a real
+			// answer for both — getNetworkState() itself handles there being no
+			// wifi device, reporting a disconnected radio rather than throwing.
+			const available = await isAvailable();
 			try {
 				// `available` isn't part of the wifi module's own state — it answers
 				// "can this device manage wifi at all", which is settled by the check
 				// above rather than by anything NetworkManager reports.
-				return { ...(await getNetworkState()), available: true };
+				return { ...(await getNetworkState()), available };
 			} catch {
+				// NetworkManager missing entirely is the normal case in development.
+				// The TV should carry on as if everything is fine rather than
+				// showing a provisioning prompt nobody can act on, so this reports
+				// `available: false` with `online: true`.
 				return { ...UNAVAILABLE, online: true };
 			}
 		}

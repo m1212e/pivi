@@ -13,9 +13,9 @@
 // own terse output is a documented, stable contract that needs no D-Bus
 // client dependency to consume.
 //
-// Nothing in here is reachable from the LAN: the phone's requests arrive over
-// the paired, encrypted relay connection and are dispatched server-side (see
-// wifiCommands.ts), never through an HTTP route.
+// Called from handlers/wifi.ts (the TV's own /wifi screen, gated on a paired
+// phone being connected) and wifiBootstrap.ts (bringing up the provisioning
+// AP at boot) — never reachable from the LAN as an HTTP route of its own.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 

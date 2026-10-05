@@ -105,7 +105,7 @@ export const urqlClient = new Client({
 	fetchSubscriptions: true,
 	// Several pages poll a liveQuery on a plain setInterval instead of a real
 	// subscription (anything not backed by a DB table rumble can push
-	// updates for — the YouTube plugin's auth/screen/dashboard fields, the
+	// updates for — the YouTube app's auth/screen/dashboard fields, the
 	// pairing QR refresh): urql's default 'cache-first' policy serves those
 	// repeat identical queries straight from cache and never re-fetches, so
 	// the UI silently never sees the change on the server (e.g. a device

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Opening the player takes a real network round trip (resolving the
-	// session with the plugin) before the destination page's own top-level
-	// await settles -- see the `info` fetch in play/[pluginId]/[sessionId]'s
+	// session with the app) before the destination page's own top-level
+	// await settles -- see the `info` fetch in play/[appId]/[sessionId]'s
 	// +page.svelte -- so SvelteKit sits on the old screen for a moment with no
 	// feedback that the click landed. Shown only for that navigation, not
 	// every one, since screens like home<->app resolve fast enough that a

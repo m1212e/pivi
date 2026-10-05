@@ -9,5 +9,5 @@
 			"#api/*": ["./src/api/*"]
 		}
 	},
-	"include": ["src", "drizzle.config.ts", "plugins"]
+	"include": ["src", "drizzle.config.ts", "apps"]
 }

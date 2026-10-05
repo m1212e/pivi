@@ -10,14 +10,30 @@
 		items
 	}: {
 		title: string;
-		items: { id: string; name: string; href: string }[];
+		items: {
+			id: string;
+			name: string;
+			href: string;
+			icon?: string | null;
+			primaryColor?: string | null;
+			secondaryColor?: string | null;
+			hasUpdate?: boolean;
+		}[];
 	} = $props();
 </script>
 
 <ContentRow {title}>
 	{#each items as app, i (app.id)}
 		<div class="shrink-0" in:fly|global={{ y: 24, duration: 400, delay: i * 70 }}>
-			<AppCard id={app.id} name={app.name} href={app.href} />
+			<AppCard
+				id={app.id}
+				name={app.name}
+				href={app.href}
+				icon={app.icon}
+				primaryColor={app.primaryColor}
+				secondaryColor={app.secondaryColor}
+				hasUpdate={app.hasUpdate}
+			/>
 		</div>
 	{/each}
 
@@ -28,7 +44,7 @@
 		in:fly|global={{ y: 24, duration: 400, delay: items.length * 70 }}
 	>
 		<a
-			href="/plugins"
+			href="/apps"
 			class="group flex w-28 shrink-0 flex-col items-center gap-2 focus:outline-none sm:w-32"
 		>
 			<span

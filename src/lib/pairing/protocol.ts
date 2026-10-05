@@ -5,7 +5,7 @@
 //
 // Every shape is a zod schema (types are derived from it, not the other way
 // round) so both sides can validate a message crossing this untrusted
-// network boundary at runtime, the same way the plugin RPC/UI boundaries
+// network boundary at runtime, the same way the app RPC/UI boundaries
 // already do, instead of trusting a TypeScript cast.
 import { z } from 'zod';
 

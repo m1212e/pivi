@@ -37,6 +37,7 @@ import {
 	remoteConnectedNotification,
 	remoteDisconnectedNotification
 } from '#lib/pairing/remoteProtocol';
+import { PHONE_CONNECTION_EVENT, remotePubSub } from './remotePubsub';
 import { db } from '../db';
 import { pairedDevice } from '../db/schema';
 import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from '../pairing';
@@ -242,6 +243,7 @@ async function handleChallengeResponse(
 			params: { name: state.deviceName }
 		});
 	}
+	remotePubSub.publish(PHONE_CONNECTION_EVENT);
 }
 
 function startHandshakeTimeout(socket: WebSocket) {
@@ -286,6 +288,7 @@ export function startPairingRelay() {
 						params: { name: state.deviceName }
 					});
 				}
+				remotePubSub.publish(PHONE_CONNECTION_EVENT);
 			}
 		});
 	});
@@ -441,56 +444,11 @@ function relayFromPhone(
 	}
 	const plaintext = decryptFromPhone(socket, state, message);
 	if (plaintext === undefined) return;
-	if (handledHere(plaintext)) return;
 	broadcastToTvs(plaintext);
 }
 
-// A phone's frames are normally opaque to this relay: it decrypts them and
-// hands them to the TV, which is what every remote/* notification wants.
-// Wifi provisioning is the exception -- the server answers those itself (see
-// src/api/wifiCommands.ts, which registers the handler), because joining a
-// network is an OS-level operation that has no business being brokered by
-// whatever page the TV happens to be showing.
-type PhoneFrameHandler = (method: string, params: unknown) => boolean;
-
-const phoneFrameHandlers = new Set<PhoneFrameHandler>();
-
-/** Returns true from the handler to consume the frame, so the TV never sees it. */
-export function registerPhoneFrameHandler(handler: PhoneFrameHandler) {
-	phoneFrameHandlers.add(handler);
-}
-
-// A phone sends remote/move many times a second while a thumb is down, so
-// every frame paying a JSON.parse just to discover it isn't a server-handled
-// one (wifi, plugin management) would be waste. This substring test is the
-// cheap pre-filter; only a candidate gets parsed.
-const SERVER_HANDLED_MARKERS = ['"wifi/', '"plugins/'];
-
-function handledHere(plaintext: string): boolean {
-	if (!SERVER_HANDLED_MARKERS.some((marker) => plaintext.includes(marker))) return false;
-	const frame = parseNotification(plaintext);
-	if (!frame) return false;
-	return [...phoneFrameHandlers].some((handler) => handler(frame.method, frame.params));
-}
-
-function parseFrameObject(plaintext: string): { method?: unknown; params?: unknown } | null {
-	try {
-		const raw: unknown = JSON.parse(plaintext);
-		return raw && typeof raw === 'object' ? raw : null;
-	} catch {
-		return null;
-	}
-}
-
-function parseNotification(plaintext: string): { method: string; params: unknown } | null {
-	const frame = parseFrameObject(plaintext);
-	if (!frame) return null;
-	const { method, params } = frame;
-	return typeof method === 'string' ? { method, params } : null;
-}
-
-// Lets server-side code outside this module (the plugin host, for a
-// PhoneAuthHandoff — see plugins/runtime.ts) push a JSON-RPC notification
+// Lets server-side code outside this module (the app host, for a
+// PhoneAuthHandoff — see apps/runtime.ts) push a JSON-RPC notification
 // straight to whatever phone is currently paired, without going through the
 // TV at all. `message` must already be a valid JSON-RPC notification frame
 // (`{jsonrpc: '2.0', method, params}`) — construct it from the relevant

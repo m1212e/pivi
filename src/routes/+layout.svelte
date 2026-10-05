@@ -8,6 +8,7 @@
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import NavigationSpinner from '#lib/components/NavigationSpinner.svelte';
+	import PairingOverlay from '#lib/components/PairingOverlay.svelte';
 	import { playSound } from '#lib/sounds';
 	import { startAmbient, stopAmbient } from '#lib/ambient';
 	import { ambientMusic } from '#lib/state/ambient.svelte';
@@ -32,11 +33,10 @@
 		return clearTvScale;
 	});
 
-	// Every route this app actually navigates *between* (as opposed to a
-	// transient step like /oauth/callback) is one of these four "screens" --
-	// each gets the same zoom treatment moving to/from any of the others, not
-	// just the one app<->home pair this originally shipped with. `null` (e.g.
-	// /remote, /oauth/callback) means "not a screen with its own zoom
+	// Every route this app actually navigates *between* is one of these four
+	// "screens" -- each gets the same zoom treatment moving to/from any of
+	// the others, not just the one app<->home pair this originally shipped
+	// with. `null` (e.g. /remote) means "not a screen with its own zoom
 	// identity" -- no transition applies there either way.
 	type ScreenKind = 'login' | 'home' | 'app' | 'player';
 
@@ -54,10 +54,18 @@
 		return SCREEN_MATCHERS.find(([, matches]) => matches(path))?.[0] ?? null;
 	}
 
+	// The pairing QR overlay (PairingOverlay.svelte) repeats on every screen
+	// except: the player (explicitly, so it never sits over video), and
+	// login/the picker/register, which already show the same QR as their own
+	// primary content -- an overlay on top of that would just be a duplicate.
+	const hidePairingOverlay = $derived(
+		screenKindOf(page.url.pathname) === 'login' || screenKindOf(page.url.pathname) === 'player'
+	);
+
 	// How "deep" each screen sits, purely to pick a zoom direction -- login
 	// is the outermost, home opens from it, an app opens from home, and the
 	// player can open from either home or an app's own screen (see
-	// #lib/plugins/dashboard's pluginActionHref), so it sits one deeper still.
+	// #lib/apps/dashboard's appActionHref), so it sits one deeper still.
 	const SCREEN_DEPTH: Record<ScreenKind, number> = { login: 0, home: 1, app: 2, player: 3 };
 
 	// The actual zoom keyframes live in layout.css, keyed off this data
@@ -124,11 +132,13 @@
 		return stopAmbient;
 	});
 
-	// Opening the home screen from anywhere else (an app, the player) gets its
-	// own sound. The initial page load has no `from`, so it stays silent.
+	// Only logging in gets the jingle, not returning to home from an app or
+	// the player. The initial page load has no `from`, so it stays silent.
 	afterNavigate((navigation) => {
 		if (isRemotePage || !navigation.from || !navigation.to) return;
-		if (navigation.to.url.pathname === '/home' && navigation.from.url.pathname !== '/home') {
+		const from = navigation.from.url.pathname;
+		const to = navigation.to.url.pathname;
+		if (to === '/home' && screenKindOf(from) === 'login') {
 			playSound('home');
 		}
 	});
@@ -176,6 +186,7 @@
 	     the library has no props for those). -->
 	<Toaster theme="dark" position="top-right" richColors offset="1.5rem" mobileOffset="1rem" />
 	<NavigationSpinner />
+	<PairingOverlay hidden={hidePairingOverlay} />
 {/if}
 {@render children()}
 

@@ -13,7 +13,7 @@
 		title: string;
 		description: string;
 		badge?: string;
-		// Which app/plugin this suggestion came from — generic over whatever
+		// Which app/app this suggestion came from — generic over whatever
 		// contributed the card, not specific to any one of them.
 		source?: string;
 		gradient?: string;

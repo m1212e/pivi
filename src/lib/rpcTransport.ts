@@ -3,7 +3,7 @@
 // readable/writable stream: a WebSocket's `onmessage` (RemoteBridge.svelte,
 // the phone remote page), or the pairing session's already-decrypted
 // `onMessage` callback (session.ts). Nothing here is specific to any one of
-// those — it's the same seam the plugin host (api/plugins/runtime.ts) uses
+// those — it's the same seam the app host (api/apps/runtime.ts) uses
 // for its child-process IPC channel.
 import {
 	AbstractMessageReader,

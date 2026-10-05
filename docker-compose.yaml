@@ -10,5 +10,17 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
 
+  # Local OCI registry for app development -- lets suggested/test app
+  # images (see src/api/apps/suggested.ts) be built and pushed without a
+  # real registry account. Plain HTTP is fine since registry.ts only trusts
+  # localhost that way.
+  registry:
+    image: registry:2
+    ports:
+      - 127.0.0.1:5055:5000
+    volumes:
+      - registrydata:/var/lib/registry
+
 volumes:
   pgdata:
+  registrydata:

@@ -38,7 +38,9 @@
 		requestStateNotification,
 		selectAppNotification,
 		selectAppParamsSchema,
-		selectNotification,
+		selectCancelNotification,
+		selectPressNotification,
+		selectReleaseNotification,
 		selectProfileNotification,
 		selectProfileParamsSchema,
 		stateNotification,
@@ -53,6 +55,12 @@
 	let socket: WebSocket | undefined;
 	let connection: MessageConnection | undefined;
 	let currentEl: HTMLElement | null = null;
+
+	// Arbitrary and fixed: the remote only ever has one "finger" down at a
+	// time, and this never corresponds to a pointer the browser's own input
+	// pipeline tracks (see dispatchRemotePointer below), so there's nothing
+	// for it to collide with.
+	const REMOTE_POINTER_ID = -1;
 
 	const TEXTUAL_INPUT_TYPES = new Set(['text', 'search', 'email', 'tel', 'url', 'password']);
 
@@ -127,7 +135,8 @@
 			canGoHome:
 				location.pathname.startsWith('/apps/') ||
 				location.pathname.startsWith('/play/') ||
-				location.pathname === '/plugins'
+				location.pathname === '/apps' ||
+				location.pathname === '/wifi'
 		};
 	}
 
@@ -231,7 +240,10 @@
 	function dashboardApps() {
 		return [...document.querySelectorAll<HTMLElement>('[data-pivi-app-id]')].map((el) => ({
 			id: el.dataset.piviAppId!,
-			name: el.dataset.piviAppName!
+			name: el.dataset.piviAppName!,
+			icon: el.dataset.piviAppIcon ?? null,
+			primaryColor: el.dataset.piviAppPrimaryColor ?? null,
+			secondaryColor: el.dataset.piviAppSecondaryColor ?? null
 		}));
 	}
 
@@ -302,31 +314,57 @@
 	}
 
 	// How good a move onto one candidate is: its distance, penalised by how
-	// far off the swipe's own direction it sits. `undefined` means it's
-	// outside the ~60deg cone (or on top of where focus already is), i.e. not
-	// a candidate at all. Lower is better.
+	// far off the swipe's own direction it sits. `undefined` means it's on
+	// top of where focus already is, or behind rather than ahead along the
+	// swipe -- never a candidate.
 	function directionScore(
 		from: { x: number; y: number },
 		to: { x: number; y: number },
 		dir: { x: number; y: number }
-	): number | undefined {
+	): { distance: number; cos: number } | undefined {
 		const vx = to.x - from.x;
 		const vy = to.y - from.y;
 		const distance = Math.hypot(vx, vy);
 		const dot = vx * dir.x + vy * dir.y;
 		if (distance === 0 || dot <= 0) return undefined;
-		const cos = dot / distance;
-		return cos < 0.5 ? undefined : distance / cos;
+		return { distance, cos: dot / distance };
+	}
+
+	// Whether a candidate sits in the lane the active element already
+	// occupies along the swipe's *other* axis -- e.g. for a vertical swipe,
+	// do their x-ranges overlap at all. A candidate in-lane is a clean "next
+	// row", so it's picked by pure along-axis distance with no angle limit;
+	// one that isn't still needs the ~60deg cone below, since without lane
+	// overlap a wide angle usually means it belongs to an unrelated row or
+	// column off to the side rather than the thing directly ahead.
+	//
+	// This is what lets a narrow row of small controls (e.g. the hold-to-
+	// confirm buttons under an app's toggles, packed toward one side of a
+	// much wider row) still win over something full-width further away: its
+	// bounding box still falls inside the wide row above it, even though its
+	// own center is well off to that row's side.
+	function inLane(activeRect: DOMRect, candidateRect: DOMRect, dx: number, dy: number): boolean {
+		return Math.abs(dy) > Math.abs(dx)
+			? candidateRect.left < activeRect.right && candidateRect.right > activeRect.left
+			: candidateRect.top < activeRect.bottom && candidateRect.bottom > activeRect.top;
 	}
 
 	function bestInDirection(els: HTMLElement[], active: HTMLElement, dx: number, dy: number) {
 		const from = centerOf(active);
+		const activeRect = active.getBoundingClientRect();
 		const dir = unitVector(dx, dy);
 		let best: HTMLElement | null = null;
+		let bestTier = Infinity;
 		let bestScore = Infinity;
 		for (const el of candidatesFor(els, active, dx, dy)) {
-			const score = directionScore(from, centerOf(el), dir);
-			if (score === undefined || score >= bestScore) continue;
+			const result = directionScore(from, centerOf(el), dir);
+			if (result === undefined) continue;
+			const laned = inLane(activeRect, el.getBoundingClientRect(), dx, dy);
+			if (!laned && result.cos < 0.5) continue;
+			const tier = laned ? 0 : 1;
+			const score = laned ? result.distance * result.cos : result.distance / result.cos;
+			if (tier > bestTier || (tier === bestTier && score >= bestScore)) continue;
+			bestTier = tier;
 			bestScore = score;
 			best = el;
 		}
@@ -425,6 +463,29 @@
 		target.classList.add('pivi-press');
 	}
 
+	// Gives whatever's focused a real pointerdown/pointerup with duration in
+	// between (see selectPress/selectReleaseNotification below), rather than
+	// the single synthetic click a remote press used to produce -- the only
+	// thing that lets HoldToConfirmButton's hold-to-confirm gesture actually
+	// run over the remote. A script-dispatched pointer event never auto-fires
+	// a `click` afterward the way a trusted device one does, so the release
+	// handler below still calls `.click()` itself for every other control
+	// that only ever listens for clicks.
+	function dispatchRemotePointer(
+		type: 'pointerdown' | 'pointerup' | 'pointercancel',
+		el: HTMLElement
+	) {
+		el.dispatchEvent(
+			new PointerEvent(type, {
+				bubbles: true,
+				cancelable: true,
+				pointerId: REMOTE_POINTER_ID,
+				pointerType: 'touch',
+				isPrimary: true
+			})
+		);
+	}
+
 	function pressPinKey(key: string) {
 		// Not a real .click() -- PinPad listens for this event specifically so
 		// it can register the digit without its usual "which key was pressed"
@@ -513,8 +574,27 @@
 		// These carry no params, so there's nothing for a zod schema to
 		// enforce — registered directly on the connection instead of through
 		// the onNotification wrapper.
-		connection.onNotification(selectNotification, () => {
-			if (document.activeElement instanceof HTMLElement) document.activeElement.click();
+		connection.onNotification(selectPressNotification, () => {
+			if (document.activeElement instanceof HTMLElement) {
+				dispatchRemotePointer('pointerdown', document.activeElement);
+			}
+		});
+		connection.onNotification(selectReleaseNotification, () => {
+			if (document.activeElement instanceof HTMLElement) {
+				const el = document.activeElement;
+				dispatchRemotePointer('pointerup', el);
+				el.click();
+			}
+		});
+		// A press that turned out to be the start of a swipe, not a real
+		// selection -- cancels whatever the pointerdown above started (e.g.
+		// unwinds HoldToConfirmButton's hold back to empty) without the
+		// release handler's `.click()`, which would otherwise fire a real
+		// selection on whatever's focused just because a swipe began under it.
+		connection.onNotification(selectCancelNotification, () => {
+			if (document.activeElement instanceof HTMLElement) {
+				dispatchRemotePointer('pointercancel', document.activeElement);
+			}
 		});
 		// Clicking the matching profile link (rather than just navigating
 		// directly) reuses its existing view-transition tagging and the

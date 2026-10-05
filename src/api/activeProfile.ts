@@ -4,8 +4,8 @@ let activeUserId: string | null = null;
 
 // Lets anything that depends on "which profile is active" react to a switch
 // instead of only ever seeing whatever was active when it started -- the
-// plugin host (runtime.ts) uses this to tell a running plugin process to
-// reload its account-bound state (see plugins/youtube/innertube.ts).
+// app host (runtime.ts) uses this to tell a running app process to
+// reload its account-bound state (see apps/youtube/innertube.ts).
 type ActiveProfileListener = () => void;
 const listeners = new Set<ActiveProfileListener>();
 
