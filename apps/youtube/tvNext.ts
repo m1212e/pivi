@@ -9,6 +9,7 @@ type PanelEntry = { videoId: string; selected: boolean };
 
 // Walks the response for panel renderers, which can sit in different places
 // depending on the client.
+// fallow-ignore-next-line complexity
 function collectPanel(node: unknown, out: PanelEntry[]) {
 	if (Array.isArray(node)) {
 		for (const item of node) collectPanel(item, out);

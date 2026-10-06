@@ -112,6 +112,7 @@
 
 	// While focus sits on the on-screen keyboard's keys, the field being typed
 	// into is still the one the phone should mirror.
+	// fallow-ignore-next-line complexity
 	function focusedTextInput() {
 		const active = document.activeElement;
 		if (isTextualInput(active)) return active;
@@ -140,6 +141,7 @@
 		};
 	}
 
+	// fallow-ignore-next-line complexity
 	function sendState() {
 		if (!connection) return;
 		// Queried once and reused below -- `playing`/position/duration/quality

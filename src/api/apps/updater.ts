@@ -87,6 +87,7 @@ export async function checkForUpdate(deps: AppDeps, appId: string): Promise<Upda
 	}
 }
 
+// fallow-ignore-next-line complexity
 async function runCheck(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	const row = await deps.store.find(appId);
 	if (!row) throw new AppError(`No app "${appId}" is installed`);

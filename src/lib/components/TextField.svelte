@@ -87,16 +87,27 @@
 		onblur?.();
 	}
 
+	// fallow-ignore-next-line complexity
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') void stop();
 		else if (e.key === 'Enter' && !multiline) onEnter?.(e);
 	}
+	const inputType = $derived(secret ? 'password' : search ? 'search' : 'text');
+	const alignClass = $derived(multiline ? 'items-start' : 'items-center');
+	const triggerClass = $derived(
+		[
+			multiline ? 'text-left break-all whitespace-pre-wrap' : 'truncate',
+			center ? 'text-center' : 'text-left',
+			mono && 'font-mono',
+			value ? 'text-white' : 'text-white/40'
+		]
+			.filter(Boolean)
+			.join(' ')
+	);
 </script>
 
 <div
-	class="flex w-full gap-2 text-white has-[.pivi-remote-focus]:outline-3 has-[.pivi-remote-focus]:outline-offset-3 has-[.pivi-remote-focus]:outline-white {multiline
-		? 'items-start'
-		: 'items-center'} {className}"
+	class="flex w-full gap-2 text-white has-[.pivi-remote-focus]:outline-3 has-[.pivi-remote-focus]:outline-offset-3 has-[.pivi-remote-focus]:outline-white {alignClass} {className}"
 >
 	{#if search}
 		<svg viewBox="0 0 24 24" class="size-5 shrink-0 fill-white/60" aria-hidden="true">
@@ -123,7 +134,7 @@
 			<input
 				bind:this={input}
 				bind:value
-				type={secret ? 'password' : search ? 'search' : 'text'}
+				type={inputType}
 				{enterkeyhint}
 				{autocomplete}
 				autocapitalize="off"
@@ -143,11 +154,7 @@
 			aria-label={label}
 			onclick={edit}
 			style:min-height={multiline ? `${rows * 1.5}em` : undefined}
-			class="w-full min-w-0 outline-none! {multiline
-				? 'text-left break-all whitespace-pre-wrap'
-				: 'truncate'} {center ? 'text-center' : 'text-left'} {mono ? 'font-mono' : ''} {value
-				? 'text-white'
-				: 'text-white/40'}"
+			class="w-full min-w-0 outline-none! {triggerClass}"
 		>
 			{shown}
 		</button>

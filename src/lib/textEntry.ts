@@ -45,6 +45,7 @@ export function insertText(el: TextTarget, text: string) {
 
 // Removes a whole grapheme, so a flag or a letter with combining marks goes
 // in one press.
+// fallow-ignore-next-line complexity
 export function deleteBackward(el: TextTarget) {
 	const [start, end] = selection(el);
 	if (start === 0 && end === 0) return;

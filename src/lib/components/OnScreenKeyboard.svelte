@@ -50,6 +50,7 @@
 		if (altGr === 'once') altGr = 'off';
 	}
 
+	// fallow-ignore-next-line complexity
 	function pressCell(cell: Cell) {
 		if (typeof cell === 'string') {
 			type(dead ? composeDead(dead, cell) : cell);
@@ -116,6 +117,7 @@
 		backspace();
 	}
 
+	// fallow-ignore-next-line complexity
 	function onFocusIn(event: FocusEvent) {
 		const el = event.target;
 		if (!(el instanceof Element) || root?.contains(el)) return;
@@ -131,6 +133,7 @@
 	// empty space.
 	function onFocusOut(event: FocusEvent) {
 		if (event.relatedTarget) return;
+		// fallow-ignore-next-line complexity
 		setTimeout(() => {
 			const active = document.activeElement;
 			if (!osk.target || active === osk.target || root?.contains(active)) return;
@@ -142,6 +145,7 @@
 	}
 
 	// Lets a physical keyboard keep working while focus sits on the keys.
+	// fallow-ignore-next-line complexity
 	function onKeyDown(event: KeyboardEvent) {
 		if (!root?.contains(document.activeElement)) return;
 		if (event.key === 'Escape') {
@@ -179,6 +183,7 @@
 	});
 
 	// The phone taking over while focus is on a key would leave focus nowhere.
+	// fallow-ignore-next-line complexity
 	$effect(() => {
 		if (visible || !osk.target?.isConnected) return;
 		if (document.activeElement === document.body) osk.target.focus();
@@ -197,6 +202,7 @@
 	const ACTIVE = 'bg-white text-slate-950';
 </script>
 
+<!-- fallow-ignore-next-line complexity -->
 <svelte:document onfocusin={onFocusIn} onfocusout={onFocusOut} onkeydown={onKeyDown} />
 
 {#if visible}

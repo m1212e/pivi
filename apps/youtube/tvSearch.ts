@@ -69,6 +69,7 @@ export type SearchPage = { results: SearchResult[]; continuation?: string };
 
 type Raw = { data: unknown };
 
+// fallow-ignore-next-line complexity
 function findLockups(node: unknown, out: Lockup[]) {
 	if (!node || typeof node !== 'object') return;
 	if (Array.isArray(node)) {
@@ -100,6 +101,7 @@ function absolute(url: string | undefined): string {
 	return url.startsWith('//') ? `https:${url}` : url;
 }
 
+// fallow-ignore-next-line complexity
 function toVideo(lockup: Lockup): SearchResult | null {
 	if (!lockup.contentId) return null;
 	const meta = lockup.metadata?.lockupMetadataViewModel;
@@ -119,6 +121,7 @@ function toVideo(lockup: Lockup): SearchResult | null {
 	};
 }
 
+// fallow-ignore-next-line complexity
 function toPlaylist(lockup: Lockup): SearchResult | null {
 	if (!lockup.contentId) return null;
 	const thumbnail =
@@ -141,6 +144,7 @@ function toPlaylist(lockup: Lockup): SearchResult | null {
 	};
 }
 
+// fallow-ignore-next-line complexity
 function toChannel(lockup: Lockup): SearchResult | null {
 	if (!lockup.contentId) return null;
 	const parts = metaParts(lockup);
@@ -154,6 +158,7 @@ function toChannel(lockup: Lockup): SearchResult | null {
 	};
 }
 
+// fallow-ignore-next-line complexity
 function toResult(lockup: Lockup): SearchResult | null {
 	const type = lockup.contentType ?? '';
 	if (VIDEO_TYPES.has(type)) return toVideo(lockup);

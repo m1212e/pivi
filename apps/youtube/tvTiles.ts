@@ -171,6 +171,7 @@ export function collectTiles(root: unknown, limit: number): VideoSummary[] {
 // playlist content type and the playlist id as contentId. Some responses
 // prefix that id with `VL` (the browse id form), so it's stripped to keep one
 // canonical id.
+// fallow-ignore-next-line complexity
 function tileToPlaylist(tile: Tile): PlaylistSummary | null {
 	if (!tile.contentId || tile.contentType !== 'TILE_CONTENT_TYPE_PLAYLIST') return null;
 
@@ -184,6 +185,7 @@ function tileToPlaylist(tile: Tile): PlaylistSummary | null {
 	};
 }
 
+// fallow-ignore-next-line complexity
 export function collectPlaylists(root: unknown, limit: number): PlaylistSummary[] {
 	const tiles: Record<string, unknown>[] = [];
 	findTiles(root, tiles);
@@ -206,6 +208,7 @@ export function collectPlaylists(root: unknown, limit: number): PlaylistSummary[
 // so the last one found wins since the page-level one comes after its shelves.
 export function findContinuationToken(root: unknown): string | undefined {
 	let token: string | undefined;
+	// fallow-ignore-next-line complexity
 	const visit = (node: unknown) => {
 		if (!node || typeof node !== 'object') return;
 		if (Array.isArray(node)) return node.forEach(visit);

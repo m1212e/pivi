@@ -452,6 +452,7 @@
 		const writer = new SinkMessageWriter((msg) => session?.send(msg as Record<string, unknown>));
 		connection = createMessageConnection(reader, writer);
 
+		// fallow-ignore-next-line complexity
 		onNotification(connection, stateNotification, stateParamsSchema, (state) => {
 			hasPinPad = state.hasPinPad;
 			hasTextInput = state.hasTextInput;

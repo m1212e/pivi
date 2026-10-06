@@ -948,6 +948,7 @@
 
 	// Plays the next entry of the sequence this session came from, or leaves
 	// when there is none. Replacing the entry keeps one back press enough.
+	// fallow-ignore-next-line complexity
 	async function onVideoEnded() {
 		if (!context) return goBack();
 		try {

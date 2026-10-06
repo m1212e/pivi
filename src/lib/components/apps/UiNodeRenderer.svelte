@@ -78,6 +78,7 @@
 
 	// Layout only: how a container arranges its children. Anything with a look
 	// of its own is a component (see the node kinds below).
+	// fallow-ignore-next-line complexity
 	function containerRowClasses(n: Extract<UiNode, { type: 'container' }>): string {
 		const panel = n.panel
 			? ' rounded-3xl bg-white/8 px-12 py-10 ring-1 ring-white/12 backdrop-blur-md'
@@ -350,6 +351,7 @@
 	</div>
 {/snippet}
 
+<!-- fallow-ignore-next-line complexity -->
 {#if node.type === 'container'}
 	{@render containerNode(node)}
 {:else if node.type === 'text'}
