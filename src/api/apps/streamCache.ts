@@ -43,7 +43,7 @@ export function dropStreamCache(appId: string): void {
 	}
 }
 
-export async function resolveStreamCached(
+export function resolveStreamCached(
 	appId: string,
 	sessionId: string,
 	app: AppInstance,
