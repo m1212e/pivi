@@ -5,7 +5,7 @@
 // assumes one. vscode-jsonrpc is only the host's (and the TypeScript SDK's)
 // way of speaking it: request/response correlation is handled by the library
 // instead of by hand. The same method names and schemas are published as JSON
-// Schema (protocolSchema.ts, docs/app-protocol.schema.json) for every other
+// Schema (protocolSchema.ts, attached to each GitHub release) for every other
 // language.
 import { NotificationType, NotificationType0, RequestType } from 'vscode-jsonrpc';
 import { z } from 'zod';

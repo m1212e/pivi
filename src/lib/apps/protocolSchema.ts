@@ -1,9 +1,8 @@
 // The host<->app protocol (host.ts) as a plain JSON document: every method,
 // who sends it, whether it expects a reply, which manifest feature gates it, and
 // JSON Schema for its parameters and result. This is what an app author in a
-// language other than TypeScript implements against; docs/app-protocol.schema.json
-// is generated from it (scripts/generate-app-protocol.ts) and a test keeps
-// the two from drifting apart.
+// language other than TypeScript implements against. The release workflow
+// publishes it as app-protocol.schema.json (scripts/apps.ts).
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
 import { appScreenSchema, uiEventSchema } from './ui';

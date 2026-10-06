@@ -9,17 +9,14 @@
 // (src/lib/components): every node kind is either layout or renders a real
 // shell component (Button, MediaCard, ContentRow, HeroBanner, LoadingSpinner,
 // ...), never a look-alike, so a plugin's screen can't drift from the host's
-// own. Adding a new one touches six places, in order:
+// own. Adding a new one touches five places, in order:
 //   1. the `UiNode` union below (the real, hand-written type)
 //   2. the matching branch in `uiNodeSchema` (the runtime/RPC-boundary check)
 //   3. `UI_NODE_TYPES` (checked for completeness at compile time)
 //   4. a render snippet + dispatch branch in UiNodeRenderer.svelte
 //   5. its entry in docs/app-ui-components.md (a test fails without it)
-//   6. `bun run apps:protocol`, to regenerate docs/app-protocol.schema.json
-// Step 4 isn't optional busywork: protocolSchema.spec.ts fails the build if
-// that file ever drifts from what `uiNodeSchema` actually accepts, so an app
-// author reading the committed doc can trust it's exactly what the host
-// will take -- never a kind added here and forgotten there, or vice versa.
+// The JSON Schema published with each release is generated from `uiNodeSchema`,
+// so steps 1-3 are also what app authors outside TypeScript get to see.
 import { z } from 'zod';
 import { appThemeSchema } from './theme';
 import { appActionSchema, type AppAction } from './dashboard';

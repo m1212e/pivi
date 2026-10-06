@@ -18,12 +18,6 @@
 		"src/lib/components/PosterCard.svelte",
 		"src/lib/components/PosterRow.svelte"
 	],
-	// Third-party bundles committed verbatim (see vendor/inlang/README.md).
-	// Not ours to refactor, and loaded by path from project.inlang/settings.json
-	// rather than imported, so the module graph can't see them either.
-	// `ignorePatterns` rather than `ignoreFindings`: these should not be
-	// analyzed at all.
-	"ignorePatterns": ["vendor/**"],
 	// Registered by URL string (navigator.serviceWorker.register), not an
 	// import, so the static module graph can't see it's reachable.
 	"dynamicallyLoaded": ["static/remote/sw.js"],

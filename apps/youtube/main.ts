@@ -1,5 +1,5 @@
 // Entry point of the YouTube app image: speaks the host protocol (see
-// #lib/apps/host, docs/app-protocol.schema.json) over stdin/stdout and
+// #lib/apps/host, protocolSchema.ts) over stdin/stdout and
 // wires the pieces in this folder together — login (auth.ts), browsing: this
 // account's personalized home feed (tvHomeFeed.ts), signed in only, no
 // anonymous fallback — and playback (stream.ts, resolved on demand by
