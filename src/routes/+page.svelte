@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
+	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import NetworkSetup from '#lib/components/NetworkSetup.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { getPairing } from '#lib/state/pairing.svelte';
@@ -143,4 +144,6 @@
 			</div>
 		</div>
 	{/if}
+
+	<LanguagePicker placement="above" />
 </div>

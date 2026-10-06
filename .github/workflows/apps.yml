@@ -1,0 +1,91 @@
+name: App images
+
+# One image per directory under apps/. Pull requests only check that they still
+# build. Pushes to main and version tags publish to GHCR as
+# ghcr.io/<owner>/<repo>/pivi-<id>. Tags also move `latest`, which is what an
+# untagged suggested app follows.
+on:
+  pull_request:
+    paths: ['apps/**', 'src/lib/apps/**', 'scripts/apps.ts', 'package.json', 'bun.lock']
+  push:
+    branches: [main]
+    tags: ['v*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.list.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          echo "apps=$(find apps -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: discover
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.discover.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+
+      # The host refuses an image whose manifest label doesn't validate, so the
+      # label comes from the same schema check the local build uses.
+      - id: manifest
+        run: |
+          manifest=$(bun scripts/apps.ts manifest apps/${{ matrix.app }})
+          echo "id=$(jq -r .id <<<"$manifest")" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version <<<"$manifest")" >> "$GITHUB_OUTPUT"
+          {
+            echo "label<<EOF"
+            echo "dev.pivi.manifest=$manifest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          flavor: |
+            latest=false
+          images: ghcr.io/${{ github.repository }}/pivi-${{ steps.manifest.outputs.id }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=${{ steps.manifest.outputs.version }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            ${{ steps.manifest.outputs.label }}
+          cache-from: type=gha,scope=app-${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=app-${{ matrix.app }}

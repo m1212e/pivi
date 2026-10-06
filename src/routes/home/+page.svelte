@@ -12,6 +12,7 @@
 	import VideoRow from '#lib/components/VideoRow.svelte';
 	import VideoRowSkeleton from '#lib/components/VideoRowSkeleton.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
+	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import { getNetworkStatus } from '#lib/state/network.svelte';
 	import { pollEvery } from '#lib/poll';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
@@ -330,6 +331,7 @@
 					<Wifi class="size-5" />
 				{/if}
 			</a>
+			<LanguagePicker />
 		</div>
 	</div>
 {/snippet}

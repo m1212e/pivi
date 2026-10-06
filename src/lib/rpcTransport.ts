@@ -17,7 +17,6 @@ export class PushMessageReader extends AbstractMessageReader {
 
 	// Called by vscode-jsonrpc itself (MessageConnection wiring), not by our
 	// own code, so static analysis can't see it's reachable.
-	// fallow-ignore-next-line unused-class-member
 	listen(callback: (data: Message) => void): Disposable {
 		this.callback = callback;
 		return { dispose: () => (this.callback = undefined) };
@@ -40,12 +39,10 @@ export class SinkMessageWriter extends AbstractMessageWriter {
 
 	// Called by vscode-jsonrpc itself whenever it sends a message, not by our
 	// own code, so static analysis can't see it's reachable.
-	// fallow-ignore-next-line unused-class-member
 	write(msg: Message): Promise<void> {
 		this.sink(msg);
 		return Promise.resolve();
 	}
 
-	// fallow-ignore-next-line unused-class-member
 	end() {}
 }

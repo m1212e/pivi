@@ -36,6 +36,7 @@
 		options,
 		label,
 		disabled = false,
+		placement = 'above',
 		option,
 		onChange
 	}: {
@@ -43,6 +44,10 @@
 		options: readonly T[];
 		label: string;
 		disabled?: boolean;
+		// Which side of the trigger the dropdown opens on. Defaults to above
+		// for the player's bottom-corner controls, pass 'below' for a trigger
+		// sitting at the top of the screen.
+		placement?: 'above' | 'below';
 		// Renders one option's content -- called once for the collapsed
 		// trigger (with the currently selected value) and once per row while
 		// expanded, so a caller only ever describes "how to show one option",
@@ -356,7 +361,9 @@
 		<div
 			role="listbox"
 			aria-label={label}
-			class="absolute right-0 bottom-full z-20 mb-2 flex max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
+			class="absolute right-0 z-20 flex {placement === 'above'
+				? 'bottom-full mb-2'
+				: 'top-full mt-2'} max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
 		>
 			{#each options as candidate (candidate)}
 				{@const selected = candidate === value}

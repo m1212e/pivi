@@ -277,9 +277,9 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 );
 
 // Every node kind, in the order docs/app-ui-components.md lists them. The
-// type below fails to compile when a kind is added to `UiNode` but not here,
-// and the doc's spec then fails until it is described there too.
-export const UI_NODE_TYPES = [
+// annotation below fails to compile when a kind is added to `UiNode` but not
+// here, and the doc's spec then fails until it is described there too.
+const listedNodeTypes = [
 	'container',
 	'text',
 	'icon',
@@ -295,10 +295,12 @@ export const UI_NODE_TYPES = [
 	'list'
 ] as const satisfies readonly UiNode['type'][];
 
-type MissingNodeTypes = Exclude<UiNode['type'], (typeof UI_NODE_TYPES)[number]>;
-// Fails to compile when a node type is missing from UI_NODE_TYPES.
-// fallow-ignore-next-line unused-export
-export const allNodeTypesListed: [MissingNodeTypes] extends [never] ? true : never = true;
+type AllNodeTypesListed<T extends readonly UiNode['type'][]> = [
+	Exclude<UiNode['type'], T[number]>
+] extends [never]
+	? T
+	: never;
+export const UI_NODE_TYPES: AllNodeTypesListed<typeof listedNodeTypes> = listedNodeTypes;
 
 // No app id: the host knows which app it's talking to, and an app
 // naming one itself would only be a way to claim to be another.

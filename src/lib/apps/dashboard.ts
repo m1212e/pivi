@@ -1,5 +1,5 @@
 // Tier 1: typed data an app hands to the shared home-dashboard
-// components (ContinueWatchingRow/PosterRow/AppsRow — see
+// components (VideoRow/AppsRow, see
 // src/lib/components). The app never renders these itself, only
 // supplies data — in the same shape the dashboard's placeholder data in
 // src/routes/home/+page.svelte already mirrors, deliberately, so wiring in
