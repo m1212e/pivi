@@ -49,10 +49,11 @@
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import { formatTime } from '#lib/playback/time';
+	import { browserStorage, readItem, writeItem } from '#lib/storage';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
-	import { mirroredText } from '#lib/textEntry';
+	import { mirroredText, recordSent, type SentText } from '#lib/textEntry';
 	import { profileGradient } from '#lib/profileColor';
 	import { appAccentGradient } from '#lib/appAccent';
 	import { appIconDataUrl } from '#lib/apps/manifest';
@@ -166,14 +167,14 @@
 	// always resetting to the TV's current requirement.
 	const OVERRIDE_STORAGE_KEY = 'pivi-remote-manual-override';
 
+	const storage = browserStorage(browser);
+
 	function loadStoredOverride(): 'trackpad' | null {
-		return browser && localStorage.getItem(OVERRIDE_STORAGE_KEY) === 'trackpad' ? 'trackpad' : null;
+		return readItem(storage, OVERRIDE_STORAGE_KEY) === 'trackpad' ? 'trackpad' : null;
 	}
 
 	function storeOverride(value: 'trackpad' | null) {
-		if (!browser) return;
-		if (value) localStorage.setItem(OVERRIDE_STORAGE_KEY, value);
-		else localStorage.removeItem(OVERRIDE_STORAGE_KEY);
+		writeItem(storage, OVERRIDE_STORAGE_KEY, value);
 	}
 
 	let manualOverride = $state<'trackpad' | null>(loadStoredOverride());
@@ -400,11 +401,11 @@
 
 	// Values this phone sent recently, so the TV echoing them back isn't
 	// mistaken for an edit made on the TV (the echo can lag behind typing).
-	let recentlySent: string[] = [];
+	let recentlySent: SentText[] = [];
 
 	function onTextInput() {
 		if (!connection) return;
-		recentlySent = [...recentlySent.slice(-19), text];
+		recentlySent = recordSent(recentlySent, text, Date.now());
 		sendNotification(connection, textNotification, textParamsSchema, { value: text });
 	}
 
@@ -454,7 +455,7 @@
 			// Cheap and idempotent, and covers a TV that reloaded and forgot.
 			if (state.hasTextInput) reportTextEntryMode();
 			else recentlySent = [];
-			text = mirroredText(state, text, recentlySent);
+			text = mirroredText(state, text, recentlySent, Date.now());
 			canGoBack = state.canGoBack;
 			canGoHome = state.canGoHome;
 			profiles = state.profiles;

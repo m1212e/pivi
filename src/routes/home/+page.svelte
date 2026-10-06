@@ -13,6 +13,7 @@
 	import VideoRowSkeleton from '#lib/components/VideoRowSkeleton.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
 	import { getNetworkStatus } from '#lib/state/network.svelte';
+	import { pollEvery } from '#lib/poll';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
 	import { Cable, Music, VolumeX, Wifi } from '@lucide/svelte';
 
@@ -235,12 +236,11 @@
 	// unlike the pre-login picker's polling, nothing here is waiting on this to
 	// notice a change quickly, so a slow refresh is plenty.
 	let network = $state(await getNetworkStatus());
-	$effect(() => {
-		const interval = setInterval(async () => {
-			network = await getNetworkStatus();
-		}, 60_000);
-		return () => clearInterval(interval);
-	});
+	$effect(() =>
+		pollEvery(60_000, getNetworkStatus, (next) => {
+			network = next;
+		})
+	);
 
 	// If nobody's touched the dashboard in a while, it's likely sitting on a
 	// TV with nobody looking at the current scroll position — scroll back to

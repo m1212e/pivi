@@ -11,6 +11,7 @@
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
 	import { getPairing } from '#lib/state/pairing.svelte';
+	import { pollEvery } from '#lib/poll';
 	import PairingQr from './PairingQr.svelte';
 
 	let { hidden }: { hidden: boolean } = $props();
@@ -28,20 +29,21 @@
 	// stale "disconnected" reading could otherwise stick forever.
 	onMount(() => {
 		let cancelled = false;
-		getPairing().then((pairing) => {
-			if (!cancelled) remoteUrl = pairing.remoteUrl;
+		getPairing()
+			.then((pairing) => {
+				if (!cancelled) remoteUrl = pairing.remoteUrl;
+			})
+			.catch(() => {});
+		const stopPairingPoll = pollEvery(60_000, getPairing, (pairing) => {
+			remoteUrl = pairing.remoteUrl;
 		});
-		const interval = setInterval(async () => {
-			const pairing = await getPairing();
-			if (!cancelled) remoteUrl = pairing.remoteUrl;
-
-			try {
-				const result = await client.query.phoneConnection({ connected: true });
-				if (!cancelled) phoneConnected = result.connected;
-			} catch {
-				// transient network/server hiccup -- next poll will retry
+		const stopPhonePoll = pollEvery(
+			60_000,
+			() => client.query.phoneConnection({ connected: true }),
+			(result) => {
+				phoneConnected = result.connected;
 			}
-		}, 60_000);
+		);
 
 		const subscription = client.liveQuery
 			.phoneConnection({ connected: true })
@@ -51,7 +53,8 @@
 
 		return () => {
 			cancelled = true;
-			clearInterval(interval);
+			stopPairingPoll();
+			stopPhonePoll();
 			stopSubscription(subscription);
 		};
 	});

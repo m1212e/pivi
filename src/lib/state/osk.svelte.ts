@@ -1,4 +1,4 @@
-import type { TextTarget } from '#lib/textEntry';
+import { requestTextExit, type TextTarget } from '#lib/textEntry';
 
 // State of the on-screen keyboard, kept outside the component so the remote
 // bridge and the text field can talk to it without importing each other.
@@ -27,8 +27,7 @@ export function keyboardVisible(): boolean {
 export function dismissKeyboard(): boolean {
 	const target = osk.target;
 	if (!target || !keyboardVisible()) return false;
-	// A field that manages its own editing state (TextInput) closes on Escape.
-	target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+	requestTextExit(target);
 	// Still ours means the field did not move focus away on its own.
 	if (osk.target === target) {
 		osk.dismissed = target;

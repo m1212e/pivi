@@ -13,6 +13,7 @@
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
 	import type { TvHello } from '#lib/pairing/protocol';
 	import { ensureRal } from '#lib/rpcRal';
+	import { createReconnector } from '#lib/pairing/reconnect';
 	import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
 	import {
 		backNotification,
@@ -58,7 +59,7 @@
 	import { playSound } from '#lib/sounds';
 	import { navigationFlagsFor } from '#lib/navigationFlags';
 	import { planMove } from '#lib/spatialNav';
-	import { isTextualInput, setInputValue, submitInput } from '#lib/textEntry';
+	import { isTextualInput, requestTextExit, setInputValue, submitInput } from '#lib/textEntry';
 	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
 
 	let socket: WebSocket | undefined;
@@ -442,8 +443,7 @@
 	function exitFocusedText() {
 		const el = focusedTextInput();
 		if (!el) return;
-		// Fields that manage their own editing state close on Escape.
-		el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+		requestTextExit(el);
 		if (el.isConnected && document.activeElement === el) el.blur();
 		osk.target = null;
 		scheduleFocusRecheck();
@@ -479,7 +479,6 @@
 		observer.observe(document.body, { childList: true, subtree: true });
 
 		ensureRal();
-		socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
 
 		const reader = new PushMessageReader();
 		// `socket?.` alone isn't enough of a guard -- calling `.send()` while
@@ -602,23 +601,39 @@
 		);
 		connection.listen();
 
-		socket.onopen = () => {
-			// Only accepted from the relay's loopback check — this tab and the
-			// relay run on the same device. See src/api/ws/relay.ts. Sent as a
-			// raw frame, not through the RPC connection above — it's a
-			// relay-level handshake message (see pairing/protocol.ts), not part
-			// of the app-level remote-control protocol that starts afterwards.
-			socket?.send(JSON.stringify({ type: 'tvHello' } satisfies TvHello));
-			sendState();
-		};
+		// The relay lives in the server process, so a server restart drops this
+		// socket. Without a retry the TV stays deaf to the phone until a reload.
+		const reconnector = createReconnector(openSocket);
 
-		socket.onmessage = (event) => {
-			try {
-				reader.push(JSON.parse(event.data));
-			} catch {
-				// Malformed frame — drop it rather than crash the connection.
-			}
-		};
+		function openSocket() {
+			const ws = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
+			socket = ws;
+
+			ws.onopen = () => {
+				reconnector.connected();
+				// Raw frame, not RPC. The relay only accepts it from loopback.
+				ws.send(JSON.stringify({ type: 'tvHello' } satisfies TvHello));
+				sendState();
+			};
+
+			ws.onmessage = (event) => {
+				try {
+					reader.push(JSON.parse(event.data));
+				} catch {
+					// Malformed frame, drop it rather than crash the connection.
+				}
+			};
+
+			// Failed attempts end up here too, so this also drives the backoff.
+			ws.onclose = () => {
+				// No socket means no phone. The phone resends its mode once the TV
+				// reports a focused text field again.
+				osk.phoneKeyboard = false;
+				reconnector.lost();
+			};
+		}
+
+		openSocket();
 
 		return () => {
 			document.removeEventListener('focusin', onFocusChange);
@@ -629,6 +644,7 @@
 			document.removeEventListener('volumechange', scheduleFocusRecheck, true);
 			document.removeEventListener('pivi-player-state-changed', scheduleFocusRecheck);
 			observer.disconnect();
+			reconnector.stop();
 			connection?.dispose();
 			socket?.close();
 		};

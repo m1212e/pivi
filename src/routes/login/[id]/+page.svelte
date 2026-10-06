@@ -8,6 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import { getPairing } from '#lib/state/pairing.svelte';
+	import { pollEvery } from '#lib/poll';
 	import * as m from '#lib/paraglide/messages';
 
 	const id = page.params.id!;
@@ -25,12 +26,11 @@
 	// still scan to pair even if they navigated here before ever pairing a
 	// phone, rather than only offering that on the screen before this one.
 	let pairing = $state(await getPairing());
-	$effect(() => {
-		const interval = setInterval(async () => {
-			pairing = await getPairing();
-		}, 60_000);
-		return () => clearInterval(interval);
-	});
+	$effect(() =>
+		pollEvery(60_000, getPairing, (next) => {
+			pairing = next;
+		})
+	);
 
 	const label = $derived(profile?.username ?? m.unknown_profile());
 

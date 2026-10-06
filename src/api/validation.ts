@@ -1,11 +1,19 @@
 import { z } from 'zod';
+import { usernameIssue } from '#lib/usernameRules';
+
+const USERNAME_MESSAGES = {
+	too_short: 'Username is too short',
+	too_long: 'Username is too long',
+	invalid_chars: 'Only letters, numbers, - and _ are allowed'
+} as const;
 
 const usernameSchema = z
 	.string()
 	.trim()
-	.min(2, 'Username is too short')
-	.max(20, 'Username is too long')
-	.regex(/^[a-zA-Z0-9_-]+$/, 'Only letters, numbers, - and _ are allowed');
+	.superRefine((value, ctx) => {
+		const issue = usernameIssue(value);
+		if (issue) ctx.addIssue({ code: 'custom', message: USERNAME_MESSAGES[issue] });
+	});
 
 const pinSchema = z.string().regex(/^\d{4}$/, 'PIN must be 4 digits');
 

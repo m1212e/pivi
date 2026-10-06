@@ -6,6 +6,7 @@
 	import { client } from '#lib/api/rumbleClient/client';
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import { getNetworkStatus } from '#lib/state/network.svelte';
+	import { pollEvery } from '#lib/poll';
 	import * as m from '#lib/paraglide/messages';
 
 	const profiles = await client.liveQuery.users({
@@ -28,24 +29,22 @@
 	// sits open long enough for it to expire, refresh it before that happens
 	// rather than leaving a dead code on screen.
 	let pairing = $state(await getPairing());
-	$effect(() => {
-		const interval = setInterval(async () => {
-			pairing = await getPairing();
-		}, 60_000);
-		return () => clearInterval(interval);
-	});
+	$effect(() =>
+		pollEvery(60_000, getPairing, (next) => {
+			pairing = next;
+		})
+	);
 
 	// Polled far more often than the pairing token, because this is what
 	// notices the phone finishing a join: the setup screen should disappear on
 	// its own within a couple of seconds of the device coming online, without
 	// anyone touching the TV.
 	let network = $state(await getNetworkStatus());
-	$effect(() => {
-		const interval = setInterval(async () => {
-			network = await getNetworkStatus();
-		}, 3_000);
-		return () => clearInterval(interval);
-	});
+	$effect(() =>
+		pollEvery(3_000, getNetworkStatus, (next) => {
+			network = next;
+		})
+	);
 
 	// Reset on every reload on purpose: dismissing is "let me look around now",
 	// not "stop asking me".

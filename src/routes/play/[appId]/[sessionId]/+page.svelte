@@ -45,8 +45,8 @@
 	import { createSessionUrls, mimeTypeFor, nextSessionHref } from '#lib/playback/urls';
 	import { clampSeek, settleTimeUpdate, type SeekTarget } from '#lib/playback/seek';
 	import { nextSkipStep, skipTarget, type SkipSegment } from '#lib/playback/skipSegments';
+	import { browserStorage } from '#lib/storage';
 	import {
-		browserStorage,
 		clampVolume,
 		isOfferedSubtitle,
 		loadSkipActive,

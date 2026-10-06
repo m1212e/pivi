@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { isSingleLineEnter } from '#lib/textEntry';
+	import { isSingleLineEnter, TEXT_EXIT_EVENT } from '#lib/textEntry';
 
 	let {
 		value = $bindable(''),
@@ -87,6 +87,14 @@
 		editing = false;
 		onblur?.();
 	}
+
+	$effect(() => {
+		const el = input;
+		if (!el) return;
+		const onExit = () => void stop();
+		el.addEventListener(TEXT_EXIT_EVENT, onExit);
+		return () => el.removeEventListener(TEXT_EXIT_EVENT, onExit);
+	});
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') void stop();

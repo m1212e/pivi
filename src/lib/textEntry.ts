@@ -76,17 +76,36 @@ export function isSingleLineEnter(event: KeyboardEvent, multiline: boolean): boo
 	return event.key === 'Enter' && !multiline;
 }
 
+// Fields listen for this to end editing. A real Escape press does the same.
+export const TEXT_EXIT_EVENT = 'pivi-text-exit';
+
+export function requestTextExit(el: TextTarget) {
+	el.dispatchEvent(new CustomEvent(TEXT_EXIT_EVENT, { bubbles: true }));
+}
+
+export type SentText = { value: string; at: number };
+
+// Long enough for the TV's state push to come back, short enough that an
+// edit made on the TV later is not mistaken for an echo.
+const ECHO_WINDOW_MS = 2000;
+
+/** Adds what the phone just sent and drops entries too old to be echoes. */
+export function recordSent(sent: SentText[], value: string, now: number): SentText[] {
+	return [...sent.filter((s) => now - s.at < ECHO_WINDOW_MS), { value, at: now }];
+}
+
 /**
  * The phone's copy of a field after the TV reports its value. Keeps what the
- * phone has when it just sent that value itself, so a late echo does not
- * overwrite newer typing.
+ * phone has when the TV is only echoing something it sent a moment ago, so a
+ * late echo does not overwrite newer typing.
  */
 export function mirroredText(
 	state: { hasTextInput: boolean; textValue: string },
 	current: string,
-	recentlySent: string[]
+	sent: SentText[],
+	now: number
 ): string {
-	const stale =
-		!state.hasTextInput || state.textValue === current || recentlySent.includes(state.textValue);
+	const echo = sent.some((s) => s.value === state.textValue && now - s.at < ECHO_WINDOW_MS);
+	const stale = !state.hasTextInput || state.textValue === current || echo;
 	return stale ? current : state.textValue;
 }

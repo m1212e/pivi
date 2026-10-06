@@ -15,9 +15,9 @@ import {
 	loadSubtitleLanguage,
 	loadVolume,
 	saveSubtitleLanguage,
-	saveVolume,
-	type KeyValueStorage
+	saveVolume
 } from './preferences';
+import type { KeyValueStorage } from '../storage';
 import { createSessionUrls, nextSessionHref } from './urls';
 import { describeError } from './errors';
 import { bufferedAheadSeconds, formatTime } from './time';
