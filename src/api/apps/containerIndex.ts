@@ -20,9 +20,19 @@ export type SegmentBaseIndex = { initRange: ByteRange; indexRange: ByteRange };
 const SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
 
 async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
-	const res = await fetch(url, { headers: { range: `bytes=${start}-${end}` } });
-	if (!res.ok && res.status !== 206) error(502, `Upstream range request failed: ${res.status}`);
-	return new Uint8Array(await res.arrayBuffer());
+	// The CDN occasionally drops or rejects a request, so one retry avoids
+	// failing the whole playback start on a transient blip.
+	let lastStatus = 0;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		try {
+			const res = await fetch(url, { headers: { range: `bytes=${start}-${end}` } });
+			if (res.ok || res.status === 206) return new Uint8Array(await res.arrayBuffer());
+			lastStatus = res.status;
+		} catch (err) {
+			console.warn('[containerIndex] range fetch threw', err);
+		}
+	}
+	error(502, `Upstream range request failed: ${lastStatus || 'network error'}`);
 }
 
 function readU32(data: Uint8Array, offset: number): number {
@@ -110,7 +120,7 @@ type EbmlElement = { id: number; start: number; bodyStart: number; size: number 
 
 function* ebmlChildren(data: Uint8Array, start: number, end: number): Generator<EbmlElement> {
 	let pos = start;
-	while (pos < end - 1) {
+	while (pos < end - 1 && pos < data.length) {
 		const elementStart = pos;
 		const idResult = readVint(data, pos, true);
 		const sizePos = pos + idResult.length;

@@ -174,7 +174,13 @@
 			return;
 		}
 		dragging = true;
-		el?.setPointerCapture(event.pointerId);
+		// RemoteBridge dispatches synthetic pointers whose id the browser
+		// doesn't know, which makes this throw.
+		try {
+			el?.setPointerCapture(event.pointerId);
+		} catch {
+			// dragging still works via move events without capture
+		}
 		updateFromPointer(event);
 	}
 

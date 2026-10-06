@@ -738,9 +738,31 @@
 		);
 	}
 
+	// A segment starting right at the video's beginning never has a lead
+	// window to enter, so playback is already inside it once it starts. Waits
+	// for real playback (not just the `play` event, which fires before any
+	// data is loaded) or the seek would be a no-op that still marks it decided.
+	const SKIP_IMMEDIATE_START_SECONDS = 1;
+	function segmentAtVideoStart(): SkipSegment | null {
+		return (
+			skipSegments.find(
+				(segment) =>
+					!decidedSkipSegments.has(segment) &&
+					segment.startSeconds <= SKIP_IMMEDIATE_START_SECONDS &&
+					position >= segment.startSeconds &&
+					position < segment.endSeconds
+			) ?? null
+		);
+	}
+
 	$effect(() => {
 		const active = activeSkipSegment;
 		if (!active) {
+			const atStart = playing && !buffering ? segmentAtVideoStart() : null;
+			if (atStart) {
+				resolveSkipSegment(atStart);
+				return;
+			}
 			activeSkipSegment = upcomingSkipSegment();
 			return;
 		}
