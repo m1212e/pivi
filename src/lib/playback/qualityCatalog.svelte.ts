@@ -100,5 +100,3 @@ export function createQualityCatalog({ urls, fetchMeta, defaultMeta }: Deps) {
 		bestInitial: () => bestInitialQuality(mseAvailability)
 	};
 }
-
-export type QualityCatalog = ReturnType<typeof createQualityCatalog>;

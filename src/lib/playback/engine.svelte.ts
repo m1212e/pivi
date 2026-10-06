@@ -17,6 +17,11 @@ type Deps = {
 	getQuality: () => QualityOption;
 };
 
+function describeMediaError(error: MediaError | null | undefined): string {
+	if (!error) return 'native video error (no detail available)';
+	return `native video error ${error.code}: ${error.message || '(no message)'}`;
+}
+
 export type PlaybackMode = 'direct' | 'mse' | 'ffmpeg';
 
 /**
@@ -191,13 +196,7 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 			failed = true;
 			return;
 		}
-		const mediaError = getVideo()?.error;
-		fallbackToFfmpeg(
-			position,
-			mediaError
-				? `native video error ${mediaError.code}: ${mediaError.message || '(no message)'}`
-				: 'native video error (no detail available)'
-		);
+		fallbackToFfmpeg(position, describeMediaError(getVideo()?.error));
 	}
 
 	/** Spread onto the <video> so the engine sees the element's own state changes. */
@@ -239,5 +238,3 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 		getShakaStats: () => (mode === 'mse' ? (dualTrackHandle?.getStats() ?? null) : null)
 	};
 }
-
-export type PlayerEngine = ReturnType<typeof createPlayerEngine>;

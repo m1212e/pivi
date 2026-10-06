@@ -53,8 +53,8 @@ import {
 import { connectRemoteSession, type RemoteSession } from './session';
 
 export type TvState = z.infer<typeof stateParamsSchema>;
-export type PlayerAction = z.infer<typeof playerActionParamsSchema>['action'];
-export type RemotePhase = 'connecting' | 'not-paired' | 'error' | 'ready';
+type PlayerAction = z.infer<typeof playerActionParamsSchema>['action'];
+type RemotePhase = 'connecting' | 'not-paired' | 'error' | 'ready';
 
 const INITIAL_TV_STATE: TvState = {
 	hasPinPad: false,

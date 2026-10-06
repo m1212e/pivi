@@ -120,11 +120,14 @@
 		readyForInitialAttach = true;
 	});
 	let attached = false;
-	$effect(() => {
-		if (attached || !videoEl || !readyForInitialAttach) return;
+	const canAttach = $derived(!!videoEl && readyForInitialAttach);
+	function attachInitialPlayback() {
 		attached = true;
 		const meta = catalog.meta[quality];
 		if (meta) engine.setupPlayback(meta, 0);
+	}
+	$effect(() => {
+		if (canAttach && !attached) attachInitialPlayback();
 	});
 
 	// A quality switch can change the whole mode, so it's a fresh setup.

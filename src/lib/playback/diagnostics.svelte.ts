@@ -21,6 +21,17 @@ export type Diagnostics = {
 	shakaStats: ShakaStats | null;
 };
 
+const resolutionOf = (el: HTMLVideoElement | undefined) =>
+	el ? `${el.videoWidth}×${el.videoHeight}` : '—';
+
+const loadStatesOf = (el: HTMLVideoElement | undefined) =>
+	el
+		? { readyState: el.readyState, networkState: el.networkState }
+		: { readyState: 0, networkState: 0 };
+
+const bufferedAheadOf = (el: HTMLVideoElement | undefined) =>
+	el ? bufferedAheadSeconds(el.buffered, el.currentTime) : 0;
+
 /**
  * Element and Shaka internals for the diagnostics panel. None of it is
  * reactive, so it is polled, and only while the panel is open. Must be
@@ -42,10 +53,9 @@ export function createDiagnostics(deps: {
 	function refresh() {
 		const el = deps.getVideo();
 		snapshot = {
-			resolution: el ? `${el.videoWidth}×${el.videoHeight}` : '—',
-			readyState: el?.readyState ?? 0,
-			networkState: el?.networkState ?? 0,
-			bufferedAheadSeconds: el ? bufferedAheadSeconds(el.buffered, el.currentTime) : 0,
+			resolution: resolutionOf(el),
+			...loadStatesOf(el),
+			bufferedAheadSeconds: bufferedAheadOf(el),
 			shakaStats: (deps.getShakaStats() as ShakaStats | null) ?? null
 		};
 	}
