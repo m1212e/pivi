@@ -755,18 +755,16 @@
 		);
 	}
 
+	function pickNextSkipSegment() {
+		const atStart = playing && !buffering ? segmentAtVideoStart() : null;
+		if (atStart) resolveSkipSegment(atStart);
+		else activeSkipSegment = upcomingSkipSegment();
+	}
+
 	$effect(() => {
 		const active = activeSkipSegment;
-		if (!active) {
-			const atStart = playing && !buffering ? segmentAtVideoStart() : null;
-			if (atStart) {
-				resolveSkipSegment(atStart);
-				return;
-			}
-			activeSkipSegment = upcomingSkipSegment();
-			return;
-		}
-		if (position >= active.startSeconds) resolveSkipSegment(active);
+		if (!active) pickNextSkipSegment();
+		else if (position >= active.startSeconds) resolveSkipSegment(active);
 	});
 
 	function togglePlayPause() {

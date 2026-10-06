@@ -19,18 +19,27 @@ export type SegmentBaseIndex = { initRange: ByteRange; indexRange: ByteRange };
 // fraction of the actual media data.
 const SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
 
+type RangeResult = { data: Uint8Array } | { status: number };
+
+async function tryFetchRange(url: string, start: number, end: number): Promise<RangeResult> {
+	try {
+		const res = await fetch(url, { headers: { range: `bytes=${start}-${end}` } });
+		if (res.ok || res.status === 206) return { data: new Uint8Array(await res.arrayBuffer()) };
+		return { status: res.status };
+	} catch (err) {
+		console.warn('[containerIndex] range fetch threw', err);
+		return { status: 0 };
+	}
+}
+
 async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
-	// The CDN occasionally drops or rejects a request, so one retry avoids
+	// The CDN occasionally drops or rejects a request, so retries avoid
 	// failing the whole playback start on a transient blip.
 	let lastStatus = 0;
 	for (let attempt = 0; attempt < 3; attempt++) {
-		try {
-			const res = await fetch(url, { headers: { range: `bytes=${start}-${end}` } });
-			if (res.ok || res.status === 206) return new Uint8Array(await res.arrayBuffer());
-			lastStatus = res.status;
-		} catch (err) {
-			console.warn('[containerIndex] range fetch threw', err);
-		}
+		const result = await tryFetchRange(url, start, end);
+		if ('data' in result) return result.data;
+		lastStatus = result.status;
 	}
 	error(502, `Upstream range request failed: ${lastStatus || 'network error'}`);
 }
