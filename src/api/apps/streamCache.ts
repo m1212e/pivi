@@ -55,7 +55,7 @@ export function resolveStreamCached(
 	// resolution for this session happened to be.
 	const key = `${appId}:${sessionId}:${maxHeight ?? 'auto'}`;
 	const hit = cache.get(key);
-	if (hit && hit.expiresAt > Date.now()) return hit.value;
+	if (hit && hit.expiresAt > Date.now()) return Promise.resolve(hit.value);
 
 	const running = inFlight.get(key);
 	if (running) return running;
