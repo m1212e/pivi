@@ -299,6 +299,8 @@ export const UI_NODE_TYPES = [
 ] as const satisfies readonly UiNode['type'][];
 
 type MissingNodeTypes = Exclude<UiNode['type'], (typeof UI_NODE_TYPES)[number]>;
+// Fails to compile when a node type is missing from UI_NODE_TYPES.
+// fallow-ignore-next-line unused-export
 export const allNodeTypesListed: [MissingNodeTypes] extends [never] ? true : never = true;
 
 // No app id: the host knows which app it's talking to, and an app
