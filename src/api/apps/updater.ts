@@ -87,60 +87,95 @@ export async function checkForUpdate(deps: AppDeps, appId: string): Promise<Upda
 	}
 }
 
-// fallow-ignore-next-line complexity
+type ImageRef = ReturnType<typeof parseImageRef>;
+type ResolvedImage = Awaited<ReturnType<typeof resolveImage>>;
+
+function messageOf(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+// The outcome when the digest needs no work, undefined when it is new.
+function knownOutcome(row: InstalledApp, digest: string): UpdateOutcome | undefined {
+	if (digest === row.imageDigest) return 'unchanged';
+	if (digest === row.ignoredDigest) return 'ignored';
+	return digest === row.pendingUpdate?.image.digest ? 'pending' : undefined;
+}
+
+async function vetCandidate(
+	deps: AppDeps,
+	row: InstalledApp,
+	ref: ImageRef,
+	resolved: ResolvedImage
+): Promise<void> {
+	// Whoever controls the tag doesn't control the key: a build that isn't
+	// signed by the key this app was installed with is not an update.
+	// Skipped for an app that was installed without one.
+	if (row.signer) await deps.verify(ref, resolved.digest, row.signer, deps.registry);
+	if (resolved.manifest.id !== row.appId) {
+		throw new AppError(`The new version is a different app (${resolved.manifest.id})`);
+	}
+}
+
+async function tryApply(
+	deps: AppDeps,
+	row: InstalledApp,
+	image: AppImage,
+	resolved: ResolvedImage
+): Promise<UpdateOutcome> {
+	try {
+		await applyImage(deps, row, image, resolved.manifest);
+		return 'applied';
+	} catch (error) {
+		// Rolled back already; remembered so it isn't retried every check.
+		await deps.store.update(row.appId, {
+			ignoredDigest: resolved.digest,
+			lastError: `Version ${resolved.manifest.version} failed to start and was rolled back: ${messageOf(error)}`
+		});
+		return 'failed';
+	}
+}
+
+async function applyOrPark(
+	deps: AppDeps,
+	row: InstalledApp,
+	resolved: ResolvedImage
+): Promise<UpdateOutcome> {
+	const image: AppImage = {
+		digest: resolved.digest,
+		command: resolved.command,
+		workingDir: resolved.workingDir
+	};
+	if (diffManifests(row.approvedManifest, resolved.manifest).needsApproval || !row.autoUpdate) {
+		await deps.store.update(row.appId, {
+			pendingUpdate: { manifest: resolved.manifest, image },
+			lastError: null
+		});
+		return 'pending';
+	}
+	return tryApply(deps, row, image, resolved);
+}
+
+async function checkRow(deps: AppDeps, row: InstalledApp): Promise<UpdateOutcome> {
+	const ref = parseImageRef(row.imageRef);
+	const resolved = await resolveImage(ref, deps.registry);
+	await deps.store.update(row.appId, { lastCheckedAt: new Date() });
+
+	const known = knownOutcome(row, resolved.digest);
+	if (known) return known;
+
+	await vetCandidate(deps, row, ref, resolved);
+	await deps.backend.prepare(pinnedReference(ref, resolved.digest));
+	return applyOrPark(deps, row, resolved);
+}
+
 async function runCheck(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	const row = await deps.store.find(appId);
 	if (!row) throw new AppError(`No app "${appId}" is installed`);
 
 	try {
-		const ref = parseImageRef(row.imageRef);
-		const resolved = await resolveImage(ref, deps.registry);
-		await deps.store.update(appId, { lastCheckedAt: new Date() });
-
-		if (resolved.digest === row.imageDigest) return 'unchanged';
-		if (resolved.digest === row.ignoredDigest) return 'ignored';
-		if (resolved.digest === row.pendingUpdate?.image.digest) return 'pending';
-
-		// Whoever controls the tag doesn't control the key: a build that isn't
-		// signed by the key this app was installed with is not an update.
-		// Skipped for an app that was installed without one.
-		if (row.signer) await deps.verify(ref, resolved.digest, row.signer, deps.registry);
-		if (resolved.manifest.id !== row.appId) {
-			throw new AppError(`The new version is a different app (${resolved.manifest.id})`);
-		}
-
-		const image: AppImage = {
-			digest: resolved.digest,
-			command: resolved.command,
-			workingDir: resolved.workingDir
-		};
-		await deps.backend.prepare(pinnedReference(ref, resolved.digest));
-
-		if (diffManifests(row.approvedManifest, resolved.manifest).needsApproval || !row.autoUpdate) {
-			await deps.store.update(appId, {
-				pendingUpdate: { manifest: resolved.manifest, image },
-				lastError: null
-			});
-			return 'pending';
-		}
-
-		try {
-			await applyImage(deps, row, image, resolved.manifest);
-		} catch (error) {
-			// Rolled back already; remembered so it isn't retried every check.
-			await deps.store.update(appId, {
-				ignoredDigest: resolved.digest,
-				lastError: `Version ${resolved.manifest.version} failed to start and was rolled back: ${
-					error instanceof Error ? error.message : error
-				}`
-			});
-			return 'failed';
-		}
-		return 'applied';
+		return await checkRow(deps, row);
 	} catch (error) {
-		await deps.store.update(appId, {
-			lastError: error instanceof Error ? error.message : String(error)
-		});
+		await deps.store.update(appId, { lastError: messageOf(error) });
 		return 'failed';
 	}
 }

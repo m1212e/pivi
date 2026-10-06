@@ -4,17 +4,24 @@
 	import { ArrowBigUp, CornerDownLeft, Delete } from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
 	import {
-		composeDead,
 		DEAD_SPACING,
 		EURKEY_ROWS,
 		layerIndex,
 		type Cell,
+		type KeyLayers,
 		type DeadKind
 	} from '#lib/keyboard/eurkey';
 	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
-	import { deleteBackward, insertText, isTextualInput, submitInput } from '#lib/textEntry';
-
-	type Modifier = 'off' | 'once' | 'lock';
+	import { deleteBackward, insertText, submitInput } from '#lib/textEntry';
+	import {
+		cycleModifier,
+		focusWasDropped,
+		physicalKeyAction,
+		pressCellResult,
+		reclaimFocus,
+		resolveFocus,
+		type Modifier
+	} from '#lib/keyboard/oskLogic';
 
 	const visible = $derived(keyboardVisible());
 	let root: HTMLElement | undefined = $state();
@@ -37,10 +44,6 @@
 				: m.osk_go()
 	);
 
-	function cycle(mod: Modifier): Modifier {
-		return mod === 'off' ? 'once' : mod === 'once' ? 'lock' : 'off';
-	}
-
 	function type(text: string) {
 		if (osk.target) insertText(osk.target, text);
 	}
@@ -50,26 +53,15 @@
 		if (altGr === 'once') altGr = 'off';
 	}
 
-	// fallow-ignore-next-line complexity
 	function pressCell(cell: Cell) {
-		if (typeof cell === 'string') {
-			type(dead ? composeDead(dead, cell) : cell);
-			dead = null;
-		} else if (dead) {
-			// A second accent prints the first one bare, and the same accent twice
-			// is how a real dead key types the accent itself.
-			type(DEAD_SPACING[dead]);
-			dead = dead === cell.dead ? null : cell.dead;
-		} else {
-			dead = cell.dead;
-		}
+		const press = pressCellResult(dead, cell);
+		if (press.text !== null) type(press.text);
+		dead = press.dead;
 		afterKey();
 	}
 
 	function pressSpace() {
-		type(dead ? composeDead(dead, ' ') : ' ');
-		dead = null;
-		afterKey();
+		pressCell(' ');
 	}
 
 	function backspace() {
@@ -117,47 +109,33 @@
 		backspace();
 	}
 
-	// fallow-ignore-next-line complexity
 	function onFocusIn(event: FocusEvent) {
 		const el = event.target;
 		if (!(el instanceof Element) || root?.contains(el)) return;
-		if (isTextualInput(el) && el !== osk.dismissed) {
-			osk.target = el;
-			return;
-		}
-		if (el !== osk.dismissed) osk.dismissed = null;
-		osk.target = null;
+		const next = resolveFocus(el, osk.dismissed);
+		osk.target = next.target;
+		osk.dismissed = next.dismissed;
 	}
 
 	// Focus can drop to <body> with no focusin to react to, e.g. a click on
 	// empty space.
 	function onFocusOut(event: FocusEvent) {
 		if (event.relatedTarget) return;
-		// fallow-ignore-next-line complexity
 		setTimeout(() => {
-			const active = document.activeElement;
-			if (!osk.target || active === osk.target || root?.contains(active)) return;
-			if (!active || active === document.body) {
-				osk.target = null;
-				osk.dismissed = null;
-			}
+			if (!focusWasDropped(osk.target, document.activeElement, root)) return;
+			osk.target = null;
+			osk.dismissed = null;
 		}, 0);
 	}
 
 	// Lets a physical keyboard keep working while focus sits on the keys.
-	// fallow-ignore-next-line complexity
 	function onKeyDown(event: KeyboardEvent) {
 		if (!root?.contains(document.activeElement)) return;
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			dismissKeyboard();
-		} else if (event.key === 'Backspace') {
-			event.preventDefault();
-			backspace();
-		} else if (event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey) {
-			event.preventDefault();
-			type(event.key);
-		}
+		const action = physicalKeyAction(event);
+		if (!action) return;
+		event.preventDefault();
+		const run = { dismiss: dismissKeyboard, backspace, type: () => type(event.key) };
+		run[action]();
 	}
 
 	onMount(() => {
@@ -183,10 +161,8 @@
 	});
 
 	// The phone taking over while focus is on a key would leave focus nowhere.
-	// fallow-ignore-next-line complexity
 	$effect(() => {
-		if (visible || !osk.target?.isConnected) return;
-		if (document.activeElement === document.body) osk.target.focus();
+		if (!visible) reclaimFocus(osk.target);
 	});
 
 	$effect(() => {
@@ -202,8 +178,101 @@
 	const ACTIVE = 'bg-white text-slate-950';
 </script>
 
-<!-- fallow-ignore-next-line complexity -->
 <svelte:document onfocusin={onFocusIn} onfocusout={onFocusOut} onkeydown={onKeyDown} />
+
+{#snippet suggestionBar()}
+	{#if suggestions.length > 0}
+		<div class="flex flex-wrap gap-2.5" aria-label={m.osk_suggestions()}>
+			{#each suggestions.slice(0, 6) as suggestion (suggestion)}
+				<button
+					type="button"
+					onclick={() => pick(suggestion)}
+					class="{KEY} {SOFT} h-12 max-w-[22rem] px-5 text-lg"
+				>
+					<span class="truncate">{suggestion}</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet shiftKey()}
+	<button
+		type="button"
+		aria-label={m.osk_shift()}
+		aria-pressed={shift !== 'off'}
+		onclick={() => (shift = cycleModifier(shift))}
+		class="{KEY} w-24 {shift === 'off' ? SOFT : ACTIVE}"
+	>
+		<ArrowBigUp class="size-6" fill={shift === 'lock' ? 'currentColor' : 'none'} />
+	</button>
+{/snippet}
+
+{#snippet backspaceKey()}
+	<button
+		type="button"
+		aria-label={m.osk_backspace()}
+		onclick={onBackspaceClick}
+		onpointerdown={startHold}
+		onpointerup={clearHold}
+		onpointercancel={clearHold}
+		onpointerleave={clearHold}
+		class="{KEY} {SOFT} w-24"
+	>
+		<Delete class="size-6" />
+	</button>
+{/snippet}
+
+{#snippet enterKey()}
+	<button
+		type="button"
+		onclick={pressEnter}
+		class="{KEY} {ACTIVE} min-w-28 gap-2 px-5 hover:bg-white/90"
+	>
+		{enterLabel}
+		<CornerDownLeft class="size-5" />
+	</button>
+{/snippet}
+
+{#snippet altGrKey()}
+	<button
+		type="button"
+		aria-pressed={altGr !== 'off'}
+		onclick={() => (altGr = cycleModifier(altGr))}
+		class="{KEY} w-24 text-base {altGr === 'off' ? SOFT : ACTIVE}"
+	>
+		AltGr{altGr === 'lock' ? ' ·' : ''}
+	</button>
+{/snippet}
+
+{#snippet cellKey(cell: Cell, start: boolean)}
+	<button
+		type="button"
+		onclick={() => pressCell(cell)}
+		data-osk-start={start ? '' : undefined}
+		class="{KEY} {typeof cell !== 'string' && dead === cell.dead ? ACTIVE : SOFT}"
+	>
+		{typeof cell === 'string' ? cell : DEAD_SPACING[cell.dead]}
+	</button>
+{/snippet}
+
+{#snippet keyRow(row: KeyLayers[], r: number)}
+	<div class="flex justify-center gap-2.5">
+		{#if r === 3}
+			{@render shiftKey()}
+		{/if}
+		{#each row as key, c (c)}
+			{@render cellKey(key[layer], r === 2 && c === 4)}
+		{/each}
+		{#if r === 0}
+			{@render backspaceKey()}
+		{:else if r === 2}
+			{@render enterKey()}
+		{:else if r === 3}
+			{@render altGrKey()}
+		{/if}
+	</div>
+{/snippet}
 
 {#if visible}
 	<div
@@ -215,77 +284,10 @@
 		transition:fly={{ y: 48, duration: 250 }}
 		class="fixed bottom-8 left-1/2 z-40 flex w-fit max-w-[96vw] -translate-x-1/2 flex-col gap-2.5 rounded-3xl bg-white/12 p-4 text-white shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
 	>
-		{#if suggestions.length > 0}
-			<div class="flex flex-wrap gap-2.5" aria-label={m.osk_suggestions()}>
-				{#each suggestions.slice(0, 6) as suggestion (suggestion)}
-					<button
-						type="button"
-						onclick={() => pick(suggestion)}
-						class="{KEY} {SOFT} h-12 max-w-[22rem] px-5 text-lg"
-					>
-						<span class="truncate">{suggestion}</span>
-					</button>
-				{/each}
-			</div>
-		{/if}
+		{@render suggestionBar()}
 
 		{#each EURKEY_ROWS as row, r (r)}
-			<div class="flex justify-center gap-2.5">
-				{#if r === 3}
-					<button
-						type="button"
-						aria-label={m.osk_shift()}
-						aria-pressed={shift !== 'off'}
-						onclick={() => (shift = cycle(shift))}
-						class="{KEY} w-24 {shift === 'off' ? SOFT : ACTIVE}"
-					>
-						<ArrowBigUp class="size-6" fill={shift === 'lock' ? 'currentColor' : 'none'} />
-					</button>
-				{/if}
-				{#each row as key, c (c)}
-					{@const cell = key[layer]}
-					<button
-						type="button"
-						onclick={() => pressCell(cell)}
-						data-osk-start={r === 2 && c === 4 ? '' : undefined}
-						class="{KEY} {typeof cell !== 'string' && dead === cell.dead ? ACTIVE : SOFT}"
-					>
-						{typeof cell === 'string' ? cell : DEAD_SPACING[cell.dead]}
-					</button>
-				{/each}
-				{#if r === 0}
-					<button
-						type="button"
-						aria-label={m.osk_backspace()}
-						onclick={onBackspaceClick}
-						onpointerdown={startHold}
-						onpointerup={clearHold}
-						onpointercancel={clearHold}
-						onpointerleave={clearHold}
-						class="{KEY} {SOFT} w-24"
-					>
-						<Delete class="size-6" />
-					</button>
-				{:else if r === 2}
-					<button
-						type="button"
-						onclick={pressEnter}
-						class="{KEY} {ACTIVE} min-w-28 gap-2 px-5 hover:bg-white/90"
-					>
-						{enterLabel}
-						<CornerDownLeft class="size-5" />
-					</button>
-				{:else if r === 3}
-					<button
-						type="button"
-						aria-pressed={altGr !== 'off'}
-						onclick={() => (altGr = cycle(altGr))}
-						class="{KEY} w-24 text-base {altGr === 'off' ? SOFT : ACTIVE}"
-					>
-						AltGr{altGr === 'lock' ? ' ·' : ''}
-					</button>
-				{/if}
-			</div>
+			{@render keyRow(row, r)}
 		{/each}
 
 		<div class="flex gap-2.5">

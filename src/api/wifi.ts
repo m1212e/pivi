@@ -75,32 +75,12 @@ export type NetworkState = {
 
 // nmcli's terse output escapes its own field separator and backslashes, which
 // matters because an SSID is free-form text and may legitimately contain a
-// colon.
-//
-// The four branches are one character-at-a-time lexer: escape pending,
-// escape introducer, separator, ordinary character. Splitting it would hand
-// half a lexer to a helper and leave the same decisions in play, so this is
-// suppressed rather than decomposed.
-// fallow-ignore-next-line complexity
+// colon. A colon only separates when every character before it is a whole
+// token, so an escaped one never counts.
+const UNESCAPED_COLON = /(?<=^(?:[^\\]|\\.)*):/;
+
 function splitTerse(line: string): string[] {
-	const fields: string[] = [];
-	let current = '';
-	let escaped = false;
-	for (const char of line) {
-		if (escaped) {
-			current += char;
-			escaped = false;
-		} else if (char === '\\') {
-			escaped = true;
-		} else if (char === ':') {
-			fields.push(current);
-			current = '';
-		} else {
-			current += char;
-		}
-	}
-	fields.push(current);
-	return fields;
+	return line.split(UNESCAPED_COLON).map((field) => field.replace(/\\([\s\S]?)/g, '$1'));
 }
 
 async function nmcli(...args: string[]): Promise<string> {

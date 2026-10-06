@@ -51,6 +51,7 @@
 	import PinPad from '#lib/components/PinPad.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
+	import { mirroredText } from '#lib/textEntry';
 	import { profileGradient } from '#lib/profileColor';
 	import { appAccentGradient } from '#lib/appAccent';
 	import { appIconDataUrl } from '#lib/apps/manifest';
@@ -284,7 +285,7 @@
 	function reportMove(conn: MessageConnection, t: Touch) {
 		const dx = t.clientX - touchOrigin!.x;
 		const dy = t.clientY - touchOrigin!.y;
-		if (Math.abs(dx) <= MOVE_THRESHOLD && Math.abs(dy) <= MOVE_THRESHOLD) return;
+		if (Math.max(Math.abs(dx), Math.abs(dy)) <= MOVE_THRESHOLD) return;
 		// A cancel, not a release -- this was never a selection, just a press
 		// that turned out to be the start of a swipe, so the TV shouldn't
 		// click whatever's focused because of it.
@@ -452,21 +453,14 @@
 		const writer = new SinkMessageWriter((msg) => session?.send(msg as Record<string, unknown>));
 		connection = createMessageConnection(reader, writer);
 
-		// fallow-ignore-next-line complexity
 		onNotification(connection, stateNotification, stateParamsSchema, (state) => {
 			hasPinPad = state.hasPinPad;
 			hasTextInput = state.hasTextInput;
 			suggestions = state.hasTextInput ? state.suggestions : [];
 			// Cheap and idempotent, and covers a TV that reloaded and forgot.
 			if (state.hasTextInput) reportTextEntryMode();
-			if (!state.hasTextInput) recentlySent = [];
-			if (
-				state.hasTextInput &&
-				state.textValue !== text &&
-				!recentlySent.includes(state.textValue)
-			) {
-				text = state.textValue;
-			}
+			else recentlySent = [];
+			text = mirroredText(state, text, recentlySent);
 			canGoBack = state.canGoBack;
 			canGoHome = state.canGoHome;
 			profiles = state.profiles;

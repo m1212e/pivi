@@ -43,17 +43,17 @@ export function insertText(el: TextTarget, text: string) {
 	setCaret(el, start + text.length);
 }
 
+function lastGraphemeLength(text: string): number {
+	const last = [...new Intl.Segmenter().segment(text)].at(-1);
+	return last?.segment.length ?? 1;
+}
+
 // Removes a whole grapheme, so a flag or a letter with combining marks goes
 // in one press.
-// fallow-ignore-next-line complexity
 export function deleteBackward(el: TextTarget) {
 	const [start, end] = selection(el);
 	if (start === 0 && end === 0) return;
-	let from = start;
-	if (start === end) {
-		const before = [...new Intl.Segmenter().segment(el.value.slice(0, start))].at(-1);
-		from = start - (before?.segment.length ?? 1);
-	}
+	const from = start === end ? start - lastGraphemeLength(el.value.slice(0, start)) : start;
 	setInputValue(el, el.value.slice(0, from) + el.value.slice(end));
 	setCaret(el, from);
 }
@@ -69,4 +69,24 @@ export function submitInput(el: TextTarget) {
 	});
 	el.dispatchEvent(event);
 	if (!event.defaultPrevented) el.closest('form')?.requestSubmit();
+}
+
+// A textarea keeps Enter for its own newline.
+export function isSingleLineEnter(event: KeyboardEvent, multiline: boolean): boolean {
+	return event.key === 'Enter' && !multiline;
+}
+
+/**
+ * The phone's copy of a field after the TV reports its value. Keeps what the
+ * phone has when it just sent that value itself, so a late echo does not
+ * overwrite newer typing.
+ */
+export function mirroredText(
+	state: { hasTextInput: boolean; textValue: string },
+	current: string,
+	recentlySent: string[]
+): string {
+	const stale =
+		!state.hasTextInput || state.textValue === current || recentlySent.includes(state.textValue);
+	return stale ? current : state.textValue;
 }

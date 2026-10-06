@@ -83,11 +83,9 @@ function titleOf(meta: ReturnType<typeof tileMetadataOf>): string {
 
 function durationTextOf(tile: Tile): string {
 	const overlays = tile.header?.tileHeaderRenderer?.thumbnailOverlays ?? [];
-	for (const overlay of overlays) {
-		const text = overlay.thumbnailOverlayTimeStatusRenderer?.text?.simpleText;
-		if (text) return text;
-	}
-	return '';
+	return (
+		overlays.map((o) => o.thumbnailOverlayTimeStatusRenderer?.text?.simpleText).find(Boolean) ?? ''
+	);
 }
 
 // This path was only confirmed against an ad tile from a signed-out TV
@@ -135,71 +133,86 @@ function tileToSummary(tile: Tile): VideoSummary | null {
 	return summary;
 }
 
+// Adds `item` to `results` if it's real and not seen yet. Returns whether
+// `results` has now hit `limit`, so the caller knows to stop.
+function addUnique<T extends { id: string }>(
+	item: T | null,
+	seen: Set<string>,
+	results: T[],
+	limit: number
+): boolean {
+	if (!item || seen.has(item.id)) return false;
+	seen.add(item.id);
+	results.push(item);
+	return results.length >= limit;
+}
+
 // Flattens every tile found anywhere in a raw TV response into a deduped
 // list, capped at `limit`. Dedup matters because the same video can
 // legitimately appear in more than one shelf/section (harmless for a real
 // TV UI, which renders each shelf separately, but downstream UI here keys
 // each item by video id, which breaks on a duplicate).
-// Adds `tile`'s summary to `results` if it's a real, not-yet-seen video tile.
-// Returns whether `results` has now hit `limit`, so the caller knows to stop.
-function addUniqueTile(
-	tile: Tile,
-	seen: Set<string>,
-	results: VideoSummary[],
-	limit: number
-): boolean {
-	const summary = tileToSummary(tile);
-	if (!summary || seen.has(summary.id)) return false;
-	seen.add(summary.id);
-	results.push(summary);
-	return results.length >= limit;
-}
-
-export function collectTiles(root: unknown, limit: number): VideoSummary[] {
+function collectUnique<T extends { id: string }>(
+	root: unknown,
+	limit: number,
+	convert: (tile: Tile) => T | null
+): T[] {
 	const tiles: Record<string, unknown>[] = [];
 	findTiles(root, tiles);
 
 	const seen = new Set<string>();
-	const results: VideoSummary[] = [];
+	const results: T[] = [];
 	for (const tile of tiles) {
-		if (addUniqueTile(tile as Tile, seen, results, limit)) break;
+		if (addUnique(convert(tile as Tile), seen, results, limit)) break;
 	}
 	return results;
+}
+
+export function collectTiles(root: unknown, limit: number): VideoSummary[] {
+	return collectUnique(root, limit, tileToSummary);
 }
 
 // The Playlists tab's tiles use the same renderer as videos, just with a
 // playlist content type and the playlist id as contentId. Some responses
 // prefix that id with `VL` (the browse id form), so it's stripped to keep one
 // canonical id.
-// fallow-ignore-next-line complexity
+function lastThumbnailUrl(tile: Tile): string {
+	const thumbnails = tile.header?.tileHeaderRenderer?.thumbnail?.thumbnails ?? [];
+	return thumbnails[thumbnails.length - 1]?.url ?? '';
+}
+
 function tileToPlaylist(tile: Tile): PlaylistSummary | null {
-	if (!tile.contentId || tile.contentType !== 'TILE_CONTENT_TYPE_PLAYLIST') return null;
+	const id = tile.contentId;
+	if (!id || tile.contentType !== 'TILE_CONTENT_TYPE_PLAYLIST') return null;
 
 	const meta = tileMetadataOf(tile);
-	const thumbnails = tile.header?.tileHeaderRenderer?.thumbnail?.thumbnails ?? [];
 	return {
-		id: tile.contentId.replace(/^VL/, ''),
+		id: id.replace(/^VL/, ''),
 		title: titleOf(meta),
 		subtitle: firstLineText(meta?.lines),
-		thumbnailUrl: thumbnails[thumbnails.length - 1]?.url ?? ''
+		thumbnailUrl: lastThumbnailUrl(tile)
 	};
 }
 
-// fallow-ignore-next-line complexity
 export function collectPlaylists(root: unknown, limit: number): PlaylistSummary[] {
-	const tiles: Record<string, unknown>[] = [];
-	findTiles(root, tiles);
+	return collectUnique(root, limit, tileToPlaylist);
+}
 
-	const seen = new Set<string>();
-	const results: PlaylistSummary[] = [];
-	for (const tile of tiles) {
-		const playlist = tileToPlaylist(tile as Tile);
-		if (!playlist || seen.has(playlist.id)) continue;
-		seen.add(playlist.id);
-		results.push(playlist);
-		if (results.length >= limit) break;
+// Calls `visit` for every object anywhere in a raw response, parents before
+// their children.
+export function walkObjects(node: unknown, visit: (obj: Record<string, unknown>) => void): void {
+	if (!node || typeof node !== 'object') return;
+	if (Array.isArray(node)) {
+		node.forEach((item) => walkObjects(item, visit));
+		return;
 	}
-	return results;
+	const obj = node as Record<string, unknown>;
+	visit(obj);
+	Object.values(obj).forEach((value) => walkObjects(value, visit));
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+	return typeof value === 'string' ? value : undefined;
 }
 
 // The token for the next page of a TV browse response, or undefined on the
@@ -208,17 +221,10 @@ export function collectPlaylists(root: unknown, limit: number): PlaylistSummary[
 // so the last one found wins since the page-level one comes after its shelves.
 export function findContinuationToken(root: unknown): string | undefined {
 	let token: string | undefined;
-	// fallow-ignore-next-line complexity
-	const visit = (node: unknown) => {
-		if (!node || typeof node !== 'object') return;
-		if (Array.isArray(node)) return node.forEach(visit);
-		const obj = node as Record<string, unknown>;
+	walkObjects(root, (obj) => {
 		const command = obj.continuationCommand as { token?: unknown } | undefined;
-		if (typeof command?.token === 'string') token = command.token;
 		const next = obj.nextContinuationData as { continuation?: unknown } | undefined;
-		if (typeof next?.continuation === 'string') token = next.continuation;
-		Object.values(obj).forEach(visit);
-	};
-	visit(root);
+		token = stringOrUndefined(next?.continuation) ?? stringOrUndefined(command?.token) ?? token;
+	});
 	return token;
 }

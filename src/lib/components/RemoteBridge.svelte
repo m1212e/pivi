@@ -56,6 +56,8 @@
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import * as m from '#lib/paraglide/messages';
 	import { playSound } from '#lib/sounds';
+	import { navigationFlagsFor } from '#lib/navigationFlags';
+	import { planMove } from '#lib/spatialNav';
 	import { isTextualInput, setInputValue, submitInput } from '#lib/textEntry';
 	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
 
@@ -112,57 +114,52 @@
 
 	// While focus sits on the on-screen keyboard's keys, the field being typed
 	// into is still the one the phone should mirror.
-	// fallow-ignore-next-line complexity
 	function focusedTextInput() {
 		const active = document.activeElement;
 		if (isTextualInput(active)) return active;
-		return active?.closest('[data-pivi-osk]') && osk.target?.isConnected ? osk.target : null;
+		return active?.closest('[data-pivi-osk]') ? connectedOskTarget() : null;
+	}
+
+	function connectedOskTarget() {
+		return osk.target?.isConnected ? osk.target : null;
 	}
 
 	// Tells the phone what's actually on screen right now, so it only shows
 	// the PIN pad, keyboard, or back button when there's something for them
-	// to do here. Text-field targeting rides on plain DOM focus — the same
-	// thing a screen reader or a real keyboard already keys off — instead of
+	// to do here. Text-field targeting rides on plain DOM focus, the same
+	// thing a screen reader or a real keyboard already keys off, instead of
 	// a bespoke marker attribute, so any future page with a normal <input>
 	// gets remote-keyboard support with no extra wiring.
-	// Where the phone's Back/Home buttons are worth showing at all: neither
-	// the pre-login profile picker ('/') nor the home screen itself has
-	// anywhere sensible to go back *to*, and Home only goes somewhere new
-	// from inside an app or the player (mirroring hooks.server.ts's own
-	// definition of "has an active profile" for those routes).
-	function navigationFlags() {
-		return {
-			canGoBack: location.pathname !== '/' && location.pathname !== '/home',
-			canGoHome:
-				location.pathname.startsWith('/apps/') ||
-				location.pathname.startsWith('/play/') ||
-				location.pathname === '/apps' ||
-				location.pathname === '/wifi'
-		};
+	function textState() {
+		const el = focusedTextInput();
+		return { hasTextInput: !!el, textValue: el?.value ?? '' };
 	}
 
-	// fallow-ignore-next-line complexity
-	function sendState() {
-		if (!connection) return;
-		// Queried once and reused below -- `playing`/position/duration/quality
-		// are only ever meaningful alongside `hasPlayer` anyway (no player, no
-		// video to report on).
+	// `playing`/position/duration/quality are only meaningful alongside
+	// `hasPlayer` anyway (no player, no video to report on).
+	function playerState() {
 		const playerEl = document.querySelector<HTMLElement>('[data-pivi-player]');
 		const playerVideo = playerEl?.querySelector<HTMLVideoElement>('video');
-		sendNotification(connection, stateNotification, stateParamsSchema, {
-			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
-			hasTextInput: !!focusedTextInput(),
-			textValue: focusedTextInput()?.value ?? '',
-			suggestions: focusedSuggestions(),
-			...navigationFlags(),
-			profiles: pickerProfiles(),
-			// Sliced to the first three here (rather than trusting the phone
-			// to do it) so the phone doesn't need to know that limit is even a
-			// thing -- it just renders whatever this sends.
-			apps: dashboardApps().slice(0, 3),
+		return {
 			hasPlayer: !!playerEl,
 			playing: !!playerVideo && !playerVideo.paused,
 			...playerProgress(playerEl)
+		};
+	}
+
+	function sendState() {
+		if (!connection) return;
+		sendNotification(connection, stateNotification, stateParamsSchema, {
+			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
+			...textState(),
+			suggestions: focusedSuggestions(),
+			...navigationFlagsFor(location.pathname),
+			profiles: pickerProfiles(),
+			// Sliced to the first three here (rather than trusting the phone
+			// to do it) so the phone doesn't need to know that limit is even a
+			// thing, it just renders whatever this sends.
+			apps: dashboardApps().slice(0, 3),
+			...playerState()
 		});
 	}
 
@@ -297,87 +294,6 @@
 		moveFocus(dx, dy);
 	}
 
-	function centerOf(el: Element): { x: number; y: number } {
-		const rect = el.getBoundingClientRect();
-		return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-	}
-
-	// The swipe as a unit vector -- a zero-length swipe (never sent in
-	// practice, but cheap to be safe about) would otherwise divide by zero
-	// and score every candidate NaN.
-	function unitVector(dx: number, dy: number): { x: number; y: number } {
-		const length = Math.hypot(dx, dy) || 1;
-		return { x: dx / length, y: dy / length };
-	}
-
-	// Which elements a swipe is even allowed to land on. A mostly-horizontal
-	// swipe stays inside the current shelf: the cone below is wide enough that
-	// the next row's cards can otherwise win over "nothing further right in
-	// this row", which reads as focus randomly hopping rows instead of
-	// stopping at the row's end.
-	function candidatesFor(els: HTMLElement[], active: HTMLElement, dx: number, dy: number) {
-		const shelf = Math.abs(dx) > Math.abs(dy) ? active.closest('[data-pivi-hscroll]') : null;
-		return els.filter((el) => el !== active && (!shelf || shelf.contains(el)));
-	}
-
-	// How good a move onto one candidate is: its distance, penalised by how
-	// far off the swipe's own direction it sits. `undefined` means it's on
-	// top of where focus already is, or behind rather than ahead along the
-	// swipe -- never a candidate.
-	function directionScore(
-		from: { x: number; y: number },
-		to: { x: number; y: number },
-		dir: { x: number; y: number }
-	): { distance: number; cos: number } | undefined {
-		const vx = to.x - from.x;
-		const vy = to.y - from.y;
-		const distance = Math.hypot(vx, vy);
-		const dot = vx * dir.x + vy * dir.y;
-		if (distance === 0 || dot <= 0) return undefined;
-		return { distance, cos: dot / distance };
-	}
-
-	// Whether a candidate sits in the lane the active element already
-	// occupies along the swipe's *other* axis -- e.g. for a vertical swipe,
-	// do their x-ranges overlap at all. A candidate in-lane is a clean "next
-	// row", so it's picked by pure along-axis distance with no angle limit;
-	// one that isn't still needs the ~60deg cone below, since without lane
-	// overlap a wide angle usually means it belongs to an unrelated row or
-	// column off to the side rather than the thing directly ahead.
-	//
-	// This is what lets a narrow row of small controls (e.g. the hold-to-
-	// confirm buttons under an app's toggles, packed toward one side of a
-	// much wider row) still win over something full-width further away: its
-	// bounding box still falls inside the wide row above it, even though its
-	// own center is well off to that row's side.
-	function inLane(activeRect: DOMRect, candidateRect: DOMRect, dx: number, dy: number): boolean {
-		return Math.abs(dy) > Math.abs(dx)
-			? candidateRect.left < activeRect.right && candidateRect.right > activeRect.left
-			: candidateRect.top < activeRect.bottom && candidateRect.bottom > activeRect.top;
-	}
-
-	function bestInDirection(els: HTMLElement[], active: HTMLElement, dx: number, dy: number) {
-		const from = centerOf(active);
-		const activeRect = active.getBoundingClientRect();
-		const dir = unitVector(dx, dy);
-		let best: HTMLElement | null = null;
-		let bestTier = Infinity;
-		let bestScore = Infinity;
-		for (const el of candidatesFor(els, active, dx, dy)) {
-			const result = directionScore(from, centerOf(el), dir);
-			if (result === undefined) continue;
-			const laned = inLane(activeRect, el.getBoundingClientRect(), dx, dy);
-			if (!laned && result.cos < 0.5) continue;
-			const tier = laned ? 0 : 1;
-			const score = laned ? result.distance * result.cos : result.distance / result.cos;
-			if (tier > bestTier || (tier === bestTier && score >= bestScore)) continue;
-			bestTier = tier;
-			bestScore = score;
-			best = el;
-		}
-		return best;
-	}
-
 	function focusAndScroll(el: HTMLElement, els: HTMLElement[]) {
 		// Focus alone can jump instantly on some browsers regardless of the
 		// container's `scroll-behavior` (Safari in particular), so scroll it
@@ -387,24 +303,15 @@
 	}
 
 	// Lightweight spatial navigation: from the focused element, pick the
-	// nearest other focusable element that lies within a ~60deg cone in the
-	// swipe direction, rather than a fixed tab order. With nothing focused
-	// (or focus somewhere that isn't a candidate at all, e.g. <body> after a
-	// navigation) the first candidate takes it, so a swipe always gets
-	// focus onto the page.
+	// nearest other focusable element within a cone in the swipe direction,
+	// rather than a fixed tab order (see spatialNav.ts).
 	function moveFocus(dx: number, dy: number) {
 		const els = focusableElements();
-		const active = document.activeElement;
-		if (!(active instanceof HTMLElement) || !els.includes(active)) {
-			if (els[0]) playSound('move');
-			els[0]?.focus();
-			return;
-		}
-		const best = bestInDirection(els, active, dx, dy);
-		if (best) {
-			playSound('move');
-			focusAndScroll(best, els);
-		}
+		const move = planMove(els, document.activeElement, dx, dy);
+		if (!move) return;
+		playSound('move');
+		if (move.scroll) focusAndScroll(move.el, els);
+		else move.el.focus();
 	}
 
 	// Vertically, center whichever row (title included) or the top bar holds

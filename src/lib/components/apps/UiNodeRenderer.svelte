@@ -20,6 +20,7 @@
 	import LoadingSpinner from '#lib/components/LoadingSpinner.svelte';
 	import MediaCard from '#lib/components/MediaCard.svelte';
 	import MediaCardSkeleton from '#lib/components/MediaCardSkeleton.svelte';
+	import { containerRowClasses } from '#lib/apps/containerClasses';
 	import Self from './UiNodeRenderer.svelte';
 
 	let {
@@ -74,37 +75,6 @@
 				skeletonTimers.delete(el);
 			}
 		};
-	}
-
-	// Layout only: how a container arranges its children. Anything with a look
-	// of its own is a component (see the node kinds below).
-	// fallow-ignore-next-line complexity
-	function containerRowClasses(n: Extract<UiNode, { type: 'container' }>): string {
-		const panel = n.panel
-			? ' rounded-3xl bg-white/8 px-12 py-10 ring-1 ring-white/12 backdrop-blur-md'
-			: '';
-		// `self-start` so the stuck column keeps its own height instead of
-		// stretching to the full row, which would leave it nothing to stick within.
-		const sticky = n.sticky ? ' sticky top-8 self-start' : '';
-		const grow =
-			panel +
-			sticky +
-			(n.grow ? ' min-w-0 flex-1' : '') +
-			(n.center ? ' items-center text-center' : '');
-		if (n.direction !== 'row')
-			return `flex flex-col ${n.center ? 'justify-center gap-8 min-h-[70vh]' : 'gap-3'}${grow}`;
-		// A real grid, so rows of differently shaped cards (a round channel
-		// among videos) stay in the same columns, with the leftover width
-		// spread between them instead of piling up on the right.
-		if (n.wrap)
-			return `grid grid-cols-[repeat(auto-fill,20rem)] items-start justify-between gap-x-4 gap-y-10 px-10${grow}`;
-		const justify =
-			n.justify === 'between'
-				? ' justify-between'
-				: n.justify === 'around'
-					? ' justify-around'
-					: '';
-		return `flex flex-row ${n.alignStart ? 'items-start' : 'items-center'} gap-3${justify}${grow}`;
 	}
 </script>
 
@@ -351,7 +321,16 @@
 	</div>
 {/snippet}
 
-<!-- fallow-ignore-next-line complexity -->
+{#snippet anyButtonNode(n: Extract<UiNode, { type: 'button' }>)}
+	{#if n.action?.type === 'openOnPhone'}
+		{@render openOnPhoneButtonNode(n, n.action.url)}
+	{:else if n.action && appId && appHref}
+		{@render buttonLinkNode(n, appActionHref(appId, appHref, n.action))}
+	{:else}
+		{@render buttonNode(n)}
+	{/if}
+{/snippet}
+
 {#if node.type === 'container'}
 	{@render containerNode(node)}
 {:else if node.type === 'text'}
@@ -370,12 +349,8 @@
 	{@render heroNode(node)}
 {:else if node.type === 'image'}
 	{@render imageNode(node)}
-{:else if node.type === 'button' && node.action?.type === 'openOnPhone'}
-	{@render openOnPhoneButtonNode(node, node.action.url)}
-{:else if node.type === 'button' && node.action && appId && appHref}
-	{@render buttonLinkNode(node, appActionHref(appId, appHref, node.action))}
 {:else if node.type === 'button'}
-	{@render buttonNode(node)}
+	{@render anyButtonNode(node)}
 {:else if node.type === 'toggle'}
 	{@render toggleNode(node)}
 {:else if node.type === 'textInput'}

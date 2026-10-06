@@ -3,7 +3,7 @@
 // Besides videos it holds playlists, series and channels, which the app shows
 // as cards of their own. Shorts are left out.
 import type { Innertube } from 'youtubei.js';
-import { findContinuationToken } from './tvTiles';
+import { findContinuationToken, walkObjects } from './tvTiles';
 import type { VideoSummary } from './youtubeClient';
 
 type ImageSources = { image?: { sources?: { url?: string }[] } };
@@ -69,23 +69,11 @@ export type SearchPage = { results: SearchResult[]; continuation?: string };
 
 type Raw = { data: unknown };
 
-// fallow-ignore-next-line complexity
 function findLockups(node: unknown, out: Lockup[]) {
-	if (!node || typeof node !== 'object') return;
-	if (Array.isArray(node)) {
-		node.forEach((item) => findLockups(item, out));
-		return;
-	}
-	const obj = node as Record<string, unknown>;
-	if (obj.lockupViewModel) out.push(obj.lockupViewModel as Lockup);
-	Object.values(obj).forEach((value) => findLockups(value, out));
+	walkObjects(node, (obj) => {
+		if (obj.lockupViewModel) out.push(obj.lockupViewModel as Lockup);
+	});
 }
-
-// Long music uploads (mixes, albums) come back as MUSIC rather than VIDEO, and
-// they are most of what a music query returns. Both play as a normal video.
-const VIDEO_TYPES = new Set(['LOCKUP_CONTENT_TYPE_VIDEO', 'LOCKUP_CONTENT_TYPE_MUSIC']);
-// A series is a playlist with a nicer page.
-const PLAYLIST_TYPES = new Set(['LOCKUP_CONTENT_TYPE_PLAYLIST', 'LOCKUP_CONTENT_TYPE_SHOW']);
 
 function metaParts(lockup: Lockup): string[] {
 	const rows =
@@ -101,70 +89,94 @@ function absolute(url: string | undefined): string {
 	return url.startsWith('//') ? `https:${url}` : url;
 }
 
-// fallow-ignore-next-line complexity
-function toVideo(lockup: Lockup): SearchResult | null {
-	if (!lockup.contentId) return null;
-	const meta = lockup.metadata?.lockupMetadataViewModel;
+type BadgeViewModels = { thumbnailBadgeViewModel?: { text?: string } }[];
+
+function firstBadgeText(badges: BadgeViewModels): string | undefined {
+	return badges.map((b) => b.thumbnailBadgeViewModel?.text).find(Boolean);
+}
+
+function titleOf(lockup: Lockup, fallback: string): string {
+	return lockup.metadata?.lockupMetadataViewModel?.title?.content ?? fallback;
+}
+
+function durationOf(lockup: Lockup): string {
 	const overlays = lockup.contentImage?.thumbnailViewModel?.overlays ?? [];
-	const duration = overlays
-		.flatMap((o) => o.thumbnailBottomOverlayViewModel?.badges ?? [])
-		.map((b) => b.thumbnailBadgeViewModel?.text)
-		.find(Boolean);
+	return (
+		firstBadgeText(overlays.flatMap((o) => o.thumbnailBottomOverlayViewModel?.badges ?? [])) ?? ''
+	);
+}
+
+function toVideo(lockup: Lockup, id: string): SearchResult {
 	return {
 		kind: 'video',
-		id: lockup.contentId,
-		title: meta?.title?.content ?? 'Untitled',
+		id,
+		title: titleOf(lockup, 'Untitled'),
 		channelTitle: metaParts(lockup)[0] ?? '',
-		durationText: duration ?? '',
+		durationText: durationOf(lockup),
 		// Same 16:9 source as the other tabs, see tvTiles.ts.
-		thumbnailUrl: `https://i.ytimg.com/vi/${lockup.contentId}/maxresdefault.jpg`
+		thumbnailUrl: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`
 	};
 }
 
-// fallow-ignore-next-line complexity
-function toPlaylist(lockup: Lockup): SearchResult | null {
-	if (!lockup.contentId) return null;
-	const thumbnail =
-		lockup.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel;
-	const badge = (thumbnail?.overlays ?? [])
-		.flatMap((o) => o.thumbnailOverlayBadgeViewModel?.thumbnailBadges ?? [])
-		.map((b) => b.thumbnailBadgeViewModel?.text)
-		.find(Boolean);
-	const isMix = lockup.contentId.startsWith('RD');
+function playlistThumbnail(lockup: Lockup) {
+	return lockup.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel;
+}
+
+function thumbnailBadgeText(lockup: Lockup): string | undefined {
+	const overlays = playlistThumbnail(lockup)?.overlays ?? [];
+	return firstBadgeText(
+		overlays.flatMap((o) => o.thumbnailOverlayBadgeViewModel?.thumbnailBadges ?? [])
+	);
+}
+
+function playlistBadge(lockup: Lockup, isMix: boolean): string {
+	return thumbnailBadgeText(lockup) ?? (isMix ? 'Mix' : 'Playlist');
+}
+
+function toPlaylist(lockup: Lockup, id: string): SearchResult {
+	const isMix = id.startsWith('RD');
 	return {
 		kind: 'playlist',
-		id: lockup.contentId,
-		title: lockup.metadata?.lockupMetadataViewModel?.title?.content ?? 'Untitled',
+		id,
+		title: titleOf(lockup, 'Untitled'),
 		meta: metaParts(lockup).join(' • '),
-		thumbnailUrl: absolute(thumbnail?.image?.sources?.at(-1)?.url),
-		badge: badge ?? (isMix ? 'Mix' : 'Playlist'),
+		thumbnailUrl: absolute(playlistThumbnail(lockup)?.image?.sources?.at(-1)?.url),
+		badge: playlistBadge(lockup, isMix),
 		playVideoId: isMix
 			? lockup.rendererContext?.commandContext?.onTap?.innertubeCommand?.watchEndpoint?.videoId
 			: undefined
 	};
 }
 
-// fallow-ignore-next-line complexity
-function toChannel(lockup: Lockup): SearchResult | null {
-	if (!lockup.contentId) return null;
+function toChannel(lockup: Lockup, id: string): SearchResult {
 	const parts = metaParts(lockup);
 	return {
 		kind: 'channel',
-		id: lockup.contentId,
-		title: lockup.metadata?.lockupMetadataViewModel?.title?.content ?? 'Channel',
+		id,
+		title: titleOf(lockup, 'Channel'),
 		// The handle comes first, the subscriber count says more.
 		meta: parts[1] ?? parts[0] ?? '',
 		thumbnailUrl: absolute(lockup.contentImage?.thumbnailViewModel?.image?.sources?.at(-1)?.url)
 	};
 }
 
-// fallow-ignore-next-line complexity
+type Converter = (lockup: Lockup, id: string) => SearchResult;
+
+// Long music uploads (mixes, albums) come back as MUSIC rather than VIDEO, and
+// they are most of what a music query returns. Both play as a normal video.
+// A series is a playlist with a nicer page.
+const CONVERTERS = new Map<string, Converter>([
+	['LOCKUP_CONTENT_TYPE_VIDEO', toVideo],
+	['LOCKUP_CONTENT_TYPE_MUSIC', toVideo],
+	['LOCKUP_CONTENT_TYPE_PLAYLIST', toPlaylist],
+	['LOCKUP_CONTENT_TYPE_SHOW', toPlaylist],
+	['LOCKUP_CONTENT_TYPE_CHANNEL', toChannel]
+]);
+
 function toResult(lockup: Lockup): SearchResult | null {
-	const type = lockup.contentType ?? '';
-	if (VIDEO_TYPES.has(type)) return toVideo(lockup);
-	if (PLAYLIST_TYPES.has(type)) return toPlaylist(lockup);
-	if (type === 'LOCKUP_CONTENT_TYPE_CHANNEL') return toChannel(lockup);
-	return null;
+	const { contentId, contentType } = lockup;
+	const convert = contentType ? CONVERTERS.get(contentType) : undefined;
+	return contentId && convert ? convert(lockup, contentId) : null;
 }
 
 function toPage(data: unknown): SearchPage {

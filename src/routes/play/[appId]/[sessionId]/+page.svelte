@@ -946,25 +946,30 @@
 		history.back();
 	}
 
-	// Plays the next entry of the sequence this session came from, or leaves
-	// when there is none. Replacing the entry keeps one back press enough.
-	// fallow-ignore-next-line complexity
-	async function onVideoEnded() {
-		if (!context) return goBack();
+	// A failed lookup counts as no next entry, same as a session without a
+	// sequence.
+	async function nextSessionId(sequence: string): Promise<string | undefined> {
 		try {
 			const result = await client.query.appNextSession({
-				__args: { appId, sessionId, context },
+				__args: { appId, sessionId, context: sequence },
 				sessionId: true
 			});
-			const nextId = result?.sessionId;
-			if (nextId) {
-				const next = new URLSearchParams({ context });
-				return goto(`/play/${encodeURIComponent(appId)}/${encodeURIComponent(nextId)}?${next}`, {
-					replaceState: true
-				});
-			}
+			return result?.sessionId ?? undefined;
 		} catch {
-			// Fall through to leaving, same as a session without a sequence.
+			return undefined;
+		}
+	}
+
+	// Plays the next entry of the sequence this session came from, or leaves
+	// when there is none. Replacing the entry keeps one back press enough.
+	async function onVideoEnded() {
+		if (!context) return goBack();
+		const nextId = await nextSessionId(context);
+		if (nextId) {
+			const next = new URLSearchParams({ context });
+			return goto(`/play/${encodeURIComponent(appId)}/${encodeURIComponent(nextId)}?${next}`, {
+				replaceState: true
+			});
 		}
 		goBack();
 	}

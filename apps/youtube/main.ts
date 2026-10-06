@@ -35,6 +35,7 @@ import {
 	fetchPlaylistVideos,
 	fetchVideosMore,
 	isLibrarySection,
+	type PlaylistPage,
 	type SectionContent,
 	type VideoPage
 } from './tvLibrary';
@@ -189,61 +190,52 @@ function sidebar(): UiNode {
 	};
 }
 
-// fallow-ignore-next-line complexity
-function mainContent(results: VideoSummary[], signIn: DeviceCodeAuth | undefined): UiNode {
-	// Sign-in is a manual action, not something gating activation -- the
-	// screen itself still opens signed out, just with an empty grid and this
-	// prompt instead of the personalized feed below. Signed in just shows the
-	// grid, no separate label -- the feed being personalized is already the
-	// signal that it's wired up.
-	const signInNode: UiNode | undefined = isSignedIn()
-		? undefined
-		: signIn
-			? signInPrompt(signIn)
-			: {
-					type: 'container',
-					direction: 'column',
-					center: true,
-					panel: true,
-					children: [
-						{ type: 'icon', path: ACCOUNT_ICON, size: 'large' },
-						{ type: 'text', value: 'Sign in to YouTube', variant: 'headline' },
-						{
-							type: 'text',
-							value: 'See your recommendations and subscriptions',
-							variant: 'headline'
-						},
-						{
-							type: 'button',
-							label: 'Sign in with Google',
-							variant: 'solid',
-							size: 'lg',
-							onSelect: 'signIn'
-						}
-					]
-				};
-
-	// Nothing below the sign-in card until there's an account to show data for.
-	if (signInNode) {
-		return { type: 'container', direction: 'column', grow: true, children: [signInNode] };
-	}
-
+// Sign-in is a manual action, not something gating activation. The screen
+// still opens signed out, just with this prompt instead of the feed.
+function signedOutCard(): UiNode {
 	return {
 		type: 'container',
 		direction: 'column',
-		grow: true,
+		center: true,
+		panel: true,
 		children: [
-			typing
-				? typingView(typing)
-				: openPlaylist
-					? collectionView(openPlaylist)
-					: currentSection === 'home'
-						? videoGrid(results, homeContinuation, 'more:home')
-						: currentSection === SEARCH
-							? searchView()
-							: sectionView()
+			{ type: 'icon', path: ACCOUNT_ICON, size: 'large' },
+			{ type: 'text', value: 'Sign in to YouTube', variant: 'headline' },
+			{
+				type: 'text',
+				value: 'See your recommendations and subscriptions',
+				variant: 'headline'
+			},
+			{
+				type: 'button',
+				label: 'Sign in with Google',
+				variant: 'solid',
+				size: 'lg',
+				onSelect: 'signIn'
+			}
 		]
 	};
+}
+
+function contentColumn(child: UiNode): UiNode {
+	return { type: 'container', direction: 'column', grow: true, children: [child] };
+}
+
+function sectionBody(results: VideoSummary[]): UiNode {
+	if (currentSection === 'home') return videoGrid(results, homeContinuation, 'more:home');
+	return currentSection === SEARCH ? searchView() : sectionView();
+}
+
+function bodyView(results: VideoSummary[]): UiNode {
+	if (typing) return typingView(typing);
+	if (openPlaylist) return collectionView(openPlaylist);
+	return sectionBody(results);
+}
+
+function mainContent(results: VideoSummary[], signIn: DeviceCodeAuth | undefined): UiNode {
+	// Nothing below the sign-in card until there's an account to show data for.
+	if (!isSignedIn()) return contentColumn(signIn ? signInPrompt(signIn) : signedOutCard());
+	return contentColumn(bodyView(results));
 }
 
 // Skeleton cards stay at the end of a grid for as long as more can be loaded,
@@ -351,50 +343,60 @@ function statusMessage(text: string, retrySection?: string): UiNode {
 
 // While typing, the live results look exactly like a committed search. With
 // nothing typed yet the recent searches are offered instead.
-// fallow-ignore-next-line complexity
 function typingView(state: NonNullable<typeof typing>): UiNode {
-	if (!state.text) {
-		const recent = recentSearches();
-		if (recent.length === 0) return statusMessage('Type something to search.');
-		return {
-			type: 'container',
-			direction: 'column',
-			title: 'Recent searches',
-			children: recent.map((query, i): UiNode => ({
-				type: 'button',
-				label: query,
-				onSelect: `recent:${i}`
-			}))
-		};
-	}
-	if (!state.results) {
+	return state.text ? liveResultsView(state.text, state.results) : recentView();
+}
+
+function recentView(): UiNode {
+	const recent = recentSearches();
+	if (recent.length === 0) return statusMessage('Type something to search.');
+	return {
+		type: 'container',
+		direction: 'column',
+		title: 'Recent searches',
+		children: recent.map((query, i): UiNode => ({
+			type: 'button',
+			label: query,
+			onSelect: `recent:${i}`
+		}))
+	};
+}
+
+function liveResultsView(text: string, results: SearchResult[] | undefined): UiNode {
+	const title = `Results for "${text}"`;
+	if (!results) {
 		return {
 			type: 'container',
 			direction: 'row',
 			wrap: true,
-			title: `Results for "${state.text}"`,
+			title,
 			children: Array.from({ length: SKELETON_COUNT * 2 }, (): UiNode => ({ type: 'skeleton' }))
 		};
 	}
-	return state.results.length === 0
-		? statusMessage(`No results for "${state.text}".`)
-		: pagedGrid(state.results.map(resultCard), undefined, '', `Results for "${state.text}"`);
+	return results.length === 0
+		? statusMessage(`No results for "${text}".`)
+		: pagedGrid(results.map(resultCard), undefined, '', title);
 }
 
-// fallow-ignore-next-line complexity
+// What a grid shows while its content is missing: a retry card or a spinner.
+function pendingView(hasFailed: boolean, retrySection?: string): UiNode {
+	return hasFailed ? statusMessage(EMPTY_ERROR, retrySection) : { type: 'spinner' };
+}
+
 function searchView(): UiNode {
 	if (!search) return statusMessage('Type something to search.');
-	const title = `Results for "${search.query}"`;
-	if (!search.page) {
-		return failed.has(SEARCH) ? statusMessage(EMPTY_ERROR) : { type: 'spinner' };
-	}
-	return search.page.results.length === 0
-		? statusMessage(`No results for "${search.query}".`)
+	if (!search.page) return pendingView(failed.has(SEARCH));
+	return searchResultsView(search.query, search.page);
+}
+
+function searchResultsView(query: string, page: SearchPage): UiNode {
+	return page.results.length === 0
+		? statusMessage(`No results for "${query}".`)
 		: pagedGrid(
-				search.page.results.map(resultCard),
-				search.page.continuation,
+				page.results.map(resultCard),
+				page.continuation,
 				`more:${SEARCH}`,
-				title
+				`Results for "${query}"`
 			);
 }
 
@@ -408,57 +410,56 @@ function latestShelf(open: NonNullable<typeof openPlaylist>): UiNode[] {
 	return [{ type: 'shelf', title: 'Latest uploads', children: latest.map((v) => videoCard(v)) }];
 }
 
-// A playlist or channel opened from the Playlists tab or from search.
-// fallow-ignore-next-line complexity
-function collectionView(open: NonNullable<typeof openPlaylist>): UiNode {
+const BACK_LABELS = { search: 'Back to results', playlists: 'Back to playlists' };
+const EMPTY_COLLECTION = { channel: 'No videos here.', playlist: 'This playlist is empty.' };
+
+function collectionBody(open: NonNullable<typeof openPlaylist>): UiNode {
 	const page = playlistVideos.get(open.id);
+	if (!page) return pendingView(failed.has(`playlist:${open.id}`));
+	if (page.videos.length === 0) return statusMessage(EMPTY_COLLECTION[open.kind]);
+	return videoGrid(
+		page.videos,
+		page.continuation,
+		`more:playlist:${open.id}`,
+		open.title,
+		open.kind === 'playlist' ? open.id : undefined
+	);
+}
+
+// A playlist or channel opened from the Playlists tab or from search.
+function collectionView(open: NonNullable<typeof openPlaylist>): UiNode {
 	return {
 		type: 'container',
 		direction: 'column',
 		children: [
-			{
-				type: 'button',
-				label: open.back === 'search' ? 'Back to results' : 'Back to playlists',
-				onSelect: 'back'
-			},
+			{ type: 'button', label: BACK_LABELS[open.back], onSelect: 'back' },
 			...latestShelf(open),
-			!page
-				? failed.has(`playlist:${open.id}`)
-					? statusMessage(EMPTY_ERROR)
-					: { type: 'spinner' }
-				: page.videos.length === 0
-					? statusMessage(open.kind === 'channel' ? 'No videos here.' : 'This playlist is empty.')
-					: videoGrid(
-							page.videos,
-							page.continuation,
-							`more:playlist:${open.id}`,
-							open.title,
-							open.kind === 'playlist' ? open.id : undefined
-						)
+			collectionBody(open)
 		]
 	};
 }
 
-// One library tab (everything except Home).
-// fallow-ignore-next-line complexity
-function sectionView(): UiNode {
-	const content = sectionCache.get(currentSection);
-	if (!content) {
-		return failed.has(currentSection)
-			? statusMessage(EMPTY_ERROR, currentSection)
-			: { type: 'spinner' };
-	}
+function playlistsSection(content: PlaylistPage, label: string, moreEvent: string): UiNode {
+	return content.playlists.length === 0
+		? statusMessage('No playlists yet.')
+		: pagedGrid(content.playlists.map(playlistCard), content.continuation, moreEvent, label);
+}
 
-	const label = sectionLabel(currentSection);
-	const moreEvent = `more:section:${currentSection}`;
-	if ('playlists' in content) {
-		return content.playlists.length === 0
-			? statusMessage('No playlists yet.')
-			: pagedGrid(content.playlists.map(playlistCard), content.continuation, moreEvent, label);
-	}
+function videosSection(content: VideoPage, label: string, moreEvent: string): UiNode {
 	return content.videos.length === 0
 		? statusMessage('Nothing here yet.')
 		: videoGrid(content.videos, content.continuation, moreEvent, label);
+}
+
+// One library tab (everything except Home).
+function sectionView(): UiNode {
+	const content = sectionCache.get(currentSection);
+	if (!content) return pendingView(failed.has(currentSection), currentSection);
+	const label = sectionLabel(currentSection);
+	const moreEvent = `more:section:${currentSection}`;
+	return 'playlists' in content
+		? playlistsSection(content, label, moreEvent)
+		: videosSection(content, label, moreEvent);
 }
 
 function browseScreen(results: VideoSummary[], signIn: DeviceCodeAuth | undefined): UiNode {
@@ -513,61 +514,71 @@ function mergeById<T extends { id: string }>(have: T[], more: T[]): T[] {
 	return [...have, ...more.filter((item) => !seen.has(item.id))];
 }
 
+async function moreHome() {
+	if (!homeContinuation) return;
+	const page = await fetchTvHomeMore(innertube, homeContinuation);
+	lastResults = mergeById(lastResults, page.videos);
+	homeContinuation = page.continuation;
+}
+
+// A newer search replaced this one while its page was loading.
+function searchMoved(query: string, have: SearchPage): boolean {
+	return search?.query !== query || search.page !== have;
+}
+
+async function moreSearch() {
+	const current = search;
+	if (!current?.page?.continuation) return;
+	const have = current.page;
+	const next = await fetchSearchMore(innertube, current.page.continuation);
+	if (searchMoved(current.query, have)) return;
+	current.page = {
+		results: mergeById(have.results, next.results),
+		continuation: next.continuation
+	};
+}
+
+// A page of the other kind than `have` can't be merged and leaves it as is.
+function mergeSection(have: SectionContent, next: SectionContent): SectionContent {
+	if ('playlists' in have) {
+		return 'playlists' in next
+			? { playlists: mergeById(have.playlists, next.playlists), continuation: next.continuation }
+			: have;
+	}
+	return 'videos' in next
+		? { videos: mergeById(have.videos, next.videos), continuation: next.continuation }
+		: have;
+}
+
+async function moreSection(id: string) {
+	const have = sectionCache.get(id);
+	if (!have?.continuation || !isLibrarySection(id)) return;
+	const next = await fetchLibraryMore(innertube, id, have.continuation);
+	sectionCache.set(id, mergeSection(have, next));
+}
+
+async function morePlaylist(id: string) {
+	const have = playlistVideos.get(id);
+	if (!have?.continuation) return;
+	const next = await fetchVideosMore(innertube, have.continuation);
+	playlistVideos.set(id, {
+		videos: mergeById(have.videos, next.videos),
+		continuation: next.continuation
+	});
+}
+
+const MORE_BY_KIND = new Map([
+	['section', moreSection],
+	['playlist', morePlaylist]
+]);
+
 // Fetches and merges the next page for one grid, identified by the key the
 // `more:` event carried.
-// fallow-ignore-next-line complexity
 async function fetchMore(key: string) {
-	if (key === 'home') {
-		if (!homeContinuation) return;
-		const page = await fetchTvHomeMore(innertube, homeContinuation);
-		lastResults = mergeById(lastResults, page.videos);
-		homeContinuation = page.continuation;
-		return;
-	}
-
-	if (key === SEARCH) {
-		const have = search?.page;
-		if (!search || !have?.continuation) return;
-		const query = search.query;
-		const next = await fetchSearchMore(innertube, have.continuation);
-		// A newer search replaced this one while the page was loading.
-		if (search?.query !== query || search.page !== have) return;
-		search.page = {
-			results: mergeById(have.results, next.results),
-			continuation: next.continuation
-		};
-		return;
-	}
-
-	if (key.startsWith('section:')) {
-		const id = key.slice('section:'.length);
-		const have = sectionCache.get(id);
-		if (!have?.continuation || !isLibrarySection(id)) return;
-		const next = await fetchLibraryMore(innertube, id, have.continuation);
-		if ('playlists' in have && 'playlists' in next) {
-			sectionCache.set(id, {
-				playlists: mergeById(have.playlists, next.playlists),
-				continuation: next.continuation
-			});
-		} else if ('videos' in have && 'videos' in next) {
-			sectionCache.set(id, {
-				videos: mergeById(have.videos, next.videos),
-				continuation: next.continuation
-			});
-		}
-		return;
-	}
-
-	if (key.startsWith('playlist:')) {
-		const id = key.slice('playlist:'.length);
-		const have = playlistVideos.get(id);
-		if (!have?.continuation) return;
-		const next = await fetchVideosMore(innertube, have.continuation);
-		playlistVideos.set(id, {
-			videos: mergeById(have.videos, next.videos),
-			continuation: next.continuation
-		});
-	}
+	if (key === 'home') return moreHome();
+	if (key === SEARCH) return moreSearch();
+	const sep = key.indexOf(':');
+	await MORE_BY_KIND.get(key.slice(0, sep))?.(key.slice(sep + 1));
 }
 
 async function loadMore(key: string) {
@@ -649,9 +660,7 @@ async function suggest(text: string) {
 	publishScreen(lastResults);
 }
 
-// fallow-ignore-next-line complexity
-async function runSearch(query: string) {
-	if (!isSignedIn()) return;
+function startSearch(query: string): NonNullable<typeof search> {
 	searchSuggestions = [];
 	suggestionQuery = '';
 	leaveTyping();
@@ -661,45 +670,59 @@ async function runSearch(query: string) {
 	openPlaylist = undefined;
 	const current: NonNullable<typeof search> = { query };
 	search = current;
-	publishScreen(lastResults);
+	return current;
+}
+
+async function loadSearchPage(current: NonNullable<typeof search>) {
 	try {
-		current.page = await fetchSearch(innertube, query);
+		current.page = await fetchSearch(innertube, current.query);
 	} catch (err) {
 		if (search === current) failed.add(SEARCH);
-		log('error', `TV search "${query}" failed: ${String(err)}`);
+		log('error', `TV search "${current.query}" failed: ${String(err)}`);
 	}
+}
+
+async function runSearch(query: string) {
+	if (!isSignedIn()) return;
+	const current = startSearch(query);
+	publishScreen(lastResults);
+	await loadSearchPage(current);
 	if (search === current) publishScreen(lastResults);
 }
 
-// What a playlist or channel was called on the card that opened it.
-// fallow-ignore-next-line complexity
-function knownTitle(id: string): string | undefined {
-	const fromSearch = search?.page?.results.find((r) => r.id === id)?.title;
-	if (fromSearch) return fromSearch;
+function searchTitle(id: string): string | undefined {
+	return search?.page?.results.find((r) => r.id === id)?.title;
+}
+
+function playlistTitle(id: string): string | undefined {
 	const known = sectionCache.get('playlists');
 	return known && 'playlists' in known
 		? known.playlists.find((p) => p.id === id)?.title
 		: undefined;
 }
 
-// fallow-ignore-next-line complexity
+// What a playlist or channel was called on the card that opened it.
+function knownTitle(id: string): string | undefined {
+	return searchTitle(id) || playlistTitle(id);
+}
+
+// A channel's uploads playlist id is its id with UC swapped for UU.
+function latestUploads(channelId: string): Promise<VideoPage | undefined> {
+	if (!channelId.startsWith('UC')) return Promise.resolve(undefined);
+	return fetchPlaylistVideos(innertube, `UU${channelId.slice(2)}`).catch(() => undefined);
+}
+
+async function loadChannel(id: string) {
+	const [page, latest] = await Promise.all([fetchChannelVideos(innertube, id), latestUploads(id)]);
+	if (latest) channelLatest.set(id, latest.videos.slice(0, LATEST_COUNT));
+	playlistVideos.set(id, page);
+}
+
 async function loadCollection(kind: 'playlist' | 'channel', id: string) {
 	failed.delete(`playlist:${id}`);
 	try {
-		if (kind === 'channel') {
-			// A channel's uploads playlist id is its id with UC swapped for UU.
-			const uploads = id.startsWith('UC') ? `UU${id.slice(2)}` : undefined;
-			const [page, latest] = await Promise.all([
-				fetchChannelVideos(innertube, id),
-				uploads
-					? fetchPlaylistVideos(innertube, uploads).catch(() => undefined)
-					: Promise.resolve(undefined)
-			]);
-			if (latest) channelLatest.set(id, latest.videos.slice(0, LATEST_COUNT));
-			playlistVideos.set(id, page);
-		} else {
-			playlistVideos.set(id, await fetchPlaylistVideos(innertube, id));
-		}
+		if (kind === 'channel') await loadChannel(id);
+		else playlistVideos.set(id, await fetchPlaylistVideos(innertube, id));
 	} catch (err) {
 		failed.add(`playlist:${id}`);
 		log('error', `TV playlist ${id} failed: ${String(err)}`);
@@ -707,7 +730,35 @@ async function loadCollection(kind: 'playlist' | 'channel', id: string) {
 	publishScreen(lastResults);
 }
 
-// fallow-ignore-next-line complexity
+function logHomeFeedError(err: unknown) {
+	const info = (err as { info?: unknown } | undefined)?.info;
+	log('error', `TV home feed failed: ${String(err)} info=${JSON.stringify(info)}`);
+}
+
+async function loadHomeFeed() {
+	// No signed-out fallback content on purpose: there's nothing worth showing
+	// without a signed-in account, and browseScreen already surfaces the
+	// "Sign in with Google" button.
+	if (!isSignedIn()) {
+		lastResults = [];
+		homeContinuation = undefined;
+		return;
+	}
+	try {
+		const page = await fetchTvHomeFeed(innertube);
+		lastResults = page.videos;
+		homeContinuation = page.continuation;
+		if (!homeContinuation) {
+			log('warn', `home feed has no continuation token (${page.videos.length} videos)`);
+		}
+	} catch (err) {
+		// TV's home feed is undocumented internal API, so a shape change or a
+		// transient failure leaves lastResults as-is instead of taking the
+		// whole dashboard down.
+		logHomeFeedError(err);
+	}
+}
+
 async function refresh() {
 	// A new session (sign-in) or a manual refresh must not keep another
 	// account's tabs around.
@@ -715,29 +766,7 @@ async function refresh() {
 	playlistVideos.clear();
 	channelLatest.clear();
 	failed.clear();
-
-	if (isSignedIn()) {
-		try {
-			const page = await fetchTvHomeFeed(innertube);
-			lastResults = page.videos;
-			homeContinuation = page.continuation;
-			if (!homeContinuation) {
-				log('warn', `home feed has no continuation token (${page.videos.length} videos)`);
-			}
-		} catch (err) {
-			// TV's home feed is undocumented internal API — a shape change
-			// or a transient failure shouldn't take the whole dashboard
-			// down with it, so this just leaves lastResults as-is.
-			const info = (err as { info?: unknown } | undefined)?.info;
-			log('error', `TV home feed failed: ${String(err)} info=${JSON.stringify(info)}`);
-		}
-	} else {
-		// No signed-out fallback content on purpose: there's nothing worth showing
-		// without a signed-in account, and browseScreen already surfaces the
-		// "Sign in with Google" button.
-		lastResults = [];
-		homeContinuation = undefined;
-	}
+	await loadHomeFeed();
 
 	connection.sendNotification(publishDashboardNotification, {
 		// The dashboard shelf only wants the top of the feed, however far the
@@ -800,6 +829,96 @@ function main() {
 	});
 }
 
+type UiEvent = { eventId: string; value?: unknown };
+
+function textOf(value: unknown): string {
+	return typeof value === 'string' ? value.trim() : '';
+}
+
+function onSuggest({ value }: UiEvent) {
+	const text = textOf(value);
+	updateTyping(text);
+	void suggest(text);
+}
+
+function onSearch({ value }: UiEvent) {
+	const query = textOf(value);
+	if (query) void runSearch(query);
+}
+
+function onRecent(index: string) {
+	const query = recentSearches()[Number(index)];
+	if (query) void runSearch(query);
+}
+
+function onNav(section: string) {
+	currentSection = section;
+	leaveTyping();
+	openPlaylist = undefined;
+	publishScreen(lastResults);
+	void loadSection(section);
+}
+
+const COLLECTION_FALLBACK_TITLE = { channel: 'Channel', playlist: 'Playlist' };
+
+function onOpenCollection(rawKind: string, id: string) {
+	const kind = rawKind === 'channel' ? 'channel' : 'playlist';
+	leaveTyping();
+	openPlaylist = {
+		id,
+		kind,
+		title: knownTitle(id) ?? COLLECTION_FALLBACK_TITLE[kind],
+		back: currentSection === SEARCH ? 'search' : 'playlists'
+	};
+	publishScreen(lastResults);
+	void loadCollection(openPlaylist.kind, id);
+}
+
+function onBack() {
+	openPlaylist = undefined;
+	publishScreen(lastResults);
+}
+
+function onSignIn() {
+	beginSignIn((status) => {
+		signInStatus = status;
+		publishScreen(lastResults);
+	})
+		.then(() => {
+			// A real refresh, not just a re-publish: signing in switches the
+			// feed itself over to this account's personalized one.
+			signInStatus = undefined;
+			return refresh();
+		})
+		.catch((err: unknown) => {
+			log('error', err instanceof Error ? err.message : String(err));
+		});
+}
+
+const EXACT_EVENTS = new Map<string, (event: UiEvent) => void>([
+	['suggest', onSuggest],
+	['search', onSearch],
+	['back', onBack],
+	['signIn', onSignIn]
+]);
+
+// Patterns are anchored so a malformed id is ignored like an unknown event.
+const PATTERN_EVENTS: [RegExp, (first: string, second: string) => void][] = [
+	[/^recent:(\d+)$/, onRecent],
+	[/^nav:([\s\S]*)$/, onNav],
+	[/^(playlist|channel):(.+)$/, onOpenCollection],
+	[/^more:([\s\S]*)$/, (key) => void loadMore(key)]
+];
+
+function routeUiEvent(event: UiEvent) {
+	const exact = EXACT_EVENTS.get(event.eventId);
+	if (exact) return exact(event);
+	for (const [pattern, handler] of PATTERN_EVENTS) {
+		const match = pattern.exec(event.eventId);
+		if (match) return handler(match[1], match[2]);
+	}
+}
+
 let activated = false;
 
 async function activate() {
@@ -810,82 +929,8 @@ async function activate() {
 	activated = true;
 	await refresh();
 
-	// fallow-ignore-next-line complexity
 	connection.onNotification(uiEventNotification, (event) => {
-		if (event.screenId !== SCREEN_ID) return;
-
-		if (event.eventId === 'suggest') {
-			const text = typeof event.value === 'string' ? event.value.trim() : '';
-			updateTyping(text);
-			void suggest(text);
-			return;
-		}
-
-		const recentMatch = /^recent:(\d+)$/.exec(event.eventId);
-		if (recentMatch) {
-			const query = recentSearches()[Number(recentMatch[1])];
-			if (query) void runSearch(query);
-			return;
-		}
-
-		if (event.eventId === 'search') {
-			const query = typeof event.value === 'string' ? event.value.trim() : '';
-			if (query) void runSearch(query);
-			return;
-		}
-
-		if (event.eventId.startsWith('nav:')) {
-			currentSection = event.eventId.slice('nav:'.length);
-			leaveTyping();
-			openPlaylist = undefined;
-			publishScreen(lastResults);
-			void loadSection(currentSection);
-			return;
-		}
-
-		const opened = /^(playlist|channel):(.+)$/.exec(event.eventId);
-		if (opened) {
-			const kind = opened[1] as 'playlist' | 'channel';
-			const id = opened[2];
-			leaveTyping();
-			openPlaylist = {
-				id,
-				kind,
-				title: knownTitle(id) ?? (kind === 'channel' ? 'Channel' : 'Playlist'),
-				back: currentSection === SEARCH ? 'search' : 'playlists'
-			};
-			publishScreen(lastResults);
-			void loadCollection(kind, id);
-			return;
-		}
-
-		if (event.eventId.startsWith('more:')) {
-			void loadMore(event.eventId.slice('more:'.length));
-			return;
-		}
-
-		if (event.eventId === 'back') {
-			openPlaylist = undefined;
-			publishScreen(lastResults);
-			return;
-		}
-
-		if (event.eventId === 'signIn') {
-			beginSignIn((status) => {
-				signInStatus = status;
-				publishScreen(lastResults);
-			})
-				.then(() => {
-					// A real refresh now, not just re-publishing the screen — signing
-					// in switches the feed itself over to this account's real
-					// personalized one (tvHomeFeed.ts), not just the "Signed in" label.
-					signInStatus = undefined;
-					return refresh();
-				})
-				.catch((err: unknown) => {
-					log('error', err instanceof Error ? err.message : String(err));
-				});
-		}
+		if (event.screenId === SCREEN_ID) routeUiEvent(event);
 	});
 }
 

@@ -10,6 +10,13 @@
 	import NavigationSpinner from '#lib/components/NavigationSpinner.svelte';
 	import OnScreenKeyboard from '#lib/components/OnScreenKeyboard.svelte';
 	import PairingOverlay from '#lib/components/PairingOverlay.svelte';
+	import {
+		isLoginToHome,
+		loginProfileId,
+		navigationPaths,
+		screenKindOf,
+		zoomKindBetween
+	} from '#lib/screens';
 	import { playSound } from '#lib/sounds';
 	import { startAmbient, stopAmbient } from '#lib/ambient';
 	import { ambientMusic } from '#lib/state/ambient.svelte';
@@ -34,27 +41,6 @@
 		return clearTvScale;
 	});
 
-	// Every route this app actually navigates *between* is one of these four
-	// "screens" -- each gets the same zoom treatment moving to/from any of
-	// the others, not just the one app<->home pair this originally shipped
-	// with. `null` (e.g. /remote) means "not a screen with its own zoom
-	// identity" -- no transition applies there either way.
-	type ScreenKind = 'login' | 'home' | 'app' | 'player';
-
-	// A lookup table rather than an if-chain: each predicate below is its own
-	// small, independently-simple unit instead of one function shouldering
-	// every path's worth of branching.
-	const SCREEN_MATCHERS: [ScreenKind, (path: string) => boolean][] = [
-		['home', (path) => path === '/home'],
-		['app', (path) => path.startsWith('/apps/')],
-		['player', (path) => path.startsWith('/play/')],
-		['login', (path) => path === '/' || path.startsWith('/login') || path.startsWith('/register')]
-	];
-
-	function screenKindOf(path: string): ScreenKind | null {
-		return SCREEN_MATCHERS.find(([, matches]) => matches(path))?.[0] ?? null;
-	}
-
 	// The pairing QR overlay (PairingOverlay.svelte) repeats on every screen
 	// except: the player (explicitly, so it never sits over video), and
 	// login/the picker/register, which already show the same QR as their own
@@ -63,29 +49,13 @@
 		screenKindOf(page.url.pathname) === 'login' || screenKindOf(page.url.pathname) === 'player'
 	);
 
-	// How "deep" each screen sits, purely to pick a zoom direction -- login
-	// is the outermost, home opens from it, an app opens from home, and the
-	// player can open from either home or an app's own screen (see
-	// #lib/apps/dashboard's appActionHref), so it sits one deeper still.
-	const SCREEN_DEPTH: Record<ScreenKind, number> = { login: 0, home: 1, app: 2, player: 3 };
-
 	// The actual zoom keyframes live in layout.css, keyed off this data
 	// attribute, since `::view-transition-*` pseudo elements can only be
-	// targeted from plain CSS, not from a component's scoped styles. The
-	// 3-way guard (either side unknown, or both the same) plus the
-	// direction ternary is one irreducible decision -- splitting it up would
-	// only relocate the same branches under a new name, not actually reduce
-	// them.
-	// fallow-ignore-next-line complexity
+	// targeted from plain CSS, not from a component's scoped styles.
 	function applyViewTransitionKind(from: string, to: string) {
-		const fromKind = screenKindOf(from);
-		const toKind = screenKindOf(to);
-		if (!fromKind || !toKind || fromKind === toKind) {
-			delete document.documentElement.dataset.viewTransition;
-			return;
-		}
-		document.documentElement.dataset.viewTransition =
-			SCREEN_DEPTH[toKind] > SCREEN_DEPTH[fromKind] ? 'zoom-in' : 'zoom-out';
+		const kind = zoomKindBetween(from, to);
+		if (kind) document.documentElement.dataset.viewTransition = kind;
+		else delete document.documentElement.dataset.viewTransition;
 	}
 
 	// The picker ('/') is the only screen with more than one profile avatar
@@ -95,14 +65,6 @@
 	// side actually names a profile id -- `to` on the way in, `from` on the
 	// way back out -- picks out the one link that should actually morph,
 	// tagged only for this one transition rather than permanently.
-	const LOGIN_PATH = /^\/login\/([^/]+)$/;
-
-	// Split from tagSharedProfileAvatar below purely so each half stays a
-	// single, simple decision instead of the two piling up in one function.
-	function loginProfileId(from: string, to: string): string | undefined {
-		return to.match(LOGIN_PATH)?.[1] ?? from.match(LOGIN_PATH)?.[1];
-	}
-
 	function tagSharedProfileAvatar(from: string, to: string) {
 		const id = loginProfileId(from, to);
 		if (!id) return;
@@ -111,16 +73,10 @@
 			?.style.setProperty('view-transition-name', 'profile-avatar');
 	}
 
-	// Moving to a deeper screen (e.g. dashboard into an app) reads as
-	// "zooming in"; moving back out (that app's own back button to the
-	// dashboard) is the mirror, "zooming out".
 	// `null` whenever there's nothing to transition between (a fresh load with
 	// no `from`, or a browser without view transitions at all).
-	function transitionPaths(
-		navigation: Parameters<Parameters<typeof onNavigate>[0]>[0]
-	): { from: string; to: string } | null {
-		if (!document.startViewTransition || !navigation.from || !navigation.to) return null;
-		return { from: navigation.from.url.pathname, to: navigation.to.url.pathname };
+	function transitionPaths(navigation: Parameters<typeof navigationPaths>[0]) {
+		return 'startViewTransition' in document ? navigationPaths(navigation) : null;
 	}
 
 	// Soft background music while sitting on the home screen only; it fades
@@ -136,12 +92,8 @@
 	// Only logging in gets the jingle, not returning to home from an app or
 	// the player. The initial page load has no `from`, so it stays silent.
 	afterNavigate((navigation) => {
-		if (isRemotePage || !navigation.from || !navigation.to) return;
-		const from = navigation.from.url.pathname;
-		const to = navigation.to.url.pathname;
-		if (to === '/home' && screenKindOf(from) === 'login') {
-			playSound('home');
-		}
+		const paths = navigationPaths(navigation);
+		if (!isRemotePage && paths && isLoginToHome(paths.from, paths.to)) playSound('home');
 	});
 
 	onNavigate((navigation) => {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { isSingleLineEnter } from '#lib/textEntry';
 
 	let {
 		value = $bindable(''),
@@ -87,10 +88,9 @@
 		onblur?.();
 	}
 
-	// fallow-ignore-next-line complexity
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') void stop();
-		else if (e.key === 'Enter' && !multiline) onEnter?.(e);
+		else if (isSingleLineEnter(e, multiline)) onEnter?.(e);
 	}
 	const inputType = $derived(secret ? 'password' : search ? 'search' : 'text');
 	const alignClass = $derived(multiline ? 'items-start' : 'items-center');

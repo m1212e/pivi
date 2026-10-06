@@ -2,28 +2,24 @@
 // answers with the playlist panel for both, with the current video marked, so
 // one call covers regular playlists and generated mixes alike.
 import { Innertube, UniversalCache } from 'youtubei.js';
+import { walkObjects } from './tvTiles';
 
 type Raw = { data: unknown };
 
 type PanelEntry = { videoId: string; selected: boolean };
 
+function panelEntryOf(value: unknown): PanelEntry | undefined {
+	const { videoId, selected } = (value ?? {}) as { videoId?: unknown; selected?: unknown };
+	return typeof videoId === 'string' ? { videoId, selected: selected === true } : undefined;
+}
+
 // Walks the response for panel renderers, which can sit in different places
 // depending on the client.
-// fallow-ignore-next-line complexity
 function collectPanel(node: unknown, out: PanelEntry[]) {
-	if (Array.isArray(node)) {
-		for (const item of node) collectPanel(item, out);
-		return;
-	}
-	if (!node || typeof node !== 'object') return;
-	for (const [key, value] of Object.entries(node)) {
-		if (key === 'playlistPanelVideoRenderer' && value && typeof value === 'object') {
-			const { videoId, selected } = value as { videoId?: unknown; selected?: unknown };
-			if (typeof videoId === 'string') out.push({ videoId, selected: selected === true });
-		} else {
-			collectPanel(value, out);
-		}
-	}
+	walkObjects(node, (obj) => {
+		const entry = panelEntryOf(obj.playlistPanelVideoRenderer);
+		if (entry) out.push(entry);
+	});
 }
 
 export function nextInPanel(data: unknown, current: string): string | undefined {
