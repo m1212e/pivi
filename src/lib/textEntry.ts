@@ -2,6 +2,8 @@
 // (RemoteBridge) and the on-screen keyboard. Shared so both edit a field the
 // way a real keystroke would and TextField reacts the same to either.
 
+import { DOM_EVENTS } from '#lib/domEvents';
+
 /** Elements the phone relay and on-screen keyboard can type into. */
 export type TextTarget = HTMLInputElement | HTMLTextAreaElement;
 
@@ -89,12 +91,9 @@ export function isSingleLineEnter(event: KeyboardEvent, multiline: boolean): boo
 	return event.key === 'Enter' && !multiline;
 }
 
-/** TextField listens for this to end editing, since the phone has no Escape key to send. */
-export const TEXT_EXIT_EVENT = 'pivi-text-exit';
-
 /** Used by RemoteBridge and the on-screen keyboard to close an editing TextField. */
 export function requestTextExit(el: TextTarget) {
-	el.dispatchEvent(new CustomEvent(TEXT_EXIT_EVENT, { bubbles: true }));
+	el.dispatchEvent(new CustomEvent(DOM_EVENTS.textExit, { bubbles: true }));
 }
 
 /** What the phone sent and when, so remoteController can recognize the TV echoing it back. */

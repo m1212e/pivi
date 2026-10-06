@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { DEV_REGISTRY } from '../src/lib/apps/devRegistry';
 import { MANIFEST_LABEL, appManifestSchema } from '../src/lib/apps/manifest';
 import { buildProtocolDocument } from '../src/lib/apps/protocolSchema';
 
@@ -55,7 +56,7 @@ function buildImage(dir: string, tag: string) {
 // Each manifest names its image (`pivi-<id>:<version>`), so adding an app is
 // just adding its directory.
 // `--no-push` only builds, for CI runs that just check the images still build.
-function buildAll(registry = 'localhost:5055', push = true) {
+function buildAll(registry = DEV_REGISTRY, push = true) {
 	const dirs = readdirSync(APPS_DIR)
 		.map((name) => join(APPS_DIR, name))
 		.filter((path) => statSync(path).isDirectory());

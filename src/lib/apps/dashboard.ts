@@ -3,6 +3,7 @@
 // every app's cards look and behave like the rest of the home screen.
 import { z } from 'zod';
 import { appThemeSchema } from './theme';
+import { playHref } from '../routes';
 
 /**
  * What activating a card, button or container does. Shared by dashboard cards
@@ -65,8 +66,7 @@ export type DashboardContribution = z.infer<typeof dashboardContributionSchema>;
  */
 export function appActionHref(appId: string, appHref: string, action: AppAction): string {
 	if (action.type === 'session') {
-		const base = `/play/${encodeURIComponent(appId)}/${encodeURIComponent(action.sessionId)}`;
-		return action.context ? `${base}?context=${encodeURIComponent(action.context)}` : base;
+		return playHref(appId, action.sessionId, action.context);
 	}
 	if (action.type === 'deepLink') {
 		return `${appHref}?deepLink=${encodeURIComponent(action.target)}`;

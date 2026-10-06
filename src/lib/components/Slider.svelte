@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DOM_EVENTS } from '#lib/domEvents';
 	// The player's progress and volume bars and the remote's player tab. A press
 	// arms it so a swipe passing over it never moves the value. While armed,
 	// RemoteBridge turns swipes along its axis into `pivi-slider-adjust`.
@@ -169,8 +170,8 @@
 	$effect(() => {
 		const node = el;
 		if (!node) return;
-		node.addEventListener('pivi-slider-adjust', onSwipeAdjust);
-		return () => node.removeEventListener('pivi-slider-adjust', onSwipeAdjust);
+		node.addEventListener(DOM_EVENTS.sliderAdjust, onSwipeAdjust);
+		return () => node.removeEventListener(DOM_EVENTS.sliderAdjust, onSwipeAdjust);
 	});
 
 	// Holds the committed value until live reaches it, so the bar doesn't

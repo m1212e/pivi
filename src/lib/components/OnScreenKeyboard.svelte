@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DOM_EVENTS } from '#lib/domEvents';
 	import { onMount, tick } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { ArrowBigUp, CornerDownLeft, Delete } from '@lucide/svelte';
@@ -83,7 +84,7 @@
 
 	// The field's owner (TextInput) decides what picking a suggestion does.
 	function pick(text: string) {
-		osk.target?.dispatchEvent(new CustomEvent('pivi-suggestion', { detail: text }));
+		osk.target?.dispatchEvent(new CustomEvent(DOM_EVENTS.suggestion, { detail: text }));
 	}
 
 	// Holding backspace repeats, since a long field is otherwise a lot of

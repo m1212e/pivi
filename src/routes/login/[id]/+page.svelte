@@ -10,6 +10,8 @@
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import { pollEvery } from '#lib/poll';
 	import * as m from '#lib/paraglide/messages';
+	import { PIN_LENGTH } from '#lib/pinRules';
+	import { ROUTES } from '#lib/routes';
 
 	const id = page.params.id!;
 	const [profile] = await client.liveQuery.users({
@@ -40,16 +42,16 @@
 			// The previous profile's cached query results must not leak into the
 			// new one; urql's cache can't be cleared outright (see client.ts).
 			resetClientState();
-			await goto('/home');
+			await goto(ROUTES.home);
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.wrong_pin());
 			pin = '';
 		}
 	}
 
-	// Wait for the effect queue so the fully-updated 4-digit value is read.
+	// Wait for the effect queue so the fully-updated PIN is read.
 	$effect(() => {
-		if (pin.length === 4) submit();
+		if (pin.length === PIN_LENGTH) submit();
 	});
 </script>
 

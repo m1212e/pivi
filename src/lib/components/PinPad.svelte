@@ -2,11 +2,13 @@
 	import { Smartphone } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 	import * as m from '#lib/paraglide/messages';
+	import { PIN_LENGTH } from '#lib/pinRules';
+	import { DOM_EVENTS } from '#lib/domEvents';
 
 	// PIN entry for the TV's login and register screens and the phone remote's
 	// PIN tab, so both look the same. The phone's keys are forwarded to the TV pad.
 	let {
-		length = 4,
+		length = PIN_LENGTH,
 		value = $bindable(''),
 		error = null,
 		showKeypad = true,
@@ -68,8 +70,8 @@
 			if (key === 'backspace') backspace({ silent: true });
 			else press(key, { silent: true });
 		}
-		node.addEventListener('pivi-remote-press', onRemotePress);
-		return () => node.removeEventListener('pivi-remote-press', onRemotePress);
+		node.addEventListener(DOM_EVENTS.remotePress, onRemotePress);
+		return () => node.removeEventListener(DOM_EVENTS.remotePress, onRemotePress);
 	});
 
 	$effect(() => {

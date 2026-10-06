@@ -1,10 +1,11 @@
 // The player page's side of its contract with RemoteBridge. The phone drives
 // playback through DOM events and RemoteBridge reads state back off data
 // attributes, so neither side needs to know how the other is implemented.
+import { DOM_EVENTS } from '#lib/domEvents';
 import { clampVolume, isOfferedSubtitle } from './preferences';
 import { QUALITY_OPTIONS, isQualityOption, type QualityMode, type QualityOption } from './quality';
 
-/** Transport buttons on the phone's player tab, dispatched by RemoteBridge as `pivi-player-action`. */
+/** Transport buttons on the phone's player tab, dispatched by RemoteBridge as `DOM_EVENTS.playerAction`. */
 export type PlayerAction = 'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo';
 
 /** How the play page reacts to each phone command. */
@@ -31,17 +32,17 @@ function listen<T>(name: string, handler: (detail: T) => void): () => void {
  */
 export function bindRemotePlayerEvents(handlers: RemoteHandlers): () => void {
 	const unbind = [
-		listen<{ action: PlayerAction }>('pivi-player-action', ({ action }) =>
+		listen<{ action: PlayerAction }>(DOM_EVENTS.playerAction, ({ action }) =>
 			handlers.onAction(action)
 		),
-		listen<{ seconds: number }>('pivi-player-seek', ({ seconds }) => handlers.onSeek(seconds)),
-		listen<{ quality: number }>('pivi-player-quality', ({ quality }) => {
+		listen<{ seconds: number }>(DOM_EVENTS.playerSeek, ({ seconds }) => handlers.onSeek(seconds)),
+		listen<{ quality: number }>(DOM_EVENTS.playerQuality, ({ quality }) => {
 			if (isQualityOption(quality)) handlers.onQuality(quality);
 		}),
-		listen<{ language: string | null }>('pivi-player-subtitle', ({ language }) => {
+		listen<{ language: string | null }>(DOM_EVENTS.playerSubtitle, ({ language }) => {
 			if (isOfferedSubtitle(handlers.getSubtitleTracks(), language)) handlers.onSubtitle(language);
 		}),
-		listen<{ volume: number }>('pivi-player-volume', ({ volume }) =>
+		listen<{ volume: number }>(DOM_EVENTS.playerVolume, ({ volume }) =>
 			handlers.onVolume(clampVolume(volume))
 		)
 	];
@@ -53,7 +54,7 @@ export function bindRemotePlayerEvents(handlers: RemoteHandlers): () => void {
  * changes that cause no DOM mutation it would notice by itself.
  */
 export function announcePlayerStateChange() {
-	document.dispatchEvent(new CustomEvent('pivi-player-state-changed'));
+	document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerStateChanged));
 }
 
 type BridgeState = {

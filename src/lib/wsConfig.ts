@@ -6,3 +6,8 @@
  * nix/module.nix mirrors the default.
  */
 export const PAIRING_WS_PORT = Number(import.meta.env?.VITE_PIVI_WS_PORT) || 5175;
+
+/** Where a browser on this host reaches the relay. Used by the TV bridge and the pairing session. */
+export function pairingSocketUrl(): string {
+	return `ws://${location.hostname}:${PAIRING_WS_PORT}`;
+}

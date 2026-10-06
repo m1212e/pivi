@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { isSingleLineEnter, TEXT_EXIT_EVENT } from '#lib/textEntry';
+	import { DOM_EVENTS } from '#lib/domEvents';
+	import { isSingleLineEnter } from '#lib/textEntry';
 
 	// The text field for every TV form (register, wifi, app manager, TextInput).
 	// At rest it is a plain button so remote navigation can pass over it without
@@ -96,8 +97,8 @@
 		const el = input;
 		if (!el) return;
 		const onExit = () => void stop();
-		el.addEventListener(TEXT_EXIT_EVENT, onExit);
-		return () => el.removeEventListener(TEXT_EXIT_EVENT, onExit);
+		el.addEventListener(DOM_EVENTS.textExit, onExit);
+		return () => el.removeEventListener(DOM_EVENTS.textExit, onExit);
 	});
 
 	function handleKeydown(e: KeyboardEvent) {

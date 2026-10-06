@@ -1,8 +1,7 @@
 import type { ResolvedStream } from '#lib/apps/host';
 import type { AppInstance } from './runtime';
+import { createTtlCache } from './ttlCache';
 import { assertPublicHost, UnsafeUrlError } from './urlGuard';
-
-const TTL_MS = 5 * 60 * 1000;
 
 // The host (ffmpeg, the stream proxy) fetches whatever URLs an app returns, so
 // they're checked before anything is cached or handed on: each has to be on a
@@ -23,7 +22,7 @@ async function assertSafeStream(app: AppInstance, stream: ResolvedStream): Promi
 	}
 }
 
-const cache = new Map<string, { value: ResolvedStream; expiresAt: number }>();
+const cache = createTtlCache<ResolvedStream>(5 * 60 * 1000);
 // Resolutions still running. The video and audio tracks and the player page ask
 // for the same stream at once, and every extra yt-dlp in the app's small VM is
 // a chance for the out-of-memory killer to take the whole app down.
@@ -34,9 +33,7 @@ const inFlight = new Map<string, Promise<ResolvedStream>>();
  * revoked permission doesn't keep serving streams resolved under the old terms.
  */
 export function dropStreamCache(appId: string): void {
-	for (const key of cache.keys()) {
-		if (key.startsWith(`${appId}:`)) cache.delete(key);
-	}
+	cache.deletePrefix(`${appId}:`);
 }
 
 /**
@@ -56,7 +53,7 @@ export function resolveStreamCached(
 	// resolution for this session happened to be.
 	const key = `${appId}:${sessionId}:${maxHeight ?? 'auto'}`;
 	const hit = cache.get(key);
-	if (hit && hit.expiresAt > Date.now()) return Promise.resolve(hit.value);
+	if (hit) return Promise.resolve(hit);
 
 	const running = inFlight.get(key);
 	if (running) return running;
@@ -64,7 +61,7 @@ export function resolveStreamCached(
 	const resolution = (async () => {
 		const value = await app.resolveStream(sessionId, maxHeight);
 		await assertSafeStream(app, value);
-		cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+		cache.set(key, value);
 		return value;
 	})().finally(() => inFlight.delete(key));
 	inFlight.set(key, resolution);

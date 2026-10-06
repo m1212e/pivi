@@ -1,5 +1,6 @@
 // Raw stream URLs never reach the client, these point at the host's proxy routes.
 import type { Container, QualityOption } from './quality';
+import { playHref } from '../routes';
 
 /** The two separate streams MSE plays side by side. */
 export type TrackKind = 'video' | 'audio';
@@ -31,6 +32,5 @@ export function mimeTypeFor(container: Container, kind: TrackKind): string {
 
 /** Lets the player continue into the next entry of a sequence. Callers replace history with it. */
 export function nextSessionHref(appId: string, nextSessionId: string, context: string): string {
-	const params = new URLSearchParams({ context });
-	return `/play/${encodeURIComponent(appId)}/${encodeURIComponent(nextSessionId)}?${params}`;
+	return playHref(appId, nextSessionId, context);
 }

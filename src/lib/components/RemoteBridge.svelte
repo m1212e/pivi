@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { ROUTES } from '#lib/routes';
+	import { DOM_EVENTS } from '#lib/domEvents';
 	import { onMount } from 'svelte';
 	import { Smartphone, Unplug } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
@@ -7,7 +9,7 @@
 	// ensureRal() installs what those subpaths would have.
 	import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 	import { afterNavigate, goto } from '$app/navigation';
-	import { PAIRING_WS_PORT } from '#lib/wsConfig';
+	import { pairingSocketUrl } from '#lib/wsConfig';
 	import type { TvHello } from '#lib/pairing/protocol';
 	import { ensureRal } from '#lib/rpcRal';
 	import { createReconnector } from '#lib/pairing/reconnect';
@@ -240,7 +242,7 @@
 		const isHorizontalSwipe = Math.abs(dx) > Math.abs(dy);
 		if (horizontal !== isHorizontalSwipe) return false;
 		const delta = horizontal ? dx : -dy;
-		active.dispatchEvent(new CustomEvent('pivi-slider-adjust', { detail: { delta } }));
+		active.dispatchEvent(new CustomEvent(DOM_EVENTS.sliderAdjust, { detail: { delta } }));
 		return true;
 	}
 
@@ -355,7 +357,7 @@
 	function pressPinKey(key: string) {
 		document
 			.querySelector('[data-pivi-pinpad]')
-			?.dispatchEvent(new CustomEvent('pivi-remote-press', { detail: { key } }));
+			?.dispatchEvent(new CustomEvent(DOM_EVENTS.remotePress, { detail: { key } }));
 	}
 
 	// Only the focused field's own suggestions, not another field's leftovers.
@@ -365,7 +367,7 @@
 	}
 
 	function pickFocusedSuggestion(value: string) {
-		focusedTextInput()?.dispatchEvent(new CustomEvent('pivi-suggestion', { detail: value }));
+		focusedTextInput()?.dispatchEvent(new CustomEvent(DOM_EVENTS.suggestion, { detail: value }));
 	}
 
 	// New suggestions arrive after the field gained focus, with no DOM change
@@ -409,7 +411,7 @@
 		document.addEventListener('volumechange', scheduleFocusRecheck, true);
 		// For player changes with no DOM mutation, like a quality auto-pick or
 		// the TV's Info button.
-		document.addEventListener('pivi-player-state-changed', scheduleFocusRecheck);
+		document.addEventListener(DOM_EVENTS.playerStateChanged, scheduleFocusRecheck);
 
 		const observer = new MutationObserver(scheduleFocusRecheck);
 		observer.observe(document.body, { childList: true, subtree: true });
@@ -457,18 +459,18 @@
 		});
 		// A DOM event, as a volume nudge has no single element to click.
 		onNotification(connection, playerActionNotification, playerActionParamsSchema, ({ action }) => {
-			document.dispatchEvent(new CustomEvent('pivi-player-action', { detail: { action } }));
+			document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerAction, { detail: { action } }));
 		});
 		// Same handoff, carrying the value the player page needs.
 		onNotification(connection, playerSeekNotification, playerSeekParamsSchema, ({ seconds }) => {
-			document.dispatchEvent(new CustomEvent('pivi-player-seek', { detail: { seconds } }));
+			document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerSeek, { detail: { seconds } }));
 		});
 		onNotification(
 			connection,
 			playerQualityNotification,
 			playerQualityParamsSchema,
 			({ quality }) => {
-				document.dispatchEvent(new CustomEvent('pivi-player-quality', { detail: { quality } }));
+				document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerQuality, { detail: { quality } }));
 			}
 		);
 		onNotification(
@@ -476,11 +478,13 @@
 			playerSubtitleNotification,
 			playerSubtitleParamsSchema,
 			({ language }) => {
-				document.dispatchEvent(new CustomEvent('pivi-player-subtitle', { detail: { language } }));
+				document.dispatchEvent(
+					new CustomEvent(DOM_EVENTS.playerSubtitle, { detail: { language } })
+				);
 			}
 		);
 		onNotification(connection, playerVolumeNotification, playerVolumeParamsSchema, ({ volume }) => {
-			document.dispatchEvent(new CustomEvent('pivi-player-volume', { detail: { volume } }));
+			document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerVolume, { detail: { volume } }));
 		});
 		// Back closes an open on-screen keyboard first, like on any TV.
 		connection.onNotification(backNotification, () => {
@@ -489,7 +493,7 @@
 		onNotification(connection, textEntryModeNotification, textEntryModeParamsSchema, (mode) => {
 			osk.phoneKeyboard = mode.phoneKeyboard;
 		});
-		connection.onNotification(goHomeNotification, () => goto('/home'));
+		connection.onNotification(goHomeNotification, () => goto(ROUTES.home));
 		onNotification(connection, keyNotification, keyParamsSchema, ({ value }) => pressPinKey(value));
 		onNotification(connection, textNotification, textParamsSchema, ({ value }) =>
 			setFocusedText(value)
@@ -526,7 +530,7 @@
 		const reconnector = createReconnector(openSocket);
 
 		function openSocket() {
-			const ws = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
+			const ws = new WebSocket(pairingSocketUrl());
 			socket = ws;
 
 			ws.onopen = () => {
@@ -562,7 +566,7 @@
 			document.removeEventListener('pause', scheduleFocusRecheck, true);
 			document.removeEventListener('timeupdate', scheduleFocusRecheck, true);
 			document.removeEventListener('volumechange', scheduleFocusRecheck, true);
-			document.removeEventListener('pivi-player-state-changed', scheduleFocusRecheck);
+			document.removeEventListener(DOM_EVENTS.playerStateChanged, scheduleFocusRecheck);
 			observer.disconnect();
 			reconnector.stop();
 			connection?.dispose();

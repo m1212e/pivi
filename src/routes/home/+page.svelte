@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ROUTES, appHref } from '#lib/routes';
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -100,9 +101,6 @@
 		cards: { id: true, title: true, subtitle: true, image: true, actionJson: true }
 	} as const;
 
-	function appHref(appId: string): string {
-		return `/apps/${encodeURIComponent(appId)}`;
-	}
 	function cardHref(card: AppCard): string {
 		return appActionHref(
 			card.appId,
@@ -320,7 +318,7 @@
 				{/if}
 			</button>
 			<a
-				href="/wifi"
+				href={ROUTES.wifi}
 				aria-label={m.wifi_open_setup()}
 				title={m.wifi_open_setup()}
 				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"

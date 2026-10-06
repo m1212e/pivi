@@ -17,6 +17,7 @@ services:
   registry:
     image: registry:2
     ports:
+      # Port mirrors DEV_REGISTRY in src/lib/apps/devRegistry.ts
       - 127.0.0.1:5055:5000
     volumes:
       - registrydata:/var/lib/registry

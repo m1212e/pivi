@@ -1,7 +1,7 @@
 // Phone side of the pairing handshake that src/api/ws/relay.ts serves. Lets
 // remoteController.svelte.ts talk to the TV without knowing about pairing,
 // key exchange or encryption.
-import { PAIRING_WS_PORT } from '#lib/wsConfig';
+import { pairingSocketUrl } from '#lib/wsConfig';
 import {
 	bytesToUtf8,
 	concatBytes,
@@ -241,7 +241,7 @@ function safeParse(data: unknown): Record<string, unknown> | undefined {
 }
 
 async function openSocket(): Promise<WebSocket> {
-	const socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
+	const socket = new WebSocket(pairingSocketUrl());
 	await waitForOpen(socket);
 	return socket;
 }

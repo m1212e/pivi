@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { appHref } from '#lib/routes';
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -11,7 +12,7 @@
 	import { appAuroraStyle } from '#lib/appAccent';
 
 	const appId = page.params.appId!;
-	const APP_HREF = `/apps/${encodeURIComponent(appId)}`;
+	const APP_HREF = appHref(appId);
 
 	const apps = await client.liveQuery.apps({
 		id: true,

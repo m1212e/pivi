@@ -1,9 +1,8 @@
 import type { SkipSegment } from '#lib/apps/host';
 import type { AppInstance } from './runtime';
+import { createTtlCache } from './ttlCache';
 
-const TTL_MS = 30 * 60 * 1000;
-
-const cache = new Map<string, { value: SkipSegment[]; expiresAt: number }>();
+const cache = createTtlCache<SkipSegment[]>(30 * 60 * 1000);
 
 /**
  * Backs the player's skip segments query (handlers/playback.ts). Asking the app
@@ -17,9 +16,9 @@ export async function resolveSkipSegmentsCached(
 ): Promise<SkipSegment[]> {
 	const key = `${appId}:${sessionId}`;
 	const hit = cache.get(key);
-	if (hit && hit.expiresAt > Date.now()) return hit.value;
+	if (hit) return hit;
 
 	const value = await app.resolveSkipSegments(sessionId);
-	cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+	cache.set(key, value);
 	return value;
 }

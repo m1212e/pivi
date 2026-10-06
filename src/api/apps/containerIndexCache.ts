@@ -1,8 +1,7 @@
 import { buildSegmentBaseIndex, type SegmentBaseIndex } from './containerIndex';
+import { createTtlCache } from './ttlCache';
 
-const TTL_MS = 5 * 60 * 1000;
-
-const cache = new Map<string, { value: SegmentBaseIndex; expiresAt: number }>();
+const cache = createTtlCache<SegmentBaseIndex>(5 * 60 * 1000);
 
 /**
  * What the stream-track index route uses so a reload or seek in the same
@@ -14,9 +13,9 @@ export async function buildSegmentBaseIndexCached(
 	container: 'mp4' | 'webm'
 ): Promise<SegmentBaseIndex> {
 	const hit = cache.get(url);
-	if (hit && hit.expiresAt > Date.now()) return hit.value;
+	if (hit) return hit;
 
 	const value = await buildSegmentBaseIndex(url, container);
-	cache.set(url, { value, expiresAt: Date.now() + TTL_MS });
+	cache.set(url, value);
 	return value;
 }

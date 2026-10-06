@@ -1,15 +1,21 @@
 // The root layout uses these to pick the view transition zoom, play the login
 // jingle and hide the pairing overlay on login and the player.
 
+import { APPS_PREFIX, LOGIN_PREFIX, ROUTES, isPlayPath } from './routes';
+
 /** TV screens with a zoom identity. Paths like /remote have none. */
 export type ScreenKind = 'login' | 'home' | 'app' | 'player';
 
 // A lookup table instead of an if-chain keeps every predicate trivial.
 const SCREEN_MATCHERS: [ScreenKind, (path: string) => boolean][] = [
-	['home', (path) => path === '/home'],
-	['app', (path) => path.startsWith('/apps/')],
-	['player', (path) => path.startsWith('/play/')],
-	['login', (path) => path === '/' || path.startsWith('/login') || path.startsWith('/register')]
+	['home', (path) => path === ROUTES.home],
+	['app', (path) => path.startsWith(APPS_PREFIX)],
+	['player', (path) => isPlayPath(path)],
+	[
+		'login',
+		(path) =>
+			path === ROUTES.login || path.startsWith(LOGIN_PREFIX) || path.startsWith(ROUTES.register)
+	]
 ];
 
 // Only used to pick a zoom direction. The player can open from home or from
@@ -39,7 +45,7 @@ export function zoomKindBetween(from: string, to: string): ZoomKind | null {
 
 /** Only logging in gets the jingle, not returning home from an app. */
 export function isLoginToHome(from: string, to: string): boolean {
-	return to === '/home' && screenKindOf(from) === 'login';
+	return to === ROUTES.home && screenKindOf(from) === 'login';
 }
 
 type NavigationEnds = { from: { url: URL } | null; to: { url: URL } | null };

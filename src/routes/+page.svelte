@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ROUTES, loginHref } from '#lib/routes';
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
@@ -81,7 +82,7 @@
 		{#each profiles as profile (profile.id)}
 			{@const label = profile.username}
 			<a
-				href="/login/{profile.id}"
+				href={loginHref(profile.id)}
 				data-pivi-profile-id={profile.id}
 				data-pivi-profile-username={label}
 				data-pivi-profile-image={profile.image ?? ''}
@@ -108,7 +109,7 @@
 		{/each}
 
 		<a
-			href="/register"
+			href={ROUTES.register}
 			class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
 		>
 			<span

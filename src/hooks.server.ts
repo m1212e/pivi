@@ -6,6 +6,7 @@ import { getLanAddress } from '#api/lan';
 import { createPairingToken, isPairingTokenValid, PAIRING_TOKEN_TTL_MS } from '#api/pairing';
 import { getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
+import { API_PREFIX, APPS_PREFIX, REMOTE_PREFIX, ROUTES, isPlayPath } from '#lib/routes';
 
 const PAIRING_COOKIE = 'pairing_token';
 
@@ -13,7 +14,7 @@ const PAIRING_COOKIE = 'pairing_token';
 // phone's remote page or API calls.
 const handleHostLocale: Handle = ({ event, resolve }) => {
 	const { pathname } = event.url;
-	if (!pathname.startsWith('/remote') && !pathname.startsWith('/api/')) {
+	if (!pathname.startsWith(REMOTE_PREFIX) && !pathname.startsWith(API_PREFIX)) {
 		noteBrowserLocale(event.request.headers.get('accept-language'));
 	}
 	return resolve(event);
@@ -37,10 +38,10 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 // any app page's) "must have an active profile" check lives here instead.
 function requiresActiveProfile(pathname: string): boolean {
 	return (
-		pathname === '/home' ||
-		pathname === '/apps' ||
-		pathname.startsWith('/apps/') ||
-		pathname.startsWith('/play/')
+		pathname === ROUTES.home ||
+		pathname === ROUTES.apps ||
+		pathname.startsWith(APPS_PREFIX) ||
+		isPlayPath(pathname)
 	);
 }
 

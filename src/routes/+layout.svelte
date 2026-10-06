@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { REMOTE_PREFIX, ROUTES, isPlayPath, loginHref } from '#lib/routes';
 	import type { Snippet } from 'svelte';
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
@@ -31,7 +32,7 @@
 	// which is what actually needs to scale with resolution. Only re-runs
 	// when this boolean itself flips (not on every navigation) since $effect
 	// tracks the derived value, not page.url.pathname directly.
-	const isRemotePage = $derived(page.url.pathname.startsWith('/remote/'));
+	const isRemotePage = $derived(page.url.pathname.startsWith(`${REMOTE_PREFIX}/`));
 	$effect(() => {
 		if (isRemotePage) {
 			clearTvScale();
@@ -69,7 +70,7 @@
 		const id = loginProfileId(from, to);
 		if (!id) return;
 		document
-			.querySelector<HTMLElement>(`a[href="/login/${CSS.escape(id)}"] [data-focus-ring-target]`)
+			.querySelector<HTMLElement>(`a[href="${loginHref(CSS.escape(id))}"] [data-focus-ring-target]`)
 			?.style.setProperty('view-transition-name', 'profile-avatar');
 	}
 
@@ -82,7 +83,7 @@
 	// Soft background music while sitting on the home screen only; it fades
 	// out when leaving (to an app, the player, the picker) or when switched off
 	// with the toggle in the home screen's top bar.
-	const isHomePage = $derived(page.url.pathname === '/home');
+	const isHomePage = $derived(page.url.pathname === ROUTES.home);
 	$effect(() => {
 		if (!isHomePage || !ambientMusic.enabled) return;
 		startAmbient();
@@ -109,7 +110,7 @@
 		// finished player with no zoom at all. Skipping the transition for this
 		// one destination trades away its zoom-in for the spinner actually
 		// being visible while the session resolves.
-		if (to.startsWith('/play/')) return;
+		if (isPlayPath(to)) return;
 		applyViewTransitionKind(from, to);
 		// Tags whichever side is currently the picker -- if it's `from`, this
 		// is the only chance to tag it before its DOM is torn down.
@@ -144,7 +145,7 @@
 {/if}
 <!-- The player reads its session from the URL once, so a change of session
      (the next video of a playlist) has to mount it fresh. -->
-{#key page.url.pathname.startsWith('/play/') ? page.url.pathname : ''}
+{#key isPlayPath(page.url.pathname) ? page.url.pathname : ''}
 	{@render children()}
 {/key}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DOM_EVENTS } from '#lib/domEvents';
 	import { onDestroy } from 'svelte';
 	import { osk } from '#lib/state/osk.svelte';
 	import Button from './Button.svelte';
@@ -49,8 +50,8 @@
 	});
 
 	$effect(() => {
-		input?.addEventListener('pivi-suggestion', pickSuggestion);
-		return () => input?.removeEventListener('pivi-suggestion', pickSuggestion);
+		input?.addEventListener(DOM_EVENTS.suggestion, pickSuggestion);
+		return () => input?.removeEventListener(DOM_EVENTS.suggestion, pickSuggestion);
 	});
 
 	onDestroy(() => clearTimeout(inputTimer));

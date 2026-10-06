@@ -1,3 +1,5 @@
+import { DEV_REGISTRY } from '#lib/apps/devRegistry';
+
 /**
  * An app offered in the install form (AppManagerPanel.svelte) so the user can
  * tap it instead of typing an image ref on a TV remote. `icon` copies the app's
@@ -18,7 +20,7 @@ const SUGGESTED_APPS: SuggestedApp[] = [
 		name: 'YouTube',
 		description: 'Browse and watch YouTube on the TV',
 		icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="10" fill="#FF0000"/><path d="M20 16L32 24L20 32Z" fill="#FFFFFF"/></svg>',
-		image: 'localhost:5055/pivi-youtube'
+		image: `${DEV_REGISTRY}/pivi-youtube`
 	}
 ];
 
