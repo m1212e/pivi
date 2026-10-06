@@ -1,17 +1,13 @@
-// The app end of the protocol for TypeScript/JavaScript apps running
-// under Bun or Node: a vscode-jsonrpc connection over this process's own
-// stdin/stdout (see ndjson.ts for the framing). A convenience only — the
-// protocol is plain JSON-RPC lines, and an app in another language just
-// implements those few lines itself.
-//
-// stdout *is* the channel, so anything else printed there would corrupt it.
-// console.log is rerouted to stderr (the log stream) up front, before any other
-// code gets a chance to use it.
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 import { ensureRal } from '#lib/rpcRal';
 import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
 import { encodeMessage, LineSplitter } from './ndjson';
 
+/**
+ * The app side of the host protocol for TypeScript apps (apps/youtube), so
+ * they don't each reimplement the stdio framing. stdout is the channel, so
+ * console.log is moved to stderr. Call once at startup, before anything prints.
+ */
 export function createStdioConnection(): MessageConnection {
 	console.log = (...args: unknown[]) => console.error(...args);
 	console.info = (...args: unknown[]) => console.error(...args);
@@ -31,6 +27,7 @@ export function createStdioConnection(): MessageConnection {
 			}
 		}
 	});
+	// Host closing stdin means the app is being stopped.
 	process.stdin.on('end', () => reader.close());
 
 	ensureRal();

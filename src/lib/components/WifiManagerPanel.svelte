@@ -1,11 +1,7 @@
 <script lang="ts">
-	// Scanning for and joining a network. The TV's own page (/wifi), driven
-	// with nothing but the remote's gestures — so everything here works by
-	// moving focus and pressing, and the password goes into an ordinary field
-	// (the remote relays the phone's keyboard to whichever one has focus),
-	// never a native dialog a remote could never answer.
-	//
-	// It sends nothing itself: whoever renders it passes the actions in.
+	// Network list and password entry for the TV's /wifi page. Driven only by
+	// remote focus and press, so the password uses a TextField the phone types
+	// into, never a native dialog. The page owns the API calls.
 	import TextField from './TextField.svelte';
 	import { AlertCircle, Check, Lock, LoaderCircle, RefreshCw, Wifi, WifiOff } from '@lucide/svelte';
 	import type { WifiManagementState } from '#lib/wifi/management';
@@ -35,8 +31,7 @@
 	});
 
 	function pick(network: WifiNetwork) {
-		// An open network has no password to ask for, and a saved one already has
-		// its credentials stored by NetworkManager — joining either is one tap.
+		// Open and saved networks need no password, so they join in one tap.
 		if (network.security === 'open' || network.saved) {
 			onConnect(network.ssid, '', false);
 			return;
@@ -53,8 +48,7 @@
 		password = '';
 	}
 
-	// Four bars' worth of signal, which is as much resolution as anyone reads
-	// off a list like this.
+	// Four bars is all the resolution anyone reads off a signal icon.
 	function bars(signal: number): number {
 		return Math.max(1, Math.min(4, Math.ceil(signal / 25)));
 	}

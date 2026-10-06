@@ -1,10 +1,11 @@
-// The one definition of a valid username. The register form maps issues to
-// translated messages, the server to plain English ones.
+// The one definition of a valid username, shared by the register form
+// (username.ts) and the server (api/validation.ts) so they can't drift.
 
 const USERNAME_MIN_LENGTH = 2;
 const USERNAME_MAX_LENGTH = 20;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+/** Issue codes instead of text, so each side can phrase them in its own language. */
 export type UsernameIssue = 'too_short' | 'too_long' | 'invalid_chars';
 
 /** Expects an already trimmed name. */

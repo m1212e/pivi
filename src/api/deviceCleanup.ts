@@ -3,7 +3,8 @@ import cron from 'node-cron';
 import { db } from './db';
 import { pairedDevice } from './db/schema';
 
-// A phone that hasn't reconnected in a month is treated as lost/abandoned
+// A phone that hasn't reconnected in a month is treated as lost or abandoned,
+// so its pairing keys stop being accepted by the relay.
 async function expireStaleDevices() {
 	const result = await db
 		.delete(pairedDevice)
@@ -15,10 +16,16 @@ async function expireStaleDevices() {
 	if (result.length > 0) console.log(`Expired ${result.length} stale paired device(s)`);
 }
 
+// Guard lives on globalThis because dev HMR re-evaluates this module, which
+// would otherwise stack up cron jobs.
 declare global {
 	var __piviDeviceCleanupStarted: boolean | undefined;
 }
 
+/**
+ * Started once from handlers/register.ts so stale pairings expire without
+ * user action. Repeat calls are ignored.
+ */
 export function startDeviceCleanupSchedule() {
 	if (globalThis.__piviDeviceCleanupStarted) return;
 	globalThis.__piviDeviceCleanupStarted = true;

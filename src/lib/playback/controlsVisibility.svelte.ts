@@ -2,10 +2,11 @@ const CONTROLS_IDLE_MS = 3000;
 const ACTIVITY_EVENTS = ['click', 'keydown', 'mousemove', 'touchstart'] as const;
 
 /**
- * Hides the player controls after a stretch of inactivity, but only while
- * playing. Paused keeps them up. Must be created during component init.
+ * Gets the TV player's overlay out of the picture while a video plays, and
+ * locks it so stray input can't hit unseen buttons. Paused keeps it up.
+ * Must be created during component init.
  *
- * `focusTarget` is where focus moves before hiding. Once the old target is
+ * `getFocusTarget` is where focus moves before hiding. Once the old target is
  * disabled the browser resets focus to <body> and its focusin would re-show
  * the controls.
  */

@@ -6,6 +6,7 @@ function isLanInterface(iface: { family: string; internal: boolean }): boolean {
 	return iface.family === 'IPv4' && !iface.internal;
 }
 
+/** hooks.server.ts builds the phone pairing URL from this. Null without a LAN address. */
 export function getLanAddress() {
 	const interfaces = Object.values(networkInterfaces()).flat();
 	return interfaces.find((iface) => iface && isLanInterface(iface))?.address ?? null;

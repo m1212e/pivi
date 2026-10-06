@@ -1,24 +1,10 @@
-// vscode-jsonrpc needs a "Runtime Abstraction Layer" installed before
-// createMessageConnection works — normally done by importing its /node or
-// /browser subpath as a side effect. Both of those subpaths declare only
-// one export condition each ("node"/"browser") with no unconditional
-// fallback, which Vite's SSR module transform and dependency scanner don't
-// resolve consistently for code that's reachable from both a server and a
-// browser build (RemoteBridge.svelte, the phone remote page, and anything
-// importing #lib/rpc transitively) — the transform step tries to resolve
-// *every* import it finds, including ones behind a dynamic import that
-// would never execute in that environment, so it fails regardless of any
-// runtime guard.
-//
-// The actual RAL interface only needs APIs universally available in both
-// Node and the browser (TextEncoder/TextDecoder, timers, console, JSON) —
-// we don't use vscode-jsonrpc's own stream wrappers, since
-// PushMessageReader/SinkMessageWriter (rpcTransport.ts) implement
-// AbstractMessageReader/AbstractMessageWriter directly. So one small,
-// environment-agnostic implementation works everywhere, sidestepping the
-// subpath resolution problem entirely instead of fighting Vite over it.
+// vscode-jsonrpc needs a runtime layer installed before any connection works,
+// normally via its /node or /browser subpath. Vite can't resolve those for code
+// shared by server and browser builds (RemoteBridge, the phone remote, the app
+// host), so this installs one small implementation that works in both.
 import { AbstractMessageBuffer, RAL, type Message } from 'vscode-jsonrpc';
 
+// Uint8Array based buffer, so no Node Buffer is needed in the browser.
 class MessageBuffer extends AbstractMessageBuffer {
 	private static readonly EMPTY = new Uint8Array(0);
 	private readonly asciiDecoder = new TextDecoder('ascii');
@@ -48,8 +34,11 @@ class MessageBuffer extends AbstractMessageBuffer {
 
 let installed = false;
 
-// Idempotent and safe to call from every module that needs a connection —
-// vscode-jsonrpc's RAL.install() throws if called twice.
+/**
+ * Call before createMessageConnection. RemoteBridge, remoteController, the app
+ * host and stdioConnection all do, and repeated calls are fine even though
+ * RAL.install() itself throws on a second call.
+ */
 export function ensureRal(): void {
 	if (installed) return;
 	installed = true;
@@ -80,9 +69,8 @@ export function ensureRal(): void {
 				const handle = setTimeout(callback, ms, ...args);
 				return { dispose: () => clearTimeout(handle) };
 			},
-			// Neither Node nor the browser need vscode-jsonrpc's own
-			// microtask/queueMicrotask juggling here — a 0ms timeout is fine
-			// for both, and keeps this implementation identical everywhere.
+			// A 0ms timeout is good enough for both Node and the browser and keeps
+			// this implementation identical everywhere.
 			setImmediate: (callback, ...args) => {
 				const handle = setTimeout(callback, 0, ...args);
 				return { dispose: () => clearTimeout(handle) };

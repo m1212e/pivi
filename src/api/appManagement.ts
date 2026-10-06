@@ -1,5 +1,6 @@
-// The app management service wired to the real database, registry and sandbox
-// (see appManagementService.ts for what it does and who may ask).
+// The app management service wired to the real database, registry and sandbox.
+// The service itself takes its deps as arguments so it can be tested, this is
+// the single live instance handlers/appManagement.ts serves to the /apps screen.
 import { getActiveProfileUser } from './activeProfile';
 import { createAppManagement } from './appManagementService';
 import { defaultAppDeps } from './apps/deps';

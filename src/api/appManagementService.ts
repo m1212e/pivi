@@ -1,7 +1,6 @@
-// The logic of managing apps: installing, configuring and updating them, for
-// the TV's own screen (over GraphQL, see handlers/appManagement.ts, so apps
-// can be managed with nothing but the remote's gestures and the phone's
-// keyboard relay typing into whichever field has focus).
+// Installing, configuring and updating apps from the TV's own /apps screen
+// (served over GraphQL by handlers/appManagement.ts), so apps can be managed
+// with nothing but the remote. Deps are injected so this can be tested.
 import type { AppsState as SharedAppsState } from '#lib/apps/management';
 import type { PermissionKey } from '#lib/apps/manifest';
 import { describeApp } from './appState';
@@ -23,9 +22,11 @@ import {
 	type UpdateOutcome
 } from './apps/updater';
 
+/** Re-exported so handlers/appManagement.ts can type its GraphQL object from the service side. */
 export type AppsState = SharedAppsState;
 type Busy = NonNullable<AppsState['busy']>;
 
+/** How the service tells GraphQL subscriptions to push fresh state, wired in appManagement.ts. */
 export type ManagementEvents = {
 	// The state shown to the user changed (busy, error, preview, or the installed set).
 	stateChanged(): void;
@@ -33,10 +34,11 @@ export type ManagementEvents = {
 	listChanged(): void;
 };
 
-// `publicKey` is left out entirely to install unsigned -- signature checking is
-// opt-in, not refused with an empty string.
+// `publicKey` is left out entirely to install unsigned, since signature
+// checking is opt in.
 type InstallRequest = { image: string; publicKey?: string };
 
+/** Create one per process (appManagement.ts). Every screen shares its session. */
 export function createAppManagement(
 	deps: AppDeps,
 	events: ManagementEvents,

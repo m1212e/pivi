@@ -1,5 +1,5 @@
-// The wifi management service wired to the real wifi module (see
-// wifiManagementService.ts for what it does and who may ask).
+// The single live wifi management service that handlers/wifi.ts serves to the
+// /wifi screen. The service takes its event hooks as arguments so it can be tested.
 import { createWifiManagement } from './wifiManagementService';
 import { WIFI_MANAGEMENT_EVENT, wifiPubSub } from './wifiPubsub';
 

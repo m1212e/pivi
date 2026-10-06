@@ -1,12 +1,6 @@
-// The app<->host RPC boundary (see SKETCH.md's "App sandboxing"
-// decision). An app is an OCI image whose entrypoint speaks JSON-RPC 2.0 over
-// its stdin/stdout, one JSON message per line (see ndjson.ts), with logs on
-// stderr — so it can be written in any language, and nothing in this file
-// assumes one. vscode-jsonrpc is only the host's (and the TypeScript SDK's)
-// way of speaking it: request/response correlation is handled by the library
-// instead of by hand. The same method names and schemas are published as JSON
-// Schema (protocolSchema.ts, attached to each GitHub release) for every other
-// language.
+// The single definition of the host/app JSON-RPC protocol, shared by the host
+// runtime and the TypeScript app SDK so neither side can drift. Apps in other
+// languages get the same methods as JSON Schema (protocolSchema.ts).
 import { NotificationType, NotificationType0, RequestType } from 'vscode-jsonrpc';
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
@@ -14,70 +8,58 @@ import { appScreenSchema, uiEventSchema } from './ui';
 
 // App -> host
 
-// The version of this protocol; an app's manifest names the one it speaks
-// (`protocol`), and the host refuses to run one it doesn't support.
+/** Sent by apps in `plugin/ready` and declared in their manifest. */
 export const PROTOCOL_VERSION = 1;
+/** Checked by the registry at install and the runtime at start, so an incompatible app is refused instead of failing oddly. */
 export const SUPPORTED_PROTOCOLS: readonly number[] = [PROTOCOL_VERSION];
 
-// The first message an app sends, once it can receive requests. Carries
-// nothing but the protocol version: what the app is and what it may do is
-// its manifest, which the host already read from the image and the user
-// already approved — never something a running app gets to restate.
+/**
+ * The app's first message, telling the host it can take requests. Only the
+ * protocol version, since what the app may do comes from its approved
+ * manifest, never from the running app.
+ */
 export const readyParamsSchema = z.object({ protocol: z.number().int().positive() });
 export const readyNotification = new NotificationType<z.infer<typeof readyParamsSchema>>(
 	'plugin/ready'
 );
 
+/** How an app fills its part of the home dashboard. Replaces its previous cards. */
 export const publishDashboardNotification = new NotificationType<
 	z.infer<typeof dashboardContributionSchema>
 >('plugin/publishDashboard');
 
+/** How an app shows its own pages (ui.ts). Replaces the screen with the same id. */
 export const publishScreenNotification = new NotificationType<z.infer<typeof appScreenSchema>>(
 	'plugin/publishScreen'
 );
 
-// Any app that wants in-browser playback implements this same handler
-// shape — the host never knows anything about a particular app's stream
-// source, only this generic result. `audioUrl` is separate rather than
-// assumed-muxed-into `videoUrl` since most modern YouTube formats (and
-// plausibly other sources) are video-only + audio-only rather than one
-// combined file — the streaming proxy (src/routes/api/stream) remuxes them.
-// `duration` has to come from here rather than the eventual <video> element,
-// since a live-remuxed stream can't report its own duration reliably.
-// The container each track is actually packaged in -- not reliably
-// guessable from the codec string alone (YouTube serves vp9 in either mp4
-// or webm depending on format, and av1 as mp4 despite webm supporting it
-// too), so this has to come from whatever actually resolved the stream
-// (e.g. yt-dlp's own reported format extension), not be re-derived
-// downstream from vcodec/acodec.
+// The container each track is packaged in. It has to come from whatever
+// resolved the stream, since the codec alone doesn't tell (YouTube serves vp9
+// as mp4 or webm).
 const containerSchema = z.enum(['mp4', 'webm']);
 
-// A subtitle/caption track an app already knows the URL for -- resolving
-// one costs nothing beyond what resolveStream already does (yt-dlp's own
-// info dump reports caption URLs alongside the stream itself, no separate
-// network round trip), so unlike SkipSegment this rides along on
-// ResolvedStream directly rather than needing its own request type. `url`
-// stays server-side just like videoUrl/audioUrl -- never forwarded to the
-// client as-is, only fetched through the streaming proxy (see
-// src/routes/api/stream-subtitle) the same way the actual video/audio bytes
-// are. Restricted to `vtt` (never `srt`/others): every app resolving
-// through yt-dlp can ask for a vtt variant directly, so there's no format
-// conversion for the host to own.
+// Rides along on ResolvedStream because yt-dlp reports caption URLs with the
+// stream anyway. `url` stays server side and is only fetched through the
+// stream-subtitle proxy. Only vtt, so the host never converts formats.
 const subtitleTrackSchema = z.object({
 	language: z.string(),
-	// An app-provided display name (yt-dlp reports one for auto-generated
-	// tracks, not always for manual ones) -- falls back to `language` itself
-	// on the client when absent.
+	// Falls back to `language` on the client when absent.
 	label: z.string().optional(),
-	// Manually authored (uploaded by the channel) vs. auto-generated
-	// (speech-to-text) -- shown as a hint in the picker so "auto-generated"
-	// tracks don't read as equally reliable as real ones.
+	// Shown in the picker so auto-generated tracks don't read as equally
+	// reliable as authored ones.
 	kind: z.enum(['caption', 'transcription']),
 	url: z.string(),
 	format: z.literal('vtt')
 });
+/** Used across the player's subtitle picker, the subtitle proxy and the phone remote. */
 export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
 
+/**
+ * The generic answer to `plugin/resolveStream`, so the shared player and the
+ * stream proxy never need to know an app's source. Audio is separate because
+ * most sources serve video-only plus audio-only, which the proxy remuxes, and
+ * `duration` comes from here because a live remux can't report its own.
+ */
 export const resolvedStreamSchema = z.object({
 	videoUrl: z.string(),
 	audioUrl: z.string().optional(),
@@ -88,55 +70,53 @@ export const resolvedStreamSchema = z.object({
 	title: z.string(),
 	duration: z.number(),
 	// Absent (not just empty) for an app that has no subtitle source at
-	// all -- same "optional, treated as none" convention resolveSkipSegments
+	// all. Same "optional, treated as none" convention resolveSkipSegments
 	// uses for an app with no handler registered.
 	subtitleTracks: z.array(subtitleTrackSchema).optional()
 });
 export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
 
-// `maxHeight`, when present, caps the requested video quality (see
-// apps/youtube/stream.ts) -- always requesting the true "best" available
-// stream regardless of what the network/CPU can actually remux and forward
-// in real time is what made playback choppy in practice, so the player page
-// lets the viewer pick a lower cap instead of always maxing this out.
+// `maxHeight` lets the viewer cap quality in the player, since always asking
+// for the best stream made real-time remuxing choppy in practice.
 export const resolveStreamParamsSchema = z.object({
 	sessionId: z.string(),
 	maxHeight: z.number().optional()
 });
+/** How the shared player gets something playable for a `session` action, from any app with the `playback` feature. */
 export const resolveStreamRequest = new RequestType<
 	z.infer<typeof resolveStreamParamsSchema>,
 	ResolvedStream,
 	void
 >('plugin/resolveStream');
 
-// A skippable stretch of the video an app knows about (a SponsorBlock
-// segment, for the YouTube app) -- generic over whatever the app's
-// source for these actually is, the player only ever needs a time range and
-// a label to show on the "prevent skip" button (see the player page).
 const skipSegmentSchema = z.object({
 	startSeconds: z.number(),
 	endSeconds: z.number(),
 	label: z.string()
 });
+/**
+ * A stretch the player skips automatically (SponsorBlock for YouTube). Kept
+ * source agnostic, the player only needs a range and a label for its banner.
+ */
 export type SkipSegment = z.infer<typeof skipSegmentSchema>;
 
-// Only called on an app whose manifest lists the `skipSegments` feature.
 export const resolveSkipSegmentsParamsSchema = z.object({ sessionId: z.string() });
 export const resolveSkipSegmentsResultSchema = z.object({ segments: z.array(skipSegmentSchema) });
+/** Feeds the player's auto skip. Only sent to apps declaring the `skipSegments` feature. */
 export const resolveSkipSegmentsRequest = new RequestType<
 	z.infer<typeof resolveSkipSegmentsParamsSchema>,
 	z.infer<typeof resolveSkipSegmentsResultSchema>,
 	void
 >('plugin/resolveSkipSegments');
 
-// What to play once a session has ended, for apps that play in sequence
-// (a playlist). `context` is whatever the app put on the session action.
-// No `sessionId` in the answer means there is nothing after this one.
+// `context` is whatever the app put on the session action. No `sessionId` in
+// the answer means there is nothing after this one.
 export const resolveNextParamsSchema = z.object({
 	sessionId: z.string(),
 	context: z.string().optional()
 });
 export const resolveNextResultSchema = z.object({ sessionId: z.string().optional() });
+/** Lets the player continue a playlist once a session ends, without knowing the app's sequencing. */
 export const resolveNextRequest = new RequestType<
 	z.infer<typeof resolveNextParamsSchema>,
 	z.infer<typeof resolveNextResultSchema>,
@@ -151,21 +131,23 @@ export const resolveNextRequest = new RequestType<
 
 // Host -> app
 
-// The host's language and region (a BCP 47 tag like `de-DE`), so an app can
-// ask its backend for results in the language the person actually reads.
+// A BCP 47 tag like `de-DE`, so an app can ask its backend for results in the
+// language the person reads.
 export const activateParamsSchema = z.object({ locale: z.string() });
+/** Tells a ready app it may start publishing, along with the host's locale. */
 export const activateNotification = new NotificationType<z.infer<typeof activateParamsSchema>>(
 	'host/activate'
 );
 
+/** The only way user input on a published screen reaches the app, since it has no DOM access. */
 export const uiEventNotification = new NotificationType<z.infer<typeof uiEventSchema>>(
 	'host/uiEvent'
 );
 
-// The host's language changed after the app started, e.g. the TV's browser
-// language became known once a page was opened.
+/** The TV's language often becomes known only after the app started, once a page is opened. */
 export const localeNotification = new NotificationType<z.infer<typeof activateParamsSchema>>(
 	'host/locale'
 );
 
+/** Gives the app a chance to exit cleanly before the host kills it. */
 export const shutdownNotification = new NotificationType0('host/shutdown');

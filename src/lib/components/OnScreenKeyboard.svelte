@@ -23,6 +23,9 @@
 		type Modifier
 	} from '#lib/keyboard/oskLogic';
 
+	// The TV's own keyboard, for when no phone keyboard is available. Its keys
+	// are normal focusable buttons so the remote's spatial nav can move over them.
+	// Mounted once in the root layout and driven by the shared `osk` state.
 	const visible = $derived(keyboardVisible());
 	let root: HTMLElement | undefined = $state();
 
@@ -48,6 +51,7 @@
 		if (osk.target) insertText(osk.target, text);
 	}
 
+	// Releases modifiers armed for a single key, locked ones stay on.
 	function afterKey() {
 		if (shift === 'once') shift = 'off';
 		if (altGr === 'once') altGr = 'off';
@@ -64,6 +68,7 @@
 		pressCell(' ');
 	}
 
+	// A pending accent has typed nothing yet, so backspace just cancels it.
 	function backspace() {
 		if (dead) dead = null;
 		else if (osk.target) deleteBackward(osk.target);
@@ -76,6 +81,7 @@
 		else submitInput(target);
 	}
 
+	// The field's owner (TextInput) decides what picking a suggestion does.
 	function pick(text: string) {
 		osk.target?.dispatchEvent(new CustomEvent('pivi-suggestion', { detail: text }));
 	}
@@ -109,6 +115,8 @@
 		backspace();
 	}
 
+	// Any focused text field becomes the target, except one the user dismissed
+	// the keyboard on, so it doesn't pop right back up.
 	function onFocusIn(event: FocusEvent) {
 		const el = event.target;
 		if (!(el instanceof Element) || root?.contains(el)) return;
@@ -121,6 +129,7 @@
 	// empty space.
 	function onFocusOut(event: FocusEvent) {
 		if (event.relatedTarget) return;
+		// Deferred so a focusin that follows right away can claim focus first.
 		setTimeout(() => {
 			if (!focusWasDropped(osk.target, document.activeElement, root)) return;
 			osk.target = null;
@@ -165,6 +174,7 @@
 		if (!visible) reclaimFocus(osk.target);
 	});
 
+	// A reopened keyboard starts clean instead of with a stale shift or accent.
 	$effect(() => {
 		if (visible) return;
 		shift = 'off';

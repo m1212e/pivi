@@ -1,13 +1,20 @@
-// Ordered highest to lowest, `bestInitialQuality` relies on that.
+// Quality tiers and how each one plays. Shared by the TV player, its quality
+// picker and the phone remote so all three show the same tiers and mode icons.
+
+/** Tiers the quality picker offers. Ordered highest to lowest, `bestInitialQuality` relies on that. */
 export const QUALITY_OPTIONS = [2160, 1440, 1080, 720, 480, 360] as const;
+/** A tier the picker offers, guarded by isQualityOption for input from the phone. */
 export type QualityOption = (typeof QUALITY_OPTIONS)[number];
 
-// Often served pre-muxed, so it starts fastest.
+/** Tier the player opens on before the others are probed. Often served pre-muxed, so it starts fastest. */
 export const DEFAULT_QUALITY: QualityOption = 720;
 
+/** Containers the stream resolver reports, needed to build the MSE MIME types. */
 export type Container = 'mp4' | 'webm';
+/** How a tier plays, shown as an icon in the quality picker and on the phone. */
 export type QualityMode = 'direct' | 'mse' | 'ffmpeg';
 
+/** Codec info the server resolves per tier, decides which playback path a tier can take. */
 export type QualityMeta = {
 	direct: boolean;
 	vcodec: string;
@@ -16,13 +23,15 @@ export type QualityMeta = {
 	audioContainer: Container | null;
 };
 
+/** Narrowed by isMseCandidate, so the MSE setup can rely on a separate audio track. */
 export type MseQualityMeta = QualityMeta & { acodec: string; audioContainer: Container };
 
+/** Drops quality values from the phone that the TV doesn't offer. */
 export function isQualityOption(value: number): value is QualityOption {
 	return (QUALITY_OPTIONS as readonly number[]).includes(value);
 }
 
-// The server only reports mp4 or webm, GraphQL just has no literal union type.
+/** Converts the play page's GraphQL result. The server only reports mp4 or webm, GraphQL just has no literal union type. */
 export function toQualityMeta(result: {
 	direct: boolean;
 	vcodec: string;
@@ -39,21 +48,20 @@ export function toQualityMeta(result: {
 	};
 }
 
-// MSE needs a proxied stream with a separate audio track to pair with.
+/** MSE needs a proxied stream with a separate audio track to pair with. Gates both the engine's MSE path and the per tier probe. */
 export function isMseCandidate(meta: QualityMeta): meta is MseQualityMeta {
 	return !meta.direct && !!meta.acodec && !!meta.audioContainer;
 }
 
-/** What setupPlayback does for this tier. MSE can still fail at runtime and fall back. */
+/** Mirrors the engine's setupPlayback choice, so the icons can predict it without playing. MSE can still fail at runtime. */
 export function strategyFor(meta: QualityMeta): QualityMode {
 	if (meta.direct) return 'direct';
 	return isMseCandidate(meta) ? 'mse' : 'ffmpeg';
 }
 
 /**
- * The mode a tier will play in, as far as is known. An MSE candidate stays
- * undefined until its segment index was probed, since only that tells if
- * real MSE works. `meta` undefined means the tier is still resolving.
+ * Feeds the mode icons in the picker and on the phone. Undefined while unknown,
+ * an MSE candidate stays that way until its segment index was probed.
  */
 export function qualityModeFor(
 	meta: QualityMeta | undefined,
@@ -66,7 +74,7 @@ export function qualityModeFor(
 	return mseAvailable ? 'mse' : 'ffmpeg';
 }
 
-/** Highest tier confirmed to do real MSE, else the default. */
+/** Lets the player open on the highest tier confirmed for real MSE instead of always the default. */
 export function bestInitialQuality(
 	mseAvailability: Partial<Record<QualityOption, boolean>>
 ): QualityOption {

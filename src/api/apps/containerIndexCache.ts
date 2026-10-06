@@ -1,12 +1,14 @@
-// Same rationale as streamCache.ts: locating the sidx/Cues index means an
-// extra round trip to the CDN, so a reload or seek within the same session
-// shouldn't redo it every time.
 import { buildSegmentBaseIndex, type SegmentBaseIndex } from './containerIndex';
 
 const TTL_MS = 5 * 60 * 1000;
 
 const cache = new Map<string, { value: SegmentBaseIndex; expiresAt: number }>();
 
+/**
+ * What the stream-track index route uses so a reload or seek in the same
+ * session doesn't re-download the CDN file's header to find its index again.
+ * Keyed by url alone since a resolved CDN url always has the same container.
+ */
 export async function buildSegmentBaseIndexCached(
 	url: string,
 	container: 'mp4' | 'webm'

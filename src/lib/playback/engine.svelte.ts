@@ -17,15 +17,18 @@ type Deps = {
 	getQuality: () => QualityOption;
 };
 
+// Fallback reason for the diagnostics panel when the element itself errors.
 function describeMediaError(error: MediaError | null | undefined): string {
 	if (!error) return 'native video error (no detail available)';
 	return `native video error ${error.code}: ${error.message || '(no message)'}`;
 }
 
+/** The path currently playing, shown in the diagnostics panel. */
 export type PlaybackMode = 'direct' | 'mse' | 'ffmpeg';
 
 /**
- * Drives one <video> element through the three ways to play, best first.
+ * Playback core of the TV play page. Not every stream plays everywhere, so it
+ * drives one <video> through three ways to play, best first.
  *
  * - direct: one URL, plain `<video src>`, native seeking.
  * - mse: separate tracks via Shaka over the range proxy, no remuxing.
@@ -68,7 +71,7 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 	// Stop Shaka fetching after leaving the page.
 	$effect(() => destroyDualTrack);
 
-	/** Restarts ffmpeg's stream at `seconds` on a fresh element clock. */
+	/** ffmpeg output can't seek natively, so a seek reopens the stream at the new offset. */
 	function reloadFfmpegStream(el: HTMLVideoElement, seconds: number) {
 		buffering = true;
 		seekOffset = seconds;
@@ -100,7 +103,6 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 		el.play().catch(() => {});
 	}
 
-	// Async because attaching Shaka loads a manifest.
 	async function setupMsePlayback(
 		el: HTMLVideoElement,
 		meta: MseQualityMeta,

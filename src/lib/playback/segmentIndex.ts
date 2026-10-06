@@ -9,7 +9,10 @@ async function fetchSegmentIndex(url: string): Promise<SegmentBaseIndex> {
 	return res.json();
 }
 
-/** Rejects when either track has no usable index, which rules MSE out for this tier. */
+/**
+ * Shared by the engine's MSE setup and the quality catalog's probe, so both
+ * agree on what counts as usable. Rejects when either track lacks an index.
+ */
 export async function fetchTrackIndexes(
 	urls: SessionUrls,
 	meta: MseQualityMeta,

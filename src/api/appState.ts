@@ -5,6 +5,7 @@ import type { AppsState } from '#lib/apps/management';
 import { diffManifests } from '#lib/apps/manifestDiff';
 import type { InstalledApp } from './apps/store';
 
+/** One app as the /apps screen sees it. */
 export type AppEntry = AppsState['apps'][number];
 
 function describeUpdate(row: InstalledApp): AppEntry['update'] {
@@ -19,6 +20,10 @@ function describeUpdate(row: InstalledApp): AppEntry['update'] {
 	};
 }
 
+/**
+ * Builds the per app entry of the app management state that
+ * appManagementService.ts hands to the /apps screen.
+ */
 export function describeApp(row: InstalledApp): AppEntry {
 	const manifest = row.approvedManifest;
 	return {

@@ -3,14 +3,17 @@
 // Western European languages, which is why the on-screen keyboard has no
 // per-language layouts.
 
+/** The accents available as dead keys, each waiting for the next letter. */
 export type DeadKind =
 	'grave' | 'acute' | 'circumflex' | 'tilde' | 'macron' | 'ring' | 'caron' | 'diaeresis';
 
+/** One key in one layer, either a character or a dead accent. */
 export type Cell = string | { dead: DeadKind };
 
-// base, shift, AltGr, shift+AltGr
+/** One physical key's layers: base, shift, AltGr, shift+AltGr. */
 export type KeyLayers = [Cell, Cell, Cell, Cell];
 
+// Combining marks, so NFC normalization can fold accent plus letter into one character.
 const COMBINING: Record<DeadKind, string> = {
 	grave: '̀',
 	acute: '́',
@@ -22,7 +25,7 @@ const COMBINING: Record<DeadKind, string> = {
 	diaeresis: '̈'
 };
 
-// What a dead key prints on its own, when nothing composes with it.
+/** What a dead key prints on its own. Also its label on the on-screen keyboard. */
 export const DEAD_SPACING: Record<DeadKind, string> = {
 	grave: '`',
 	acute: '´',
@@ -36,6 +39,7 @@ export const DEAD_SPACING: Record<DeadKind, string> = {
 
 const d = (dead: DeadKind): Cell => ({ dead });
 
+/** The on-screen keyboard renders these rows. Physical key positions, without the space and control keys. */
 export const EURKEY_ROWS: KeyLayers[][] = [
 	[
 		['`', '~', d('grave'), d('tilde')],
@@ -94,6 +98,7 @@ export const EURKEY_ROWS: KeyLayers[][] = [
 	]
 ];
 
+/** Lets the on-screen keyboard show the right label set for its shift and AltGr state. */
 export function layerIndex(shift: boolean, altGr: boolean): 0 | 1 | 2 | 3 {
 	return ((altGr ? 2 : 0) + (shift ? 1 : 0)) as 0 | 1 | 2 | 3;
 }

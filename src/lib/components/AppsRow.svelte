@@ -5,6 +5,8 @@
 	import AppCard from '#lib/components/AppCard.svelte';
 	import * as m from '#lib/paraglide/messages';
 
+	// The dashboard's row of installed apps. Separate from VideoRow because its
+	// tiles are apps, and it always ends with the add-app entry.
 	let {
 		title,
 		items

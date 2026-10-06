@@ -1,15 +1,7 @@
 <script lang="ts">
-	// The TV half of wifi provisioning: what to show when this device can't
-	// reach the network. It is deliberately just instructions — there's nothing
-	// to type into until a phone is paired as the remote (see
-	// src/api/wifiBootstrap.ts for why), so this screen only has to get a phone
-	// onto the device's own access point and then into the remote; picking a
-	// real network happens on the TV's own /wifi screen once that's done.
-	//
-	// Two QR codes rather than one, because they do genuinely different things
-	// and no single code can do both: the first is a `WIFI:` code, which phone
-	// cameras read as "join this network", and the second is the ordinary
-	// pairing URL, which is only reachable *after* the phone has joined.
+	// Shown over the profile picker when the device is offline. Nothing can be
+	// typed before a phone is paired, so it only gets a phone onto the hotspot and
+	// into the remote. Two QRs since the pairing URL only works after joining.
 	import PairingQr from './PairingQr.svelte';
 	import * as m from '#lib/paraglide/messages';
 
@@ -25,10 +17,8 @@
 		onDismiss: () => void;
 	} = $props();
 
-	// The de-facto standard wifi QR format, understood by the stock camera app
-	// on both iOS and Android. `\`, `;`, `,`, `"` and `:` are the characters its
-	// grammar reserves, so they have to be escaped inside a value — an SSID or
-	// password containing one is unusual but entirely legal.
+	// The `WIFI:` format stock iOS and Android cameras offer to join. Its
+	// reserved characters are legal in SSIDs and passwords, so they get escaped.
 	function wifiQrPayload(ssid: string, password: string): string {
 		const escape = (value: string) => value.replace(/([\\;,":])/g, '\\$1');
 		return `WIFI:T:WPA;S:${escape(ssid)};P:${escape(password)};;`;

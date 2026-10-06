@@ -8,10 +8,9 @@ import { requiredTabFor, type RemoteTab, type TabInputs } from './remoteTabs';
 const OVERRIDE_STORAGE_KEY = 'pivi-remote-manual-override';
 
 /**
- * Which tab the phone shows. Normally whatever the TV asks for, but stepping
- * onto the trackpad to use its swipe gestures means stepping off a PIN or
- * text field, so that choice is an override with a way back. Must be created
- * during component init.
+ * Decides the phone remote page's tab. It follows the TV, but the user can
+ * step onto the trackpad (TrackpadToggle.svelte) and back, so that choice is
+ * a remembered override. Must be created during component init.
  */
 export function createRemoteTabState(deps: {
 	storage: KeyValueStorage | null;

@@ -2,12 +2,9 @@
 	import type { Snippet } from 'svelte';
 	import { inview } from 'svelte-inview';
 
-	// Generic horizontal shelf shared by every dashboard row (continue watching,
-	// apps, future recommendation rows) so scroll/keyboard behavior only lives
-	// in one place.
-	// `inset: false` drops the side padding for a row placed inside a page that
-	// already has its own (an app's screen), so it lines up with the content
-	// around it instead of being indented twice.
+	// Horizontal shelf behind AppsRow, VideoRow, their skeleton and app-rendered
+	// rows, so scroll and reveal behavior lives in one place.
+	// `inset: false` is for rows inside an app's screen, which is already padded.
 	let {
 		title,
 		inset = true,
@@ -18,11 +15,8 @@
 		children: Snippet;
 	} = $props();
 
-	// Rows only unfold their cards the first time they scroll into view,
-	// rather than immediately on mount — a row further down the dashboard
-	// shouldn't reveal itself before the user has scrolled anywhere near it.
-	// `unobserveOnEnter` means this only ever fires once per row, so
-	// scrolling away and back doesn't replay it.
+	// Cards animate in on first scroll into view, so rows further down don't
+	// play their reveal offscreen. Only once, so scrolling back doesn't replay it.
 	let revealed = $state(false);
 </script>
 
@@ -41,7 +35,7 @@
 	</h2>
 	<!-- `overflow-x-auto` computes `overflow-y` to `auto` too (per spec, once
 	     one axis isn't `visible`), which clips anything a card renders past
-	     its own box — the selection ring's `outline-offset`, its hover scale,
+	     its own box, the selection ring's `outline-offset`, its hover scale,
 	     and `.pivi-card`'s glow. `py-10` and `gap-10` give the glow room to
 	     spread into on every side without touching a neighboring card or
 	     getting cut off by the row's own edge.

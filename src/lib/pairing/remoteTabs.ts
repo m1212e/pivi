@@ -1,6 +1,7 @@
+/** The input surfaces the phone remote page switches between, one component per tab. */
 export type RemoteTab = 'pin' | 'keyboard' | 'profiles' | 'player' | 'trackpad';
 
-/** What the TV is showing right now, as far as it decides which input the phone offers. */
+/** The slice of the TV's pushed state that picks the tab, narrow so the rule is testable on its own. */
 export type TabInputs = {
 	hasPinPad: boolean;
 	hasTextInput: boolean;

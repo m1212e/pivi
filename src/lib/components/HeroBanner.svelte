@@ -2,6 +2,9 @@
 	import { fade, fly } from 'svelte/transition';
 	import Button from '#lib/components/Button.svelte';
 
+	// The big featured banner at the top of the dashboard, and an app's own
+	// hero node. HeroBannerSkeleton and HeroBannerEmpty stand in for it while
+	// loading or when no app has suggestions, and mirror its size.
 	let {
 		title,
 		description,
@@ -14,17 +17,15 @@
 		title: string;
 		description: string;
 		badge?: string;
-		// Which app/app this suggestion came from — generic over whatever
-		// contributed the card, not specific to any one of them.
+		// Name of the app that contributed the card.
 		source?: string;
 		gradient?: string;
 		image?: string;
 		href: string;
 	} = $props();
 
-	// maxresdefault (the highest-res YouTube thumbnail) 404s for videos with
-	// no high-res source — degrade to mqdefault (always generated, still a
-	// genuine 16:9 crop with no letterbox) rather than showing a broken image.
+	// YouTube's maxresdefault 404s for videos without a high-res source.
+	// mqdefault always exists and is still a 16:9 crop without letterbox.
 	function onImageError(event: Event) {
 		const img = event.currentTarget as HTMLImageElement;
 		if (img.src.includes('maxresdefault.jpg')) {

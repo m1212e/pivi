@@ -42,8 +42,16 @@ import { db } from '../db';
 import { pairedDevice } from '../db/schema';
 import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from '../pairing';
 
+// The pairing relay: the TV's browser and paired phones all connect here. It
+// authenticates phones (pair once, then a signed challenge on each reconnect),
+// encrypts everything between it and a phone, and forwards messages between
+// phones and the TV. It never interprets the app level messages itself.
+
+// Stops half finished handshakes from holding a socket open forever.
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
+// What a socket is allowed to do depends on how far its handshake got, so the
+// state is a union keyed by role. Only `phone` holds session keys.
 type ConnState =
 	| { role: 'unauth'; timeout: ReturnType<typeof setTimeout>; userAgent: string | undefined }
 	| {
@@ -64,18 +72,15 @@ type ConnState =
 			s2cKey: Uint8Array;
 	  };
 
-// Best-effort device name straight off the phone's own User-Agent header —
-// no UA-parsing dependency, just the two fields worth surfacing in a toast.
-// Falls back to a generic label rather than inventing a name when the UA
-// doesn't match anything recognizable.
+// Names a phone for the TV's "connected" toast from its User-Agent, without
+// pulling in a UA parsing dependency. Unknown UAs fall back to "Phone".
 const UA_DEVICE_PATTERNS: readonly (readonly [RegExp, string])[] = [
 	[/iPad/, 'iPad'],
 	[/iPhone/, 'iPhone']
 ];
 
-// Android UAs put the marketing model right before "Build/", e.g.
-// "...Android 14; Pixel 8 Pro Build/...)" — the only human-readable device
-// identifier a stock UA string actually carries.
+// Android UAs put the model right before "Build/",
+// e.g. `Android 14; Pixel 8 Pro Build/...)`.
 function androidModelFrom(userAgent: string): string | undefined {
 	return userAgent.match(/Android [^;]+;\s*([^;)]+?)\s*(?:Build\/[^)]*)?\)/)?.[1].trim();
 }
@@ -87,6 +92,7 @@ function deriveDeviceName(userAgent: string | undefined): string {
 	return androidModelFrom(userAgent) ?? 'Phone';
 }
 
+// Module level so every handler and the exported helpers see the same sockets.
 const connections = new Map<WebSocket, ConnState>();
 
 function send(socket: WebSocket, message: object) {
@@ -97,6 +103,7 @@ function isLoopback(address: string | undefined) {
 	return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 
+// Handshake errors are final, so the socket is closed rather than retried.
 function fail(socket: WebSocket, message: object) {
 	send(socket, message);
 	socket.close();
@@ -113,13 +120,16 @@ function phoneSocketsWithKeys() {
 	);
 }
 
-// Whether a paired phone is connected right now. The TV's own screen uses this
-// to decide whether it may change what's installed: the remote is its only
-// input device, so with no phone connected nobody is steering it.
+/**
+ * Backs the TV's `phoneConnection` query and lets `openUrlOnPhone` fail loudly
+ * when no phone would receive it (handlers/remote.ts).
+ */
 export function hasConnectedPhone(): boolean {
 	return phoneSocketsWithKeys().length > 0;
 }
 
+// First contact from a new phone: trades the QR code's token for a device id
+// and the TV's public key, so the phone can verify the relay from then on.
 async function handlePairRequest(
 	socket: WebSocket,
 	message: PairRequest,
@@ -155,6 +165,8 @@ async function handlePairRequest(
 	} satisfies PairSuccess);
 }
 
+// A paired phone reconnecting. The relay proves it is the TV by signing a
+// transcript, mutual proof of identity before any keys are derived.
 async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
 	const { deviceId, ephemeralPublicKey } = message;
 	const device = await db.query.pairedDevice.findFirst({ where: { id: deviceId } });
@@ -192,6 +204,8 @@ async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
 	} satisfies Challenge);
 }
 
+// Final handshake step: the phone proves it holds its device key, then both
+// sides get matching session keys.
 async function handleChallengeResponse(
 	socket: WebSocket,
 	state: Extract<ConnState, { role: 'awaiting-response' }>,
@@ -211,7 +225,7 @@ async function handleChallengeResponse(
 	const phoneEphemeralPublicKey = state.transcript.slice(0, 32);
 	const sharedSecret = deriveSharedSecret(state.relayEphemeralSecretKey, phoneEphemeralPublicKey);
 	// Directions are named from the phone's perspective: c2s is what the
-	// relay decrypts, s2c is what it encrypts — mirrored in session.ts.
+	// relay decrypts, s2c is what it encrypts, mirrored in session.ts.
 	const { c2sKey, s2cKey } = deriveSessionKeys(sharedSecret, state.transcript);
 
 	clearHandshakeTimeout(socket);
@@ -229,13 +243,9 @@ async function handleChallengeResponse(
 
 	send(socket, { type: 'ready' } satisfies Ready);
 
-	// Tells whatever TV(s) are listening that a phone just finished
-	// connecting, so RemoteBridge can surface a toast — sent directly rather
-	// than through relayFromPhone, since that path only forwards the phone's
-	// own encrypted app-level messages (move/select/etc), not relay-originated
-	// status events. Framed as a JSON-RPC notification (see
-	// pairing/remoteProtocol.ts) like every other message on this channel,
-	// even though the relay itself has no stake in the RPC connection.
+	// Lets RemoteBridge show a toast. Sent directly since relayFromPhone only
+	// forwards the phone's own messages, framed as JSON-RPC like everything
+	// else on this channel.
 	for (const tv of tvSockets()) {
 		send(tv, {
 			jsonrpc: '2.0',
@@ -257,10 +267,16 @@ function clearHandshakeTimeout(socket: WebSocket) {
 	if (state && 'timeout' in state) clearTimeout(state.timeout);
 }
 
+// Guard lives on globalThis because dev HMR re-evaluates this module and a
+// second server would fail to bind the same port.
 declare global {
 	var __piviPairingRelayStarted: boolean | undefined;
 }
 
+/**
+ * The server phones talk to when used as a remote. Started once from
+ * handlers/register.ts, repeat calls are ignored.
+ */
 export function startPairingRelay() {
 	if (globalThis.__piviPairingRelayStarted) return;
 	globalThis.__piviPairingRelayStarted = true;
@@ -278,7 +294,7 @@ export function startPairingRelay() {
 			const state = connections.get(socket);
 			connections.delete(socket);
 
-			// Only a fully-connected phone leaving is noteworthy — not every
+			// Only a fully-connected phone leaving is noteworthy, not every
 			// dropped socket (e.g. one that never finished the handshake).
 			if (state?.role === 'phone') {
 				for (const tv of tvSockets()) {
@@ -294,9 +310,8 @@ export function startPairingRelay() {
 	});
 }
 
-// A socket's own role decides what a frame even means, so every frame lands
-// in exactly one of the per-role handlers below rather than in one long
-// chain of role/shape checks.
+// A socket's role decides what a frame means, so each frame goes to exactly
+// one per role handler.
 async function onMessage(
 	socket: WebSocket,
 	remoteAddress: string | undefined,
@@ -305,8 +320,7 @@ async function onMessage(
 ) {
 	const state = connections.get(socket);
 	if (!state) return;
-	// The one role whose frames are relayed verbatim -- a TV frame is already
-	// a JSON-RPC message for the phones, never something this relay reads.
+	// TV frames are already JSON-RPC for the phones, so they are relayed as is.
 	if (state.role === 'tv') {
 		relayFromTv(socket, data.toString());
 		return;
@@ -316,8 +330,8 @@ async function onMessage(
 	await routeFrame(socket, state, raw, remoteAddress, userAgent);
 }
 
-// `undefined` (rather than a throw) for an unparseable frame -- the socket
-// has already been failed by then, so the caller's only job is to stop.
+// `undefined` for an unparseable frame. The socket is already failed by then,
+// so the caller only has to stop.
 function parseFrame(socket: WebSocket, data: RawData): unknown {
 	try {
 		return JSON.parse(data.toString());
@@ -397,14 +411,16 @@ async function onChallengeFrame(
 	await handleChallengeResponse(socket, state, parsed.data);
 }
 
-// `except` is the sender itself on a TV-to-TV relay (a second TV tab, say) --
-// a socket never gets its own frame back.
+// `except` keeps a TV tab from getting its own frame back when relaying to
+// other TV tabs.
 function broadcastToTvs(raw: string, except?: WebSocket) {
 	for (const tv of tvSockets()) {
 		if (tv !== except && tv.readyState === WebSocket.OPEN) tv.send(raw);
 	}
 }
 
+// TV traffic is plaintext on the loopback socket, so it is encrypted per phone
+// here, and also copied to any other TV.
 function relayFromTv(sender: WebSocket, raw: string) {
 	broadcastToTvs(raw, sender);
 	for (const [socket, state] of phoneSocketsWithKeys()) {
@@ -433,6 +449,7 @@ function decryptFromPhone(
 	}
 }
 
+// Phone traffic is decrypted here so the TV page never needs session keys.
 function relayFromPhone(
 	socket: WebSocket,
 	state: Extract<ConnState, { role: 'phone' }>,
@@ -447,12 +464,11 @@ function relayFromPhone(
 	broadcastToTvs(plaintext);
 }
 
-// Lets server-side code outside this module (the app host, for a
-// PhoneAuthHandoff — see apps/runtime.ts) push a JSON-RPC notification
-// straight to whatever phone is currently paired, without going through the
-// TV at all. `message` must already be a valid JSON-RPC notification frame
-// (`{jsonrpc: '2.0', method, params}`) — construct it from the relevant
-// NotificationType's `.method`, the same way the two calls in this file do.
+/**
+ * Lets server code push a notification to connected phones without the TV
+ * page, used by the `openUrlOnPhone` mutation (handlers/remote.ts). Build
+ * `message` from a remoteProtocol.ts NotificationType's `.method`.
+ */
 export function sendToPhones(message: { jsonrpc: string; method: string; params?: unknown }) {
 	const raw = JSON.stringify(message);
 	for (const [socket, state] of phoneSocketsWithKeys()) {

@@ -1,16 +1,12 @@
-// An app's static declaration of what it is, what it implements and what
-// it's asking to be allowed to touch. It ships inside the app's OCI image
-// (see imageRef.ts) so the host can read it, and show it to the user, before
-// pulling or running anything — permissions are a install-time decision the
-// user makes, not something an app can negotiate for at runtime.
-//
-// An app is any OCI image that speaks the host protocol (host.ts) over
-// its stdin/stdout, so nothing here assumes a language or runtime.
+// An app's static declaration of what it is, implements and wants to access.
+// It ships as an image label so the host can show it for approval before
+// pulling or running anything, and permissions stay an install-time decision.
 import { z } from 'zod';
 
-// What the user can switch on or off for an app. A fixed enum on purpose:
-// every key has to be something the sandbox can actually enforce, so a new
-// one is added together with its enforcement, never speculatively.
+/**
+ * What the user can switch on or off for an app. A fixed enum because every
+ * key must be enforced by the sandbox, so a new one lands with its enforcement.
+ */
 export const permissionKeySchema = z.enum([
 	// Outbound access to exactly the domains in `network.domains`, all of them
 	// together. Everything else (other domains, the LAN, localhost, the host
@@ -26,8 +22,10 @@ export const permissionKeySchema = z.enum([
 ]);
 export type PermissionKey = z.infer<typeof permissionKeySchema>;
 
-// What the app implements, so the host only ever calls things it declared
-// instead of probing and swallowing errors. An app picks any subset.
+/**
+ * What the app implements, so the host only calls methods an app declared
+ * (protocolSchema.ts gates each method on one) instead of probing for them.
+ */
 export const featureSchema = z.enum([
 	// Publishes home-dashboard cards (Tier 1, see dashboard.ts).
 	'dashboard',
@@ -39,7 +37,7 @@ export const featureSchema = z.enum([
 	'skipSegments'
 	// There's no dedicated sign-in feature: an app that needs one shows it
 	// as part of its own 'screen' content (a code or link, a button whose
-	// action is `openOnPhone` — see dashboard.ts's AppAction) and handles the
+	// action is `openOnPhone`, see dashboard.ts's AppAction) and handles the
 	// actual login itself. See apps/youtube/auth.ts for the pattern.
 ]);
 export type Feature = z.infer<typeof featureSchema>;
@@ -47,18 +45,21 @@ export type Feature = z.infer<typeof featureSchema>;
 const LABEL = '[a-z0-9]([a-z0-9-]*[a-z0-9])?';
 const DOMAIN_PATTERN = new RegExp(`^(\\*\\.)?${LABEL}(\\.${LABEL})+$`, 'i');
 
-// An exact hostname, or `*.suffix` for the suffix and everything beneath it.
-// Never an IP, a port, a path, a bare `*`, or a wildcard over a single-label
-// suffix like `*.com`: a domain has to name something the app really talks
-// to, and the user is shown this list verbatim.
+/**
+ * One entry of `network.domains`, which the user approves verbatim and the
+ * sandbox enforces. So it must name something real: an exact host or
+ * `*.suffix`, never an IP, port, path or overly broad wildcard like `*.com`.
+ */
 export const domainSchema = z
 	.string()
 	.regex(DOMAIN_PATTERN, 'Expected a hostname like "example.com" or "*.example.com"')
 	.refine((d) => !/^\d+(\.\d+)*$/.test(d.replace(/^\*\./, '')), 'IP addresses are not allowed')
 	.refine((d) => !d.startsWith('*.') || d.slice(2).includes('.'), 'Wildcard is too broad');
 
-// Whether `hostname` falls under one of `domains` (exact, or beneath a
-// `*.suffix` entry — the suffix itself counts too).
+/**
+ * Used by the runtime to reject URLs an app hands back outside its declared
+ * domains, and by manifestDiff. A `*.suffix` entry also matches the suffix itself.
+ */
 export function domainsAllow(domains: readonly string[], hostname: string): boolean {
 	const host = hostname.toLowerCase();
 	return domains.some((entry) => {
@@ -79,8 +80,8 @@ const hexColorSchema = z
 const MAX_ICON_BYTES = 16 * 1024;
 
 // The icon is shown in the host's own chrome (install preview, the apps list,
-// the home screen, an app's own page header) — never inside the app's sandboxed
-// Shadow DOM — so it's rendered as an <img src="data:image/svg+xml,..."> via
+// the home screen, an app's own page header), never inside the app's sandboxed
+// Shadow DOM. So it's rendered as an <img src="data:image/svg+xml,..."> via
 // appIconDataUrl() below, never inserted as markup: a browser won't run script
 // or fetch anything from an SVG loaded that way. This check is defense in
 // depth on top of that, not the thing actually keeping it safe.
@@ -92,13 +93,19 @@ const appIconSchema = z
 	.refine((svg) => !/\son[a-z]+\s*=/i.test(svg), 'Icon must not contain event handler attributes')
 	.refine((svg) => !/javascript:/i.test(svg), 'Icon must not contain javascript: URLs');
 
-// A data URL an <img> can load directly. Percent-encoding rather than base64:
-// it needs no Buffer (this runs on the client too) and round-trips unicode
-// (an icon's <text>, titles) without extra escaping.
+/**
+ * How every app icon reaches the screen (AppIcon, the apps panel, the phone's
+ * app shortcuts), as an <img> source so the SVG can't run script. Percent
+ * encoding instead of base64 because it needs no Buffer on the client.
+ */
 export function appIconDataUrl(icon: string): string {
 	return `data:image/svg+xml,${encodeURIComponent(icon)}`;
 }
 
+/**
+ * Validates a manifest wherever one enters the system: the registry client
+ * reading an image label, and scripts/apps.ts when building app images.
+ */
 export const appManifestSchema = z
 	.object({
 		id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Lowercase letters, digits and dashes only'),
@@ -116,7 +123,7 @@ export const appManifestSchema = z
 		entryScreenId: z.string().default('main'),
 		// Brand identity shown wherever the app itself (not its dashboard cards
 		// or screen content) is represented: the install preview, the apps list,
-		// its home-screen tile, its own page header. All optional — an app
+		// its home-screen tile, its own page header. All optional, an app
 		// without them falls back to the host's generic styling.
 		icon: appIconSchema.optional(),
 		primaryColor: hexColorSchema.optional(),
@@ -145,5 +152,5 @@ export const appManifestSchema = z
 
 export type AppManifest = z.infer<typeof appManifestSchema>;
 
-// The OCI image label the manifest is read from (a JSON document).
+/** The image label carrying the manifest JSON, written by scripts/apps.ts and read by the registry client. */
 export const MANIFEST_LABEL = 'dev.pivi.manifest';

@@ -1,12 +1,12 @@
-// What an update asks for beyond what the user already approved. A new version
-// that only changes code is applied without asking (when auto-update is on); one
-// that wants more access than before waits for the user, because the earlier
-// approval was for the earlier ask.
+// Lets app updates apply silently only when they ask for nothing new, since the
+// user's approval covered the old manifest's access, not the new one's.
 import { domainsAllow, type PermissionKey, type AppManifest } from './manifest';
 
-// Whether `candidate` (an exact host or `*.suffix`) is already within `approved`.
-// A wildcard is only covered by an equal or broader wildcard: approving
-// `a.example.com` says nothing about `*.example.com`.
+/**
+ * Whether an update's domain was already approved, so it isn't shown as new.
+ * Unlike domainsAllow, a wildcard is only covered by an equal or broader
+ * wildcard: approving `a.example.com` says nothing about `*.example.com`.
+ */
 export function domainCovered(approved: readonly string[], candidate: string): boolean {
 	if (!candidate.startsWith('*.')) return domainsAllow(approved, candidate);
 
@@ -18,14 +18,18 @@ export function domainCovered(approved: readonly string[], candidate: string): b
 	});
 }
 
+/** What an update asks for beyond the approval, shown to the user on the /apps screen. */
 export type ManifestChange = {
 	addedPermissions: PermissionKey[];
 	addedDomains: string[];
 	protocolChanged: boolean;
-	// Whether the user has to approve before this runs.
 	needsApproval: boolean;
 };
 
+/**
+ * Used by the updater and app state to decide whether a new version may
+ * install on its own or has to wait for the user's approval.
+ */
 export function diffManifests(approved: AppManifest, next: AppManifest): ManifestChange {
 	const addedPermissions = next.permissions.filter((key) => !approved.permissions.includes(key));
 	const approvedDomains = approved.network?.domains ?? [];

@@ -2,7 +2,7 @@ import { bufferedAheadSeconds } from './time';
 
 const POLL_MS = 500;
 
-// Subset of shaka's Stats, avoids importing its types here.
+/** The Shaka stats the diagnostics panel shows. A local subset so this file doesn't import shaka's types. */
 export type ShakaStats = {
 	estimatedBandwidth: number;
 	streamBandwidth: number;
@@ -13,6 +13,7 @@ export type ShakaStats = {
 	stallsDetected: number;
 };
 
+/** One snapshot rendered by DiagnosticsPanel. */
 export type Diagnostics = {
 	resolution: string;
 	readyState: number;
@@ -21,6 +22,7 @@ export type Diagnostics = {
 	shakaStats: ShakaStats | null;
 };
 
+// Placeholders keep the panel rendering before the element exists.
 const resolutionOf = (el: HTMLVideoElement | undefined) =>
 	el ? `${el.videoWidth}×${el.videoHeight}` : '—';
 
@@ -33,9 +35,9 @@ const bufferedAheadOf = (el: HTMLVideoElement | undefined) =>
 	el ? bufferedAheadSeconds(el.buffered, el.currentTime) : 0;
 
 /**
- * Element and Shaka internals for the diagnostics panel. None of it is
- * reactive, so it is polled, and only while the panel is open. Must be
- * created during component init.
+ * Feeds the play page's diagnostics panel, so playback problems can be read
+ * on the TV without a console. None of it is reactive, so it is polled while
+ * the panel is open. Must be created during component init.
  */
 export function createDiagnostics(deps: {
 	getVideo: () => HTMLVideoElement | undefined;
@@ -74,6 +76,7 @@ export function createDiagnostics(deps: {
 		set open(value: boolean) {
 			open = value;
 		},
+		/** Last polled values, only fresh while the panel is open. */
 		get snapshot() {
 			return snapshot;
 		},

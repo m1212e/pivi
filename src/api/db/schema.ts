@@ -4,6 +4,7 @@ import type { AppImage } from '../apps/image';
 import type { AppSigner } from '../apps/signature';
 import { nanoid } from '../nanoid';
 
+// Tables for profiles, paired phones, the TV's identity and installed apps.
 const defaultTimestamps = {
 	createdAt: timestamp().defaultNow().notNull(),
 	updatedAt: timestamp({ mode: 'date' })
@@ -19,6 +20,7 @@ const defaultIdAndTimestamps = {
 	...defaultTimestamps
 };
 
+// Profiles on this device. Login is a 4 digit PIN, stored only as a hash.
 export const user = snakeCase.table('user', {
 	...defaultIdAndTimestamps,
 	username: text().notNull().unique(),
@@ -26,6 +28,8 @@ export const user = snakeCase.table('user', {
 	image: text()
 });
 
+// Phones that completed pairing. The relay checks their signatures against
+// `publicKey`, and `lastSeenAt` lets deviceCleanup drop abandoned ones.
 export const pairedDevice = snakeCase.table('paired_device', {
 	...defaultIdAndTimestamps,
 	publicKey: text().notNull(),
@@ -33,6 +37,8 @@ export const pairedDevice = snakeCase.table('paired_device', {
 	lastSeenAt: timestamp({ mode: 'date' })
 });
 
+// A single row holding this TV's keypair (see pairing.ts), so phones can
+// recognize the relay after a restart.
 export const tvIdentity = snakeCase.table('tv_identity', {
 	id: text().primaryKey().notNull().default('singleton'),
 	publicKey: text().notNull(),
@@ -40,27 +46,24 @@ export const tvIdentity = snakeCase.table('tv_identity', {
 	...defaultTimestamps
 });
 
-// One row per app installed on this device (not per user: there's a single
-// TV, and what an app is allowed to do is a device-level decision, unlike
-// the per-profile state an app keeps in its own /storage volume). An app
-// is an OCI image; this row is the host's record of *which one*, *who signed
-// it* and *what the user approved* — the manifest the image ships is only ever
-// a request until it's been accepted here.
-// A newer version of an app that's waiting for the user to approve what it
-// asks for — pulled and verified already, but not running.
+// Types `installedApp.pendingUpdate`: a newer version already pulled and
+// verified, parked until the user approves what it asks for.
 export type PendingAppUpdate = { manifest: AppManifest; image: AppImage };
 
+// One row per installed app, accessed through apps/store.ts. Per device, not
+// per user, since what an app may do is a device level decision. This is the
+// host's record of which image, who signed it and what the user approved, the
+// manifest an image ships is only a request until it's accepted here.
 export const installedApp = snakeCase.table('installed_app', {
 	...defaultIdAndTimestamps,
-	// The manifest's own id; also what every other app-keyed table uses.
+	// The manifest's own id, also what every other app keyed table uses.
 	appId: text().notNull().unique(),
 	name: text().notNull(),
 	version: text().notNull(),
 
-	// What the app was installed from, written like a compose `image:`
-	// (normalized, see #lib/apps/imageRef) and followed for updates — the
-	// repository and tag. `imageDigest` is the exact image that's pinned and
-	// runs; an update is "resolve the tag again, compare digests".
+	// What the app was installed from, like a compose `image:` (normalized,
+	// see #lib/apps/imageRef), followed for updates. `imageDigest` is the
+	// pinned image that runs, an update resolves the tag and compares digests.
 	imageRef: text().notNull(),
 	imageDigest: text().notNull(),
 	// How to run it, read from the image at install/update time so starting a
@@ -78,10 +81,9 @@ export const installedApp = snakeCase.table('installed_app', {
 	enabled: boolean().notNull().default(true),
 	autoUpdate: boolean().notNull().default(true),
 
-	// The manifest as the user last approved it, and the permissions they
-	// currently have switched on (always a subset of what that manifest asks
-	// for; the network permission covers all of its domains at once). Spawning
-	// an app reads these two, never anything the image says about itself.
+	// The manifest as the user last approved it and the permissions they have
+	// switched on, always a subset of what it asks for. Spawning an app reads
+	// these two, never anything the image says about itself.
 	approvedManifest: jsonb().$type<AppManifest>().notNull(),
 	grantedPermissions: jsonb().$type<PermissionKey[]>().notNull().default([]),
 	// An update whose manifest asks for something new (a permission or a

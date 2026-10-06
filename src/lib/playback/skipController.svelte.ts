@@ -14,8 +14,8 @@ type Deps = {
 };
 
 /**
- * Offers or applies skipping of marked sections such as intros. Must be
- * created during component init.
+ * Backs the TV player's skip banner and its persisted skip toggle, so sponsor
+ * or intro sections get skipped or offered. Must be created during component init.
  */
 export function createSkipController(deps: Deps) {
 	let segments = $state<SkipSegment[]>([]);

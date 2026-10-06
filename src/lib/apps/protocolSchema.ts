@@ -1,8 +1,6 @@
-// The host<->app protocol (host.ts) as a plain JSON document: every method,
-// who sends it, whether it expects a reply, which manifest feature gates it, and
-// JSON Schema for its parameters and result. This is what an app author in a
-// language other than TypeScript implements against. The release workflow
-// publishes it as app-protocol.schema.json (scripts/apps.ts).
+// The host/app protocol (host.ts) as a JSON document, so app authors outside
+// TypeScript have something to implement against. scripts/apps.ts publishes it
+// as app-protocol.schema.json with each release.
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
 import { appScreenSchema, uiEventSchema } from './ui';
@@ -29,11 +27,11 @@ import {
 } from './host';
 import { featureSchema, type Feature } from './manifest';
 
+// One row per protocol method, so the published document can't drift from host.ts.
 type MethodSpec = {
 	method: string;
 	// Who sends it.
 	from: 'app' | 'host';
-	// A request gets a response; a notification doesn't.
 	kind: 'request' | 'notification';
 	// The manifest feature that has to be declared for the host to use it.
 	feature?: Feature;
@@ -42,6 +40,7 @@ type MethodSpec = {
 	result?: z.ZodType;
 };
 
+// Descriptions are written for third party app authors, not for this codebase.
 const METHODS: MethodSpec[] = [
 	{
 		method: readyNotification.method,
@@ -126,9 +125,12 @@ const METHODS: MethodSpec[] = [
 	}
 ];
 
+// Input side of each schema, since that is what the sender has to produce.
+// Unrepresentable zod types become `any` instead of failing the release build.
 const toSchema = (schema: z.ZodType | undefined) =>
 	schema ? z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) : undefined;
 
+/** Called by scripts/apps.ts at release time to write the published protocol schema. */
 export function buildProtocolDocument() {
 	return {
 		title: 'pivi app protocol',

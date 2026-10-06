@@ -4,9 +4,12 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { installedApp } from '../db/schema';
 
+/** An installed app as stored. Derived from the schema so it can't drift from the table. */
 export type InstalledApp = typeof installedApp.$inferSelect;
+/** What installApp writes, with the columns that have defaults left optional. */
 export type NewInstalledApp = typeof installedApp.$inferInsert;
 
+/** The seam installer.ts and updater.ts use, so their tests can run on an in-memory fake. */
 export interface AppStore {
 	list(): Promise<InstalledApp[]>;
 	find(appId: string): Promise<InstalledApp | undefined>;
@@ -15,6 +18,10 @@ export interface AppStore {
 	remove(appId: string): Promise<void>;
 }
 
+/**
+ * The real store, also read directly by manager.ts and the home screen
+ * handlers. Kept free of logic so test fakes only have to match its shape.
+ */
 export const dbAppStore: AppStore = {
 	list: () => db.select().from(installedApp),
 

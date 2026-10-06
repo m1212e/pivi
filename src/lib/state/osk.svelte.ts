@@ -16,6 +16,7 @@ export const osk = $state({
 	suggestions: { owner: null as Element | null, items: [] as string[] }
 });
 
+/** Single check for whether the keyboard is on screen, since the target alone can be stale or hidden by the phone keyboard. */
 export function keyboardVisible(): boolean {
 	return !!osk.target && osk.target.isConnected && !osk.phoneKeyboard;
 }

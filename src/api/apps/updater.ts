@@ -1,10 +1,10 @@
 // Keeping installed apps current. For each app, the tag it follows is
-// resolved again; a different digest is a new version, which is only trusted if
+// resolved again. A different digest is a new version, which is only trusted if
 // it carries a signature from the same key the app was installed with.
 //
 // A new version that asks for nothing more than the approved one is swapped in
 // (when auto-update is on) and rolled back if it won't start. One that asks for
-// more — a permission, a domain — is pulled and parked for the user to approve,
+// more (a permission, a domain) is pulled and parked for the user to approve,
 // and the old version keeps running meanwhile.
 import { parseImageRef } from '#lib/apps/imageRef';
 import { diffManifests } from '#lib/apps/manifestDiff';
@@ -15,8 +15,14 @@ import { AppError } from './installer';
 import { pinnedReference, resolveImage } from './registry';
 import type { InstalledApp } from './store';
 
+/**
+ * Reported per app so the app manager can summarize a manual check and the
+ * hourly job (lifecycle.ts) can log what changed. 'ignored' is a digest the
+ * user rejected or that failed to start before.
+ */
 export type UpdateOutcome = 'unchanged' | 'applied' | 'pending' | 'ignored' | 'failed';
 
+// Pinned to a digest so removing an image never touches a different build.
 function referenceFor(row: InstalledApp, digest: string): string {
 	return pinnedReference(parseImageRef(row.imageRef), digest);
 }
@@ -50,6 +56,7 @@ async function switchTo(
 	}
 }
 
+// Shared by auto-apply and manual approval so both end in the same state.
 async function applyImage(
 	deps: AppDeps,
 	row: InstalledApp,
@@ -57,7 +64,7 @@ async function applyImage(
 	manifest: InstalledApp['approvedManifest']
 ): Promise<void> {
 	// What the user had switched on stays on, limited to what the new version
-	// still asks for; anything it newly asks for is granted by approving.
+	// still asks for, and anything it newly asks for is granted by approving.
 	const kept = row.grantedPermissions.filter((key) => manifest.permissions.includes(key));
 	const added = manifest.permissions.filter(
 		(key) => !row.approvedManifest.permissions.includes(key)
@@ -77,8 +84,10 @@ async function applyImage(
 	await deps.backend.removeImage(referenceFor(row, row.imageDigest));
 }
 
-// The badge's cached answer is dropped whenever this runs, since the outcome
-// (applied, parked, rolled back) changes what it should say.
+/**
+ * The entry point every update path ends in, exported for tests. Drops the
+ * badge's cached answer, since the outcome changes what it should say.
+ */
 export async function checkForUpdate(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	try {
 		return await runCheck(deps, appId);
@@ -90,6 +99,7 @@ export async function checkForUpdate(deps: AppDeps, appId: string): Promise<Upda
 type ImageRef = ReturnType<typeof parseImageRef>;
 type ResolvedImage = Awaited<ReturnType<typeof resolveImage>>;
 
+// Stored in lastError, which the UI shows as text.
 function messageOf(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
@@ -101,6 +111,7 @@ function knownOutcome(row: InstalledApp, digest: string): UpdateOutcome | undefi
 	return digest === row.pendingUpdate?.image.digest ? 'pending' : undefined;
 }
 
+// Checks that the new build is genuinely this app before it's pulled.
 async function vetCandidate(
 	deps: AppDeps,
 	row: InstalledApp,
@@ -116,6 +127,7 @@ async function vetCandidate(
 	}
 }
 
+// A build that won't start must not keep failing on every check.
 async function tryApply(
 	deps: AppDeps,
 	row: InstalledApp,
@@ -126,7 +138,7 @@ async function tryApply(
 		await applyImage(deps, row, image, resolved.manifest);
 		return 'applied';
 	} catch (error) {
-		// Rolled back already; remembered so it isn't retried every check.
+		// Rolled back already, and remembered so it isn't retried every check.
 		await deps.store.update(row.appId, {
 			ignoredDigest: resolved.digest,
 			lastError: `Version ${resolved.manifest.version} failed to start and was rolled back: ${messageOf(error)}`
@@ -135,6 +147,7 @@ async function tryApply(
 	}
 }
 
+// Anything that widens what the user approved has to wait for them.
 async function applyOrPark(
 	deps: AppDeps,
 	row: InstalledApp,
@@ -155,6 +168,8 @@ async function applyOrPark(
 	return tryApply(deps, row, image, resolved);
 }
 
+// Pulls before applying or parking, so either way the new build can later
+// start without the network.
 async function checkRow(deps: AppDeps, row: InstalledApp): Promise<UpdateOutcome> {
 	const ref = parseImageRef(row.imageRef);
 	const resolved = await resolveImage(ref, deps.registry);
@@ -168,6 +183,8 @@ async function checkRow(deps: AppDeps, row: InstalledApp): Promise<UpdateOutcome
 	return applyOrPark(deps, row, resolved);
 }
 
+// Errors are recorded on the row and reported as 'failed' so one broken app
+// doesn't abort a check of all apps.
 async function runCheck(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	const row = await deps.store.find(appId);
 	if (!row) throw new AppError(`No app "${appId}" is installed`);
@@ -180,12 +197,14 @@ async function runCheck(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	}
 }
 
+// Apps with a check running right now, see checkForUpdateOnce.
 const inFlight = new Set<string>();
 
-// For callers that notice a new digest on their own (the home screen's badge
-// check) and want it applied without waiting for the next scheduled run. A
-// check already running for the app makes this a no-op, so repeated page loads
-// can't stack up pulls or restarts.
+/**
+ * Lets the home screen's badge check (updateAvailability.ts) apply an update it
+ * spotted without waiting for the hourly run. A no-op while a check for the app
+ * is running, so repeated page loads can't stack up pulls or restarts.
+ */
 export async function checkForUpdateOnce(
 	deps: AppDeps,
 	appId: string
@@ -199,8 +218,10 @@ export async function checkForUpdateOnce(
 	}
 }
 
-// Every app, one after another: this runs in the background, and pulls are
-// heavy enough that doing several at once would only slow each other down.
+/**
+ * Behind the hourly job (lifecycle.ts) and the app manager's "check for
+ * updates". Apps go one at a time since parallel pulls only slow each other down.
+ */
 export async function checkAllForUpdates(deps: AppDeps): Promise<Record<string, UpdateOutcome>> {
 	const outcomes: Record<string, UpdateOutcome> = {};
 	for (const row of await deps.store.list()) {
@@ -209,6 +230,10 @@ export async function checkAllForUpdates(deps: AppDeps): Promise<Record<string, 
 	return outcomes;
 }
 
+/**
+ * The app manager's approve button for a parked update, which is the user's
+ * consent to whatever the new version asks for in addition.
+ */
 export async function approvePendingUpdate(deps: AppDeps, appId: string): Promise<void> {
 	const row = await deps.store.find(appId);
 	if (!row?.pendingUpdate) throw new AppError('There is no update waiting for approval');
@@ -216,6 +241,10 @@ export async function approvePendingUpdate(deps: AppDeps, appId: string): Promis
 	availabilityCache.forget(appId);
 }
 
+/**
+ * The app manager's reject button. Remembers the digest so the same version
+ * isn't parked again at the next check.
+ */
 export async function rejectPendingUpdate(deps: AppDeps, appId: string): Promise<void> {
 	const row = await deps.store.find(appId);
 	if (!row?.pendingUpdate) return;

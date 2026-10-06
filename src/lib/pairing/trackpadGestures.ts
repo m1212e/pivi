@@ -3,9 +3,10 @@
 // touch settles into a tap or turns into a swipe, so every press the TV sees
 // is always followed by exactly one release or cancel.
 
-/** How far a finger travels before a press counts as a swipe. */
+/** Finger travel before a press becomes a swipe, so a slightly shaky tap still selects. */
 export const MOVE_THRESHOLD = 48;
 
+/** What TrackpadTab.svelte wires to the remote controller's trackpad commands. */
 export type TrackpadActions = {
 	press: () => void;
 	release: () => void;
@@ -14,8 +15,13 @@ export type TrackpadActions = {
 	move: (dx: number, dy: number) => void;
 };
 
+// Screen coordinates of a touch.
 type Point = { x: number; y: number };
 
+/**
+ * Gesture logic for TrackpadTab.svelte, kept apart from its touch event
+ * plumbing. One instance per touch surface.
+ */
 export function createTrackpadGestures(actions: TrackpadActions) {
 	let origin: Point | null = null;
 	let moved = false;

@@ -5,6 +5,7 @@ import { Cable, RadioTower, Wifi, WifiOff, type LucideIcon } from '@lucide/svelt
 import * as m from '#lib/paraglide/messages';
 import type { WifiManagementState } from './management';
 
+/** Order matters: an in-flight join wins over ethernet, which wins over the wifi mode. */
 export function wifiStatusLabel(wifi: WifiManagementState): string {
 	if (wifi.connectingSsid) return m.wifi_connecting_to({ ssid: wifi.connectingSsid });
 	if (wifi.ethernet) return m.wifi_on_ethernet();
@@ -13,6 +14,7 @@ export function wifiStatusLabel(wifi: WifiManagementState): string {
 	return m.wifi_offline();
 }
 
+/** Pictogram for the /wifi page's status badge, same precedence as the label minus the in-flight join. */
 export function wifiStatusIcon(wifi: WifiManagementState): LucideIcon {
 	if (wifi.ethernet) return Cable;
 	if (wifi.mode === 'hotspot') return RadioTower;

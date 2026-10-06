@@ -1,11 +1,11 @@
-// Narrower than the app-facing SubtitleTrack on purpose. Url and format never reach the client.
+/** Tracks the TV picker and the phone list. Narrower than the app facing SubtitleTrack on purpose, url and format never reach the client. */
 export type SubtitleTrack = {
 	language: string;
 	label: string | null;
 	kind: 'caption' | 'transcription';
 };
 
-// The GraphQL layer has no literal union type, so `kind` arrives as a plain string.
+/** Converts the play page's GraphQL result. `kind` arrives as a plain string since GraphQL has no literal union type. */
 export function toSubtitleTracks(
 	tracks: readonly { language: string; label: string | null; kind: string }[] | null | undefined
 ): SubtitleTrack[] {
@@ -16,7 +16,7 @@ export function toSubtitleTracks(
 	}));
 }
 
-/** Off (null) always comes first. */
+/** Choices for the subtitle picker. Off (null) always comes first so it is the default slot. */
 export function subtitleOptions(tracks: readonly SubtitleTrack[]): (string | null)[] {
 	return [null, ...tracks.map((t) => t.language)];
 }

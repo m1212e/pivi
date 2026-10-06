@@ -1,15 +1,8 @@
-// Tier 2: an app describes a full custom screen as data instead of
-// markup. The shell renders every node with its own components and owns
-// focus/nav behavior, the same way it already does for Tier 1 cards — a
-// app only ever supplies structure here, never a DOM or webview. This is
-// the tier that covers things like a settings screen or a browse-with-
-// filters UI that a fixed card schema can't express.
-//
-// This is the plugin's way into the shell's one component library
-// (src/lib/components): every node kind is either layout or renders a real
-// shell component (Button, MediaCard, ContentRow, HeroBanner, LoadingSpinner,
-// ...), never a look-alike, so a plugin's screen can't drift from the host's
-// own. Adding a new one touches five places, in order:
+// Tier 2: an app describes whole screens (browse feeds, settings, sign-in) as
+// data, never markup. This is the plugin's way into the shell's one component
+// library: every node is layout or a real shell component, so a plugin's
+// screen can't drift from the host's own and focus/nav stays the shell's job.
+// Adding a node kind touches five places, in order:
 //   1. the `UiNode` union below (the real, hand-written type)
 //   2. the matching branch in `uiNodeSchema` (the runtime/RPC-boundary check)
 //   3. `UI_NODE_TYPES` (checked for completeness at compile time)
@@ -21,16 +14,17 @@ import { z } from 'zod';
 import { appThemeSchema } from './theme';
 import { appActionSchema, type AppAction } from './dashboard';
 
-// The type has to be declared by hand alongside the schema — zod can't
-// infer a recursive type from a lazily-defined schema on its own, since the
-// schema references itself before it exists.
+/**
+ * One node of an app screen, rendered by UiNodeRenderer. Written by hand
+ * because zod can't infer a recursive type from a lazy schema.
+ */
 export type UiNode =
 	| {
 			type: 'container';
 			direction: 'row' | 'column';
 			children: UiNode[];
-			// Lets a row wrap onto multiple lines instead of overflowing --
-			// paired with a fixed `width` on each child, this is how a screen
+			// Lets a row wrap onto multiple lines instead of overflowing.
+			// Paired with a fixed `width` on each child, this is how a screen
 			// expresses a card grid (e.g. YouTube's browse feed) without the
 			// schema needing its own dedicated grid node.
 			wrap?: boolean;
@@ -44,7 +38,7 @@ export type UiNode =
 			// its widest *unwrapped* line of text, instead of wrapping within
 			// the thumbnail's own width above it.
 			width?: string;
-			// Same idea as a button's `action` (see below) -- makes the whole
+			// Same idea as a button's `action` (see below). Makes the whole
 			// container (e.g. a video card: thumbnail + title + channel) a
 			// single navigable target instead of needing a separate, visually
 			// redundant "Play" button inside it.
@@ -80,7 +74,7 @@ export type UiNode =
 			type: 'text';
 			value: string;
 			variant?: 'title' | 'subtitle' | 'body' | 'headline' | 'display';
-			// Clamps to this many lines (ellipsis beyond it) -- titles in a
+			// Clamps to this many lines (ellipsis beyond it). Titles in a
 			// card grid need to wrap without pushing neighboring cards around.
 			lines?: number;
 	  }
@@ -136,15 +130,15 @@ export type UiNode =
 			aspect?: 'video' | 'poster' | 'square';
 			width?: string;
 			// A short label pinned to the image's bottom-right corner (a video's
-			// duration, say) -- the one thing a bare `img` can't do on its own.
+			// duration, say), the one thing a bare `img` can't do on its own.
 			badge?: string;
 	  }
-	// `onSelect` is an event id, not a callback — the app process has no
+	// `onSelect` is an event id, not a callback. The app process has no
 	// direct handle on the shell's DOM, so the event crosses back over the
 	// RPC channel as a UiEvent instead. `action`, when present, takes over
 	// instead: the button becomes a real navigable link (via the same
 	// appActionHref every dashboard card already resolves through) rather
-	// than firing a UI event — this is how a screen's own "Play" button
+	// than firing a UI event. This is how a screen's own "Play" button
 	// reaches the shared player route without a bespoke navigation path.
 	// `nav` renders a sidebar entry (full width, optional icon, highlighted
 	// when `selected`) instead of the default pill. `icon` is the `d` of a
@@ -178,6 +172,7 @@ export type UiNode =
 	  }
 	| { type: 'list'; items: UiNode[] };
 
+// Runtime check at the RPC boundary, since the app process is untrusted input.
 const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 	z.discriminatedUnion('type', [
 		z.object({
@@ -276,9 +271,7 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 	])
 );
 
-// Every node kind, in the order docs/app-ui-components.md lists them. The
-// annotation below fails to compile when a kind is added to `UiNode` but not
-// here, and the doc's spec then fails until it is described there too.
+// In the order docs/app-ui-components.md lists them.
 const listedNodeTypes = [
 	'container',
 	'text',
@@ -300,10 +293,16 @@ type AllNodeTypesListed<T extends readonly UiNode['type'][]> = [
 ] extends [never]
 	? T
 	: never;
+/**
+ * Keeps the app UI docs complete: this fails to compile when a kind is missing
+ * here, and uiComponents.spec.ts fails until each listed kind is documented.
+ */
 export const UI_NODE_TYPES: AllNodeTypesListed<typeof listedNodeTypes> = listedNodeTypes;
 
-// No app id: the host knows which app it's talking to, and an app
-// naming one itself would only be a way to claim to be another.
+/**
+ * Validates `plugin/publishScreen` at the RPC boundary. No app id, since the
+ * host knows who is talking and a self-declared one could impersonate another.
+ */
 export const appScreenSchema = z.object({
 	screenId: z.string(),
 	theme: appThemeSchema.optional(),
@@ -312,8 +311,7 @@ export const appScreenSchema = z.object({
 
 export type AppScreen = z.infer<typeof appScreenSchema>;
 
-// Fired by the shell back to the app process when the user interacts
-// with a node carrying an event id.
+/** Carries a user interaction on a node with an event id back to the app (`host/uiEvent`). */
 export const uiEventSchema = z.object({
 	screenId: z.string(),
 	eventId: z.string(),

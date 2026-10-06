@@ -4,9 +4,11 @@ import { AuthError, loginWithPin, logout, registerWithPin } from '../auth';
 import { schemaBuilder } from '../rumble';
 import { credentialsSchema } from '../validation';
 
-// The message a given failure should surface, or undefined to fall back. A
-// ZodError's first issue is the one worth showing; an AuthError is already
-// written for a person to read; anything else is unexpected and says nothing.
+// Login and profile creation. Errors are mapped to short messages the PIN pad
+// can show, never the raw cause.
+
+// Only validation and AuthError messages are written for a person, anything
+// else falls back to a generic message so internals don't leak.
 function errorMessage(err: unknown): string | undefined {
 	if (err instanceof ZodError) return err.issues[0]?.message;
 	return err instanceof AuthError ? err.message : undefined;

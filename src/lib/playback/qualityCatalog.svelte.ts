@@ -20,9 +20,9 @@ type Deps = {
 };
 
 /**
- * What is known about each quality tier: its codecs, and for MSE candidates
- * whether a segment index exists. Drives the mode icons and the initial pick.
- * Must be created during component init.
+ * Lets the play page show real mode icons per tier and open on the best one,
+ * by resolving each tier's codecs and probing MSE candidates for a segment
+ * index. Must be created during component init.
  */
 export function createQualityCatalog({ urls, fetchMeta, defaultMeta }: Deps) {
 	let meta = $state<Partial<Record<QualityOption, QualityMeta>>>({
@@ -50,6 +50,7 @@ export function createQualityCatalog({ urls, fetchMeta, defaultMeta }: Deps) {
 		return resolved;
 	}
 
+	// Codecs alone can't tell if MSE works, only a real index fetch can.
 	async function probe(option: QualityOption, tierMeta: QualityMeta) {
 		if (!isMseCandidate(tierMeta)) return;
 		try {

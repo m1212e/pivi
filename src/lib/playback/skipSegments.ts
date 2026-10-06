@@ -1,5 +1,7 @@
-// Skippable sections an app reports for a session (SponsorBlock for YouTube).
+// Decisions behind the TV player's skip banner, kept free of Svelte so
+// skipController stays thin and this stays testable.
 
+/** A skippable section an app reports for a session, like a SponsorBlock segment for YouTube. */
 export type SkipSegment = { startSeconds: number; endSeconds: number; label: string };
 
 // Lead time so the toggle is reachable before the segment starts.
@@ -7,6 +9,7 @@ const SKIP_LEAD_SECONDS = 3;
 // A segment at the very start never has a lead window to enter.
 const SKIP_IMMEDIATE_START_SECONDS = 1;
 
+/** Everything nextSkipStep needs, passed in so it doesn't read Svelte state. */
 export type SkipInput = {
 	segments: readonly SkipSegment[];
 	decided: ReadonlySet<SkipSegment>;
@@ -16,6 +19,7 @@ export type SkipInput = {
 	buffering: boolean;
 };
 
+/** `resolve` means the segment was reached, `show` sets what the banner offers. */
 export type SkipStep =
 	{ kind: 'resolve'; segment: SkipSegment } | { kind: 'show'; segment: SkipSegment | null };
 
@@ -39,8 +43,8 @@ function inLeadWindow(input: SkipInput): SkipSegment | undefined {
 }
 
 /**
- * What to do for the current position. Driven only by position, so pausing
- * in a lead window freezes the decision instead of firing on a timer.
+ * Picks the skip banner's next move. Driven only by position, so pausing in a
+ * lead window freezes the decision instead of firing on a timer.
  */
 export function nextSkipStep(input: SkipInput): SkipStep {
 	if (input.active) {
@@ -54,7 +58,7 @@ export function nextSkipStep(input: SkipInput): SkipStep {
 	return { kind: 'show', segment: inLeadWindow(input) ?? null };
 }
 
-/** Where to jump when a segment is reached, null to just play through. */
+/** Applies the viewer's skip toggle once a segment is reached. Null means play through. */
 export function skipTarget(
 	segment: SkipSegment,
 	skipEnabled: boolean,

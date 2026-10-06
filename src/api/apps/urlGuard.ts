@@ -12,6 +12,7 @@
 import { BlockList, isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 
+// Loopback, private, link-local, CGNAT, documentation and multicast ranges.
 const nonPublic = new BlockList();
 for (const [network, prefix] of [
 	['0.0.0.0', 8],
@@ -49,6 +50,10 @@ function embeddedIpv4(address: string): string | undefined {
 	return match?.[1];
 }
 
+/**
+ * The per-address check behind assertPublicHost, exported for its tests.
+ * Non-IP input returns false, so it fails closed.
+ */
 export function isPublicAddress(address: string): boolean {
 	const family = isIP(address);
 	if (family === 0) return false;
@@ -57,8 +62,13 @@ export function isPublicAddress(address: string): boolean {
 	return !nonPublic.check(address, family === 4 ? 'ipv4' : 'ipv6');
 }
 
+/** Thrown by streamCache.ts when an app hands back a URL the host must not fetch. */
 export class UnsafeUrlError extends Error {}
 
+/**
+ * Called by streamCache.ts on every stream url before ffmpeg or the proxy
+ * fetch it. Every resolved address must be public, since a name can return a mix.
+ */
 export async function assertPublicHost(hostname: string): Promise<void> {
 	const host = hostname.replace(/^\[|\]$/g, '');
 	const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);

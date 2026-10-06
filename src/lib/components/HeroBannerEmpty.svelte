@@ -3,11 +3,9 @@
 	import { fade, fly } from 'svelte/transition';
 	import heroPlaceholder from '#lib/assets/heroPlaceholder.svg';
 
-	// Shown instead of HeroBanner when no app has contributed a single card
-	// yet -- a fresh login with nothing configured, not "still loading" (the
-	// dashboard query is awaited before the page ever renders, so an empty
-	// result here is final, not a loading flash). Matches HeroBanner's exact
-	// dimensions so nothing jumps once real content starts arriving.
+	// Home's hero when no app has contributed a card yet, like a fresh login.
+	// Separate from HeroBannerSkeleton since this state is final, not loading.
+	// Matches HeroBanner's dimensions so nothing jumps once content arrives.
 </script>
 
 <div

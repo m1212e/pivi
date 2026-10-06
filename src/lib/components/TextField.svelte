@@ -2,6 +2,9 @@
 	import { tick } from 'svelte';
 	import { isSingleLineEnter, TEXT_EXIT_EVENT } from '#lib/textEntry';
 
+	// The text field for every TV form (register, wifi, app manager, TextInput).
+	// At rest it is a plain button so remote navigation can pass over it without
+	// raising a keyboard.
 	let {
 		value = $bindable(''),
 		label,
@@ -53,7 +56,7 @@
 		input?.focus();
 	}
 
-	/** Ends editing and puts focus back on the field's resting button. */
+	/** Ends editing and refocuses the resting button, so remote navigation continues from here. */
 	export async function stop() {
 		if (!editing) return;
 		editing = false;
@@ -88,6 +91,7 @@
 		onblur?.();
 	}
 
+	// The phone has no Escape key, so it ends editing through this event.
 	$effect(() => {
 		const el = input;
 		if (!el) return;

@@ -1,6 +1,8 @@
-// One guarded way to touch localStorage. Every caller needs the same
-// tolerance for private mode and blocked site data.
+// One guarded way to touch localStorage for the ambient music toggle, playback
+// preferences and the remote's last tab. Each needs the same tolerance for
+// private mode and blocked site data.
 
+/** Narrow type so tests can pass a plain fake instead of the real Storage. */
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 /**
@@ -17,7 +19,7 @@ export function browserStorage(isBrowser: boolean): KeyValueStorage | null {
 	}
 }
 
-/** Null when missing, unreadable or without storage. */
+/** Null when missing, unreadable or without storage, so callers just fall back to a default. */
 export function readItem(storage: KeyValueStorage | null, key: string): string | null {
 	try {
 		return storage?.getItem(key) ?? null;

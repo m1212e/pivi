@@ -3,6 +3,9 @@
 	import ContentRow from '#lib/components/ContentRow.svelte';
 	import MediaCard from '#lib/components/MediaCard.svelte';
 
+	// A dashboard shelf of video cards for one app's suggestions. Kept apart
+	// from AppsRow because these are media thumbnails that link into an app,
+	// while that one holds app tiles plus the add-app entry.
 	let {
 		title,
 		items

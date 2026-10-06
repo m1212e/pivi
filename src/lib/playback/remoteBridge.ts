@@ -4,8 +4,10 @@
 import { clampVolume, isOfferedSubtitle } from './preferences';
 import { QUALITY_OPTIONS, isQualityOption, type QualityMode, type QualityOption } from './quality';
 
+/** Transport buttons on the phone's player tab, dispatched by RemoteBridge as `pivi-player-action`. */
 export type PlayerAction = 'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo';
 
+/** How the play page reacts to each phone command. */
 export type RemoteHandlers = {
 	onAction: (action: PlayerAction) => void;
 	onSeek: (seconds: number) => void;
@@ -23,8 +25,9 @@ function listen<T>(name: string, handler: (detail: T) => void): () => void {
 }
 
 /**
- * Wires the phone's events to the player. Seek and quality from the phone skip
- * the controls lock on purpose. Returns the cleanup, so it fits an $effect.
+ * Lets the paired phone drive the TV player. Values are validated here so the
+ * page gets clean input. Seek and quality skip the controls lock on purpose.
+ * Returns the cleanup, so it fits an $effect.
  */
 export function bindRemotePlayerEvents(handlers: RemoteHandlers): () => void {
 	const unbind = [

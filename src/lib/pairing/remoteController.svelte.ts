@@ -52,10 +52,12 @@ import {
 } from './remoteProtocol';
 import { connectRemoteSession, type RemoteSession } from './session';
 
+/** The TV's last pushed screen state, also typed into the remote page's tab components. */
 export type TvState = z.infer<typeof stateParamsSchema>;
 type PlayerAction = z.infer<typeof playerActionParamsSchema>['action'];
 type RemotePhase = 'connecting' | 'not-paired' | 'error' | 'ready';
 
+// Shown until the TV's first push arrives, so the UI renders without null checks.
 const INITIAL_TV_STATE: TvState = {
 	hasPinPad: false,
 	hasTextInput: false,
@@ -86,9 +88,9 @@ function buzz(ms: number) {
 }
 
 /**
- * The phone's side of the pairing: the connection to the TV, a mirror of what
- * the TV currently shows, and one method per command the phone can send.
- * Connects on mount. Must be created during component init.
+ * Everything the phone remote page (/remote) needs from the TV, kept out of
+ * the page so its tab components only render. Connects on mount and must be
+ * created during component init.
  */
 export function createRemoteController(token: string | null) {
 	let phase = $state<RemotePhase>('connecting');
@@ -279,4 +281,5 @@ export function createRemoteController(token: string | null) {
 	};
 }
 
+/** The prop type for remote page children that drive the TV, like PlayerTab.svelte. */
 export type RemoteController = ReturnType<typeof createRemoteController>;

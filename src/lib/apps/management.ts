@@ -1,7 +1,6 @@
-// The shape of app-management state shared between the server
-// (appManagementService.ts) and the TV's own /apps screen, which parses
-// what it fetches over GraphQL against this same schema (see
-// routes/apps/+page.svelte's `toState`).
+// App management state shared by the server (appManagementService.ts) and the
+// TV's /apps screen, which parses what it fetches against the same schema so
+// the two sides can't drift apart.
 import { z } from 'zod';
 import { featureSchema, permissionKeySchema } from './manifest';
 
@@ -30,13 +29,14 @@ const installedAppSchema = z.object({
 	// A newer version waiting for the user to approve what it asks for.
 	update: appUpdateSchema.nullable(),
 	error: z.string().nullable(),
-	// The manifest's brand identity (manifest.ts), carried straight through —
-	// null when the app declared none.
+	// The manifest's brand identity (manifest.ts), carried straight through.
+	// Null when the app declared none.
 	icon: z.string().nullable(),
 	primaryColor: z.string().nullable(),
 	secondaryColor: z.string().nullable()
 });
 
+// What the user is about to install, shown for approval before anything is installed.
 const appPreviewSchema = z.object({
 	image: z.string(),
 	name: z.string(),
@@ -51,11 +51,8 @@ const appPreviewSchema = z.object({
 	secondaryColor: z.string().nullable()
 });
 
-// What the last "Check for updates" run found, by app id -- shown once busy
-// goes back to null so the button's own result is visible instead of silently
-// vanishing the instant the check finishes (an app whose version string
-// never changes between builds, say, would otherwise look like the check
-// did nothing at all, successful "nothing to do" included).
+// What the last "Check for updates" run found, by app id. Kept after the check
+// finishes so a run with nothing to do still visibly reports a result.
 const updateCheckSummarySchema = z.object({
 	checkedAt: z.string(),
 	applied: z.array(z.string()),
@@ -63,6 +60,7 @@ const updateCheckSummarySchema = z.object({
 	failed: z.array(z.string())
 });
 
+/** Everything the /apps screen renders, parsed there from the GraphQL response. */
 export const appsStateSchema = z.object({
 	apps: z.array(installedAppSchema),
 	preview: appPreviewSchema.nullable(),

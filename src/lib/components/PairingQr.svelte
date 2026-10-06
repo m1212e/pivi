@@ -2,12 +2,14 @@
 	import { onMount } from 'svelte';
 	import type QRCodeStyling from 'qr-code-styling';
 
+	// The one QR renderer for both the pairing code and the wifi join code, so
+	// they share the styling. The library is imported lazily to keep it out of
+	// the initial bundle.
 	let { url, size = 208 }: { url: string; size?: number } = $props();
 
 	let container: HTMLDivElement;
-	// qr-code-styling is dynamically imported and the QR itself is built
-	// off-thread, so the container sits empty for a beat after mount —
-	// without this the pairing card just shows a blank white square.
+	// The lazy import leaves the container empty for a beat, which would show
+	// as a blank white square without a placeholder.
 	let loaded = $state(false);
 
 	onMount(() => {

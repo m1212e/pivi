@@ -1,27 +1,17 @@
-// Wifi provisioning, the OS half: a thin typed wrapper over `nmcli`.
+// The OS side of wifi provisioning, a thin typed wrapper over `nmcli`. Used by
+// the /wifi screen's service (wifiManagementService.ts), the network status
+// query (handlers/network.ts) and the boot time AP (wifiBootstrap.ts).
 //
-// NetworkManager rather than raw wpa_supplicant because it owns the whole
-// problem this needs solved — scanning, storing credentials persistently,
-// bringing up an access point in shared mode (its own DHCP + DNS for the
-// phone that connects), and switching between the two — where wpa_supplicant
-// alone would leave the AP side, the address handout, and the persistence to
-// us.
-//
-// The CLI rather than the D-Bus API because every operation here is one
-// coarse, human-scale action ("scan", "join this network") with no need for
-// property-change signals or long-lived object proxies, and because nmcli's
-// own terse output is a documented, stable contract that needs no D-Bus
-// client dependency to consume.
-//
-// Called from handlers/wifi.ts (the TV's own /wifi screen, gated on a paired
-// phone being connected) and wifiBootstrap.ts (bringing up the provisioning
-// AP at boot) — never reachable from the LAN as an HTTP route of its own.
+// NetworkManager rather than wpa_supplicant because it also handles the AP,
+// its DHCP and DNS, and persisting credentials. The CLI rather than D-Bus
+// because every action here is coarse and nmcli's terse output is a stable
+// contract that needs no extra dependency.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
-// The Nix package pins this (see nix/module.nix); a development machine falls
+// The Nix package pins this (see nix/module.nix), a development machine falls
 // back to whatever is on PATH.
 const NMCLI = process.env.PIVI_NMCLI || 'nmcli';
 
@@ -35,14 +25,16 @@ const WIFI_INTERFACE = process.env.PIVI_WIFI_INTERFACE || undefined;
 const HOTSPOT_CONNECTION = 'pivi-hotspot';
 
 const HOTSPOT_SSID = process.env.PIVI_HOTSPOT_SSID || 'pivi-setup';
-// WPA2 requires 8 characters minimum. Deliberately not a secret — it is shown
+// WPA2 requires 8 characters minimum. Deliberately not a secret, it is shown
 // on the TV screen, and its only job is to keep the AP from being open (an
 // open AP makes some phones refuse to auto-join, and invites neighbours onto
 // the provisioning portal).
 const HOTSPOT_PASSWORD = process.env.PIVI_HOTSPOT_PASSWORD || 'pivi-setup';
 
+/** Lets the /wifi screen show which networks need a password. */
 export type WifiSecurity = 'open' | 'wep' | 'wpa' | 'enterprise';
 
+/** One row of the /wifi screen's network list. */
 export type WifiNetwork = {
 	ssid: string;
 	/** 0..100, as NetworkManager reports it. */
@@ -52,11 +44,12 @@ export type WifiNetwork = {
 	saved: boolean;
 };
 
+/** What the TV shows about its connection and what wifiBootstrap.ts decides on. */
 export type NetworkState = {
 	/**
 	 * What the device is doing with its radio right now. `hotspot` means it is
-	 * serving the provisioning AP, so it is by definition not on a real
-	 * network; `client` means it has joined one.
+	 * serving the provisioning AP, so it is not on a real network. `client`
+	 * means it has joined one.
 	 */
 	mode: 'client' | 'hotspot' | 'disconnected';
 	/** The joined network's SSID in `client` mode, else null. */
@@ -67,7 +60,7 @@ export type NetworkState = {
 	 * `mode`: ethernet alone gives connectivity with the radio disconnected.
 	 */
 	online: boolean;
-	/** Whether a wired connection is up — the reason wifi may not be needed. */
+	/** Whether a wired connection is up, the reason wifi may not be needed. */
 	ethernet: boolean;
 	hotspotSsid: string;
 	hotspotPassword: string;
@@ -85,9 +78,8 @@ function splitTerse(line: string): string[] {
 
 async function nmcli(...args: string[]): Promise<string> {
 	const { stdout } = await run(NMCLI, ['-t', ...args], {
-		// A scan with `--rescan yes` genuinely takes seconds; a join can take
-		// longer still. Bounded anyway so a wedged NetworkManager surfaces as an
-		// error rather than a request that never answers.
+		// Scans and joins take seconds, but a wedged NetworkManager should
+		// surface as an error rather than a request that never answers.
 		timeout: 45_000,
 		maxBuffer: 4 * 1024 * 1024
 	});
@@ -116,9 +108,8 @@ function parseSecurity(flags: string): WifiSecurity {
 
 type WifiDevice = { device: string; state: string; connection: string };
 
-// Any wifi device when no interface is configured, otherwise only the named
-// one -- a Pi with a USB dongle has two, and provisioning must not wander
-// between them.
+// Only the configured interface if there is one, since a Pi with a USB
+// dongle has two radios and provisioning must not wander between them.
 function isTargetWifi(device: string, type: string): boolean {
 	return type === 'wifi' && (!WIFI_INTERFACE || device === WIFI_INTERFACE);
 }
@@ -141,9 +132,8 @@ async function ethernetConnected(): Promise<boolean> {
 }
 
 async function isOnline(): Promise<boolean> {
-	// `full` is the only value that means a working route to the internet;
-	// `portal` and `limited` both mean something is reachable but the wider
-	// network is not, and are treated the same as `none` here.
+	// Only `full` means a working route to the internet. `portal` and
+	// `limited` count as offline.
 	const stdout = await nmcli('networking', 'connectivity');
 	return stdout.trim() === 'full';
 }
@@ -171,6 +161,7 @@ function joinedSsid(device: WifiDevice | null, mode: NetworkState['mode']): stri
 	return mode === 'client' ? (device?.connection ?? null) : null;
 }
 
+/** Backs the TV's network status and the boot time AP decision. Throws if nmcli fails. */
 export async function getNetworkState(): Promise<NetworkState> {
 	const [device, ethernet, online] = await Promise.all([
 		wifiDevice(),
@@ -214,6 +205,7 @@ function strongestPerSsid(networks: WifiNetwork[]): WifiNetwork[] {
 	return [...best.values()].sort((a, b) => b.signal - a.signal);
 }
 
+/** Fills the /wifi screen's network list. One entry per SSID, strongest first. */
 export async function scanNetworks(): Promise<WifiNetwork[]> {
 	// `--rescan yes` forces a fresh scan rather than serving NetworkManager's
 	// cached list, which on a device that just booted is often empty.
@@ -229,6 +221,10 @@ export async function scanNetworks(): Promise<WifiNetwork[]> {
 	return strongestPerSsid(parsed);
 }
 
+/**
+ * Raise the provisioning AP so a phone can reach the TV with no network. Reuses
+ * one named profile, so calling it repeatedly is safe.
+ */
 export async function startHotspot(): Promise<void> {
 	await nmcli(
 		'device',
@@ -248,17 +244,18 @@ async function stopHotspot(): Promise<void> {
 	try {
 		await nmcli('connection', 'down', HOTSPOT_CONNECTION);
 	} catch {
-		// Already down, or never created — both mean the caller's intent is
+		// Already down, or never created, both mean the caller's intent is
 		// already satisfied.
 	}
 }
 
+/** A failed join is an expected outcome the /wifi screen shows, not an exception. */
 export type ConnectResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Join a network. The hotspot, if up, has to come down first: the Pi's radio
- * is a single interface on a single channel, and `brcmfmac` cannot reliably
- * be an AP and a station at once, so provisioning is necessarily sequential.
+ * Joins the network picked on the /wifi screen. The hotspot has to come down
+ * first since the Pi's `brcmfmac` radio can't reliably be an AP and a station
+ * at once.
  */
 export async function connectToNetwork(
 	ssid: string,
@@ -280,13 +277,13 @@ export async function connectToNetwork(
 		return { ok: true };
 	} catch (error) {
 		// nmcli puts the useful part ("Secrets were required, but not provided")
-		// on stderr and exits non-zero; the Error it throws carries both.
+		// on stderr, which the thrown Error carries.
 		return { ok: false, error: nmcliError(error) };
 	}
 }
 
-// execFile rejects with an Error carrying the child's stderr; anything else
-// reaching here is an ordinary failure with nothing extra to report.
+// execFile rejects with an Error carrying the child's stderr, anything else
+// is an ordinary failure with nothing extra to report.
 function stderrOf(error: unknown): string {
 	if (!error || typeof error !== 'object' || !('stderr' in error)) return '';
 	return String((error as { stderr: unknown }).stderr).trim();
@@ -297,14 +294,9 @@ function nmcliError(error: unknown): string {
 }
 
 /**
- * Whether this device can manage wifi at all: NetworkManager reachable *and* a
- * wireless interface for it to manage. Everything here degrades to a clear
- * "provisioning unavailable" rather than a crash when it can't — the normal
- * case on a development machine, and on any wired-only box.
- *
- * The radio check is not redundant with the NetworkManager one: a desktop with
- * no wifi hardware runs NetworkManager perfectly happily, and without this
- * would be offered a wifi setup screen it could never act on.
+ * Lets callers skip wifi on dev machines and wired only boxes instead of
+ * crashing. Needs both NetworkManager and a radio, since a desktop runs
+ * NetworkManager fine without wifi hardware.
  */
 export async function isAvailable(): Promise<boolean> {
 	try {

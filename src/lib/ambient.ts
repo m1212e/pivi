@@ -1,16 +1,13 @@
-// Quiet, continuous background music for the home screen: a slow, cheerful
-// D-major chord progression of soft, low pads that never stops, with a gentle
-// "swirl" -- each group of voices drifts slowly in loudness, brightness and
-// stereo position, each at its own unrelated pace, so the sound is always
-// moving but never builds, never repeats a pattern you could notice and
-// never demands attention. Everything is synthesized (no assets), stays low
-// (nothing above ~280 Hz), and fades in and out.
+// Background music for the home screen, which the root layout runs while
+// /home is open and the user's ambient toggle is on. Slow, low D major pads
+// whose voices drift in loudness, brightness and pan at unrelated rates, so
+// it keeps moving without ever demanding attention. Synthesized, no assets.
 
 import { openBus } from './sounds';
 
 // Open voicings, bass first, all low. Every chord is plain major with its
-// bright third present -- no minor or suspended chords anywhere, so the mood
-// never turns wistful or unresolved -- and the progression is I-IV-V-IV in D
+// bright third present, no minor or suspended chords anywhere, so the mood
+// never turns wistful or unresolved, and the progression is I-IV-V-IV in D
 // (D, G, A, G), the classic uplifting loop that always lands back home. All
 // notes stay inside D major, so every chord is consonant with the next.
 const CHORDS: number[][] = [
@@ -49,6 +46,7 @@ const FADE_OUT_SECONDS = 2.5;
 // Hold off at the start so the home intro chord can play on its own first.
 const START_DELAY_MS = 5500;
 const SCHEDULE_AHEAD_SECONDS = 2;
+// Reverb send level, high enough to blur chord changes together.
 const WET = 0.55;
 
 type Running = {
@@ -98,6 +96,7 @@ function buildLane(ctx: AudioContext, bus: AudioNode, rates: (typeof LANES)[numb
 	return { input: tremolo, lfos };
 }
 
+// One pad voice. Self-cleans on end so a never-ending loop doesn't leak nodes.
 function tone(
 	state: Running,
 	lane: AudioNode,
@@ -149,7 +148,7 @@ function scheduleChord(state: Running, at: number) {
 
 // Schedules everything that falls inside the next lookahead window, then
 // re-arms itself. Audio-clock timing, so a late timer never makes it audibly
-// stutter -- it just schedules a little further ahead on the next tick.
+// stutter. It just schedules a little further ahead on the next tick.
 function tick() {
 	const state = running;
 	if (!state) return;
@@ -201,12 +200,14 @@ async function begin() {
 	tick();
 }
 
+/** Called by the root layout on /home. Waits so the home jingle plays alone first. Pair with stopAmbient. */
 export function startAmbient() {
 	if (wanted) return;
 	wanted = true;
 	startTimer = setTimeout(() => void begin(), START_DELAY_MS);
 }
 
+/** Leaving home or toggling music off. Fades out, and also cancels a start that hasn't begun yet. */
 export function stopAmbient() {
 	wanted = false;
 	clearTimeout(startTimer);

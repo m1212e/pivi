@@ -5,12 +5,12 @@ import { db } from './db';
 import { user } from './db/schema';
 import { userPubsub } from './handlers/user';
 
+/** Lets handlers/auth.ts tell user facing failures (shown as is) from internal errors (masked). */
 export class AuthError extends Error {}
 
-// The PIN is only 4 digits (10,000 combinations), so without a lockout it's
-// trivially brute-forceable over plain GraphQL requests. Keyed by username
-// rather than IP since that's the actual space being guessed; a locked-out
-// username stays locked regardless of which connection is guessing it.
+// A 4 digit PIN is trivially brute forced over GraphQL without a lockout.
+// Keyed by username rather than IP since that's the space being guessed, so a
+// locked username stays locked whichever connection is guessing.
 const MAX_ATTEMPTS_BEFORE_LOCKOUT = 5;
 const BASE_LOCKOUT_MS = 5_000;
 const MAX_LOCKOUT_MS = 15 * 60 * 1000;
@@ -42,12 +42,14 @@ function recordFailedLogin(username: string, state: LoginAttempts | undefined) {
 	loginAttempts.set(username, { failures, lastFailureAt: Date.now(), lockedUntil });
 }
 
+/** Backs the register mutation. Makes the new profile active, so a new user lands logged in. */
 export async function registerWithPin(username: string, pin: string) {
 	const existing = await db.query.user.findFirst({ where: { username: { eq: username } } });
 	if (existing) throw new AuthError('Username is already taken');
 
 	const pinHash = await hashPin(pin);
 	const [created] = await db.insert(user).values({ username, pinHash }).returning();
+	// Subscribers of the user table need to learn about the new row.
 	userPubsub.created();
 	setActiveProfile(created.id);
 	return created;
@@ -65,6 +67,10 @@ async function verifyCredentials(username: string, pin: string) {
 	return (await verifyPin(pin, existing.pinHash)) ? existing : null;
 }
 
+/**
+ * Backs the login mutation. Throws AuthError on a wrong PIN or while the
+ * username is locked out.
+ */
 export async function loginWithPin(username: string, pin: string) {
 	pruneLoginAttempts();
 
@@ -84,6 +90,7 @@ export async function loginWithPin(username: string, pin: string) {
 	return existing;
 }
 
+/** Backs the signOut mutation. Signs out the whole device, not just one browser. */
 export function logout() {
 	clearActiveProfile();
 }

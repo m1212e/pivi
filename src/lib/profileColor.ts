@@ -1,3 +1,5 @@
+// Light/dark stop pairs. Shared with app tile fallbacks (appAccent.ts) so both
+// draw from the same look.
 const PALETTE = [
 	['#f472b6', '#ec4899'], // pink
 	['#60a5fa', '#3b82f6'], // blue
@@ -9,6 +11,10 @@ const PALETTE = [
 	['#fb7185', '#f43f5e'] // rose
 ] as const;
 
+/**
+ * Gives profile avatars on the picker, login, home and the phone remote a
+ * stable color without storing one, since the same seed always maps the same.
+ */
 export function profileGradient(seed: string) {
 	let hash = 0;
 	for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;

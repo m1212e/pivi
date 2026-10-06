@@ -1,11 +1,7 @@
 <script lang="ts">
-	// Tier 2 renderer: walks an app-supplied UiNode tree (#lib/apps/ui)
-	// and draws it with the shell's own components (Button, MediaCard,
-	// ContentRow, HeroBanner, ...) — the app only ever sent structure, this
-	// component owns every pixel and every event. Anything visual lives in
-	// those components, not here, so an app can't look different from the host.
-	// One generic renderer serves every app that uses this tier, not just
-	// YouTube.
+	// Draws an app's screen on /apps/[appId] from the UiNode tree it sends, using
+	// the shell's own components. Apps only send structure, so they can't look
+	// different from the host. Visual details belong in those components.
 	import TextInput from '#lib/components/TextInput.svelte';
 	import { inview } from 'svelte-inview';
 	import type { UiNode } from '#lib/apps/ui';
@@ -31,17 +27,13 @@
 	}: {
 		node: UiNode;
 		onEvent: (eventId: string, value?: string | boolean) => void;
-		// Only needed by a button carrying an `action` (see #lib/apps/ui's
-		// UiNode) — every other node type ignores these.
+		// Only buttons with an `action` need these.
 		appId?: string;
 		appHref?: string;
 	} = $props();
 
-	// Set when a button's `openOnPhone` action is refused (no phone
-	// connected) -- the mutation otherwise just starts work and returns, so
-	// this is the only feedback the button has to give. Scoped to this node's
-	// own component instance (recursion creates one per node), so one
-	// button's error never bleeds onto another's.
+	// The only feedback when `openOnPhone` is refused, like with no phone
+	// connected. Per instance, so it stays on the button that failed.
 	let phoneError = $state<string | null>(null);
 
 	function openOnPhone(url: string) {

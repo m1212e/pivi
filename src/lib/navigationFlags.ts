@@ -6,6 +6,10 @@ const NO_BACK = new Set(['/', '/home']);
 const HOME_EXACT = new Set(['/apps', '/wifi']);
 const HOME_PREFIXES = ['/apps/', '/play/'];
 
+/**
+ * RemoteBridge sends these to the paired phone so it can hide Back and Home
+ * where they would do nothing.
+ */
 export function navigationFlagsFor(pathname: string) {
 	return {
 		canGoBack: !NO_BACK.has(pathname),

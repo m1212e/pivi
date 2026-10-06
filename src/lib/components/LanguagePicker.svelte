@@ -4,6 +4,8 @@
 	import { getLocale, locales, setLocale, type Locale } from '#lib/paraglide/runtime';
 	import Select from '#lib/components/Select.svelte';
 
+	// Built on Select so the language list is reachable by remote like any other
+	// choice.
 	let { placement = 'below' }: { placement?: 'above' | 'below' } = $props();
 
 	let value = $state<Locale>(getLocale());

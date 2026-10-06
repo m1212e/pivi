@@ -1,6 +1,5 @@
-// GraphQL surface for scanning and joining wifi networks from the TV's own
-// screen, so a network can be picked with nothing but the remote's gestures
-// (a trackpad and the phone's keyboard feeding the focused password field).
+// Serves the TV's /wifi screen, so a network can be scanned for and joined
+// with nothing but the remote (trackpad plus the phone's keyboard relay).
 import { schemaBuilder } from '../rumble';
 import type { WifiManagementState } from '#lib/wifi/management';
 import { wifiManagement } from '../wifiManagement';
@@ -12,7 +11,7 @@ const WifiNetworkRef = schemaBuilder.objectRef<NetworkEntry>('WifiNetwork').impl
 	fields: (t) => ({
 		ssid: t.exposeString('ssid'),
 		signal: t.exposeInt('signal'),
-		// 'open' | 'wep' | 'wpa' | 'enterprise' — a string for the same reason
+		// 'open' | 'wep' | 'wpa' | 'enterprise', a string for the same reason
 		// `mode` below is, see handlers/network.ts.
 		security: t.exposeString('security'),
 		saved: t.exposeBoolean('saved')
@@ -35,8 +34,8 @@ const WifiManagementRef = schemaBuilder.objectRef<WifiManagementState>('WifiMana
 	})
 });
 
-// Starts the work and returns; failures are recorded in the shared state, which
-// is where the screen reads them.
+// Returns right away since a scan or join takes seconds. Progress and failures
+// reach the screen through the subscription instead.
 function start(work: () => Promise<void> | void): boolean {
 	void Promise.resolve(work()).catch(() => {});
 	return true;

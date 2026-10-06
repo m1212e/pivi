@@ -1,11 +1,7 @@
 <script lang="ts">
-	// A persistent "scan to connect a phone" affordance, shown over every
-	// screen it makes sense on -- see +layout.svelte for exactly which
-	// (the routes that already show their own pairing QR as primary content,
-	// and the player, are excluded there). Hidden the moment a phone is
-	// already connected, since the whole point is getting one connected: the
-	// remote is this app's only input device apart from the TV itself, so a
-	// corner QR nobody needs to scan is just noise once that's solved.
+	// Corner QR from the root layout so a phone remote can be paired from any
+	// screen. The layout hides it where a pairing QR is already the main content
+	// and in the player. It also hides once a phone connects, as it's just noise then.
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { client } from '#lib/api/rumbleClient/client';
@@ -19,14 +15,9 @@
 	let remoteUrl = $state<string | null>(null);
 	let phoneConnected = $state(true);
 
-	// Same short-lived-token refresh as the home/login screens -- this can
-	// sit visible long enough for the pairing code to expire.
-	//
-	// phoneConnected also gets re-polled here, not just pushed over the
-	// subscription: if the long-lived subscription stream ever dies (proxy
-	// idle timeout, server restart) it tears down silently with nothing to
-	// reconnect it, and the TV can stay on for days without a reload, so a
-	// stale "disconnected" reading could otherwise stick forever.
+	// The pairing token is refreshed since the overlay can outlive it. The phone
+	// state is polled on top of the subscription because a dead stream never
+	// reconnects, and the TV may run for days without a reload.
 	onMount(() => {
 		let cancelled = false;
 		getPairing()

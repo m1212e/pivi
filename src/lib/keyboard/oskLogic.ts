@@ -3,10 +3,12 @@
 import { isTextualInput, type TextTarget } from '#lib/textEntry';
 import { composeDead, DEAD_SPACING, type Cell, type DeadKind } from './eurkey';
 
+/** Sticky modifier state, since a remote can't hold shift while pressing another key. */
 export type Modifier = 'off' | 'once' | 'lock';
 
 const NEXT_MODIFIER: Record<Modifier, Modifier> = { off: 'once', once: 'lock', lock: 'off' };
 
+/** Tap arms for one key, tap again locks, a third tap clears. */
 export function cycleModifier(mod: Modifier): Modifier {
 	return NEXT_MODIFIER[mod];
 }
@@ -25,13 +27,15 @@ function pressAccent(dead: DeadKind | null, accent: DeadKind): CellPress {
 	return { text: DEAD_SPACING[dead], dead: dead === accent ? null : accent };
 }
 
+/** What pressing a key does given a pending accent, so the component only applies the result. */
 export function pressCellResult(dead: DeadKind | null, cell: Cell): CellPress {
 	return typeof cell === 'string' ? pressLetter(dead, cell) : pressAccent(dead, cell.dead);
 }
 
+/** What a hardware keyboard key means while the on-screen keys have focus. */
 export type PhysicalKeyAction = 'dismiss' | 'backspace' | 'type';
 
-/** What a physical key does while focus sits on the keys, null to ignore it. */
+/** Lets a real keyboard keep typing into the field while focus sits on the on-screen keys. Null to ignore the key. */
 export function physicalKeyAction(event: KeyboardEvent): PhysicalKeyAction | null {
 	if (event.key === 'Escape') return 'dismiss';
 	if (event.key === 'Backspace') return 'backspace';
@@ -42,7 +46,7 @@ function isPrintable(event: KeyboardEvent): boolean {
 	return event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey;
 }
 
-/** Keyboard target and dismissed field after focus lands on `el`. */
+/** Opens the keyboard for a newly focused field, unless the user just closed it on that same field. */
 export function resolveFocus(
 	el: Element,
 	dismissed: TextTarget | null
@@ -55,7 +59,7 @@ function holdsFocus(target: TextTarget, active: Element | null, root: Element | 
 	return active === target || root?.contains(active) === true;
 }
 
-/** Focus fell to <body> or nowhere, leaving the keyboard target stranded. */
+/** Tells the keyboard to close once focus falls to <body>, e.g. after a click on empty space. */
 export function focusWasDropped(
 	target: TextTarget | null,
 	active: Element | null,
@@ -65,7 +69,7 @@ export function focusWasDropped(
 	return !active || active === document.body;
 }
 
-/** Puts focus back on the field when nothing else has it. */
+/** For when the keys hide while focused, e.g. the phone keyboard takes over, so focus doesn't end up nowhere. */
 export function reclaimFocus(target: TextTarget | null) {
 	if (!target?.isConnected) return;
 	if (document.activeElement === document.body) target.focus();

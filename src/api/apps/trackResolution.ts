@@ -1,18 +1,20 @@
-// Shared by the byte-range proxy and its sibling segment-index route (both
-// under src/routes/api/stream-track), and by src/routes/api/stream-subtitle
-// -- resolving a session's stream (and 404ing consistently when the app
-// can't) is identical everywhere it's needed, only what each caller does
-// with the result differs (forward video/audio bytes, locate a sidx/Cues
-// index, or fetch a subtitle track's own URL).
+// Shared by the stream-track proxy and index routes and the stream-subtitle
+// route, so they all resolve a session the same way and fail with the same 404.
 import { error } from '@sveltejs/kit';
 import { getApp } from '#api/apps/manager';
 import { resolveStreamCached } from '#api/apps/streamCache';
 
+/** Rejects a `[track]` route param that isn't video or audio before it picks a URL. */
 export function requireTrackName(track: string): 'video' | 'audio' {
 	if (track === 'video' || track === 'audio') return track;
 	error(400, 'Invalid track');
 }
 
+/**
+ * Used by the stream-subtitle route, which needs the whole resolved stream.
+ * Any failure becomes a 404 so an app that can't serve a session doesn't
+ * show up as a server error.
+ */
 export async function resolveStreamOrError(
 	appId: string,
 	sessionId: string,
@@ -33,6 +35,10 @@ function trackUrlFrom(
 	return track === 'video' ? resolved.videoUrl : resolved.audioUrl;
 }
 
+/**
+ * The CDN url the stream-track routes proxy bytes from or read the segment
+ * index of. 404s when the stream has no such track.
+ */
 export async function resolveTrackUrl(
 	appId: string,
 	sessionId: string,

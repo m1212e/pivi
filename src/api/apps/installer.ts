@@ -1,5 +1,5 @@
 // Installing, configuring and removing apps. Every app is an OCI image,
-// checked against a key the user supplied unless they chose to skip that;
+// checked against a key the user supplied unless they chose to skip that.
 // what it asks for is shown (the preview) before anything is stored, and
 // what's stored is the user's answer, not the image's request.
 import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef';
@@ -10,8 +10,13 @@ import { volumeBelongsToApp, volumeName } from './sandbox/spec';
 import { parseAppSigner, type AppSigner } from './signature';
 import type { InstalledApp } from './store';
 
+/** Marks errors whose message the app manager shows the user as is. */
 export class AppError extends Error {}
 
+/**
+ * The permissions screen the user approves before anything is stored, so an
+ * app never gets more than the user saw (appManagementService.ts).
+ */
 export type InstallPreview = {
 	// Normalized, as it will be stored (the tag it will follow for updates).
 	image: string;
@@ -28,6 +33,7 @@ export type InstallPreview = {
 // it, same as `--insecure-skip-verify` elsewhere, at their own risk.
 type InstallRequest = { image: string; publicKey?: string };
 
+// Shared by preview and install so both run the same checks on the same input.
 async function inspect(deps: AppDeps, request: InstallRequest) {
 	const ref = parseImageRef(request.image);
 	const signer = request.publicKey?.trim() ? parseAppSigner(request.publicKey) : null;
@@ -46,6 +52,7 @@ function updateTrack(ref: ImageRef): ImageRef {
 	return { registry: ref.registry, repository: ref.repository, tag: ref.tag };
 }
 
+/** Step one of the install flow in the app manager. Stores nothing. */
 export async function previewInstall(
 	deps: AppDeps,
 	request: InstallRequest
@@ -60,6 +67,10 @@ export async function previewInstall(
 	};
 }
 
+/**
+ * Step two, once the user approved the preview. `granted` is their answer. The
+ * checks rerun rather than trusting the preview. Throws if the id is taken.
+ */
 export async function installApp(
 	deps: AppDeps,
 	request: InstallRequest & { granted: readonly PermissionKey[] }
@@ -99,12 +110,17 @@ export async function installApp(
 	return (await deps.store.find(manifest.id))!;
 }
 
+// One place for the not installed error the mutations below share.
 async function requireInstalled(deps: AppDeps, appId: string): Promise<InstalledApp> {
 	const row = await deps.store.find(appId);
 	if (!row) throw new AppError(`No app "${appId}" is installed`);
 	return row;
 }
 
+/**
+ * The app manager's uninstall. Stops the app before removing the row, then
+ * frees its volumes and pulled images, which would otherwise fill the TV's disk.
+ */
 export async function uninstallApp(deps: AppDeps, appId: string): Promise<void> {
 	const row = await requireInstalled(deps, appId);
 	await deps.control.stop(appId);
@@ -118,12 +134,20 @@ export async function uninstallApp(deps: AppDeps, appId: string): Promise<void> 
 	}
 }
 
+/**
+ * Lets the user hide an app without losing its data. Disabling stops it right
+ * away, enabling needs no start as apps boot on use.
+ */
 export async function setAppEnabled(deps: AppDeps, appId: string, enabled: boolean): Promise<void> {
 	await requireInstalled(deps, appId);
 	await deps.store.update(appId, { enabled });
 	if (!enabled) await deps.control.stop(appId);
 }
 
+/**
+ * The app manager's auto-update toggle. When off, updater.ts parks every new
+ * version for approval.
+ */
 export async function setAppAutoUpdate(
 	deps: AppDeps,
 	appId: string,
@@ -133,8 +157,10 @@ export async function setAppAutoUpdate(
 	await deps.store.update(appId, { autoUpdate });
 }
 
-// Switching a permission takes effect by restarting the app: what it may do
-// is fixed when its sandbox is built.
+/**
+ * The app manager's per-permission toggles. Takes effect by stopping the app,
+ * since what it may do is fixed when its sandbox is built.
+ */
 export async function setAppPermission(
 	deps: AppDeps,
 	appId: string,
@@ -152,8 +178,10 @@ export async function setAppPermission(
 	await deps.control.stop(appId);
 }
 
-// Drops everything the app cached for the current profile. Its cache volume
-// is disposable by contract, so this is always safe; it just starts empty again.
+/**
+ * Lets the user free what an app cached for the current profile. The cache is
+ * disposable by contract, so this is always safe.
+ */
 export async function clearAppCache(deps: AppDeps, appId: string, userId: string): Promise<void> {
 	await requireInstalled(deps, appId);
 	await deps.control.stop(appId);
@@ -161,11 +189,11 @@ export async function clearAppCache(deps: AppDeps, appId: string, userId: string
 	await deps.backend.removeVolumes((candidate) => candidate === name);
 }
 
-// Drops the app's persistent data for the current profile (its /storage
-// volume) -- unlike the cache, this is the app's real state: a sign-in, saved
-// preferences, anything it expected to survive a restart. The user asked for
-// this explicitly (see AppManagerPanel.svelte's confirm step), so it's not
-// "always safe" the way clearAppCache is, just always honored.
+/**
+ * Resets an app for the current profile, sign-in and saved settings included.
+ * Unlike clearAppCache this loses real data, so AppManagerPanel.svelte
+ * confirms first.
+ */
 export async function clearAppStorage(deps: AppDeps, appId: string, userId: string): Promise<void> {
 	await requireInstalled(deps, appId);
 	await deps.control.stop(appId);

@@ -4,6 +4,9 @@
 	import Button from './Button.svelte';
 	import TextField from './TextField.svelte';
 
+	// A complete text entry for apps (see UiNodeRenderer): TextField plus submit,
+	// debounced input reporting and keyboard suggestions. TextField stays the
+	// bare field so other screens can build their own forms around it.
 	let {
 		label,
 		placeholder,
@@ -52,6 +55,8 @@
 
 	onDestroy(() => clearTimeout(inputTimer));
 
+	// A suggestion picked on the TV keyboard or the phone submits right away,
+	// since picking one means that's what the user wants.
 	function pickSuggestion(event: Event) {
 		value = (event as CustomEvent<string>).detail;
 		form?.requestSubmit();

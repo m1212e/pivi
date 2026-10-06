@@ -4,9 +4,9 @@ import { onMount } from 'svelte';
 const KEYBOARD_HEIGHT_THRESHOLD = 120;
 
 /**
- * How many pixels the on-screen keyboard covers. visualViewport shrinks when
- * it opens, unlike window.innerHeight, and that gap lets the UI translate
- * itself up above the keyboard. Must be created during component init.
+ * Lets the phone remote page lift its controls above the on-screen keyboard,
+ * which mobile browsers draw over the page instead of shrinking innerHeight.
+ * Must be created during component init.
  */
 export function createKeyboardInset() {
 	let inset = $state(0);

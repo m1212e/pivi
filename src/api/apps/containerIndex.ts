@@ -1,26 +1,24 @@
-// YouTube's adaptive (video-only/audio-only) CDN files aren't plain
-// progressive downloads -- they're already DASH-ready containers with a
-// real segment index baked in by the encoder: an ISOBMFF `sidx` box for
-// mp4, a Matroska `Cues` element for webm. Confirmed by hand-parsing real
-// resolved URLs (both had a compact index within the first couple KB,
-// pointing at ~10s fragments). That means MSE playback doesn't need to
-// invent segment boundaries or walk sample tables itself -- it just needs
-// to locate that existing index's byte range and hand it to Shaka via
-// `<SegmentBase indexRange="...">`, which already knows how to parse both
-// sidx and Cues on its own (see #lib/mse/dualTrackPlayer's manifest).
+// The TV plays separate video and audio tracks through Shaka, which needs to
+// know where each file's segment index is. YouTube's adaptive CDN files already
+// carry one from the encoder (an mp4 `sidx` box or a webm `Cues` element), so
+// this only locates its byte range for `<SegmentBase indexRange>` instead of
+// building an index from the media itself (see #lib/mse/dualTrackPlayer).
 import { error } from '@sveltejs/kit';
 
+/** Inclusive, as DASH `indexRange` and HTTP Range headers expect. */
 export type ByteRange = [start: number, end: number];
+/** What the stream-track index route returns, mirrored on the client by dualTrackPlayer.ts. */
 export type SegmentBaseIndex = { initRange: ByteRange; indexRange: ByteRange };
 
 // Comfortably covers ftyp+moov+sidx (a few hundred bytes to low KB even for
 // long videos, since these are single-track files) or EBML header+Segment
-// header+SeekHead+Info+Tracks+Cues -- without pulling in a meaningful
+// header+SeekHead+Info+Tracks+Cues, without pulling in a meaningful
 // fraction of the actual media data.
 const SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
 
 type RangeResult = { data: Uint8Array } | { status: number };
 
+// Never throws, so fetchRange can decide whether another attempt is worth it.
 async function tryFetchRange(url: string, start: number, end: number): Promise<RangeResult> {
 	try {
 		const res = await fetch(url, { headers: { range: `bytes=${start}-${end}` } });
@@ -56,10 +54,6 @@ function readU64(data: Uint8Array, offset: number): number {
 	return Number((high << 32n) | low);
 }
 
-// Walks top-level ISOBMFF boxes (32-bit size + fourcc, or 64-bit largesize
-// when size===1) looking for `sidx`. Bails out once it hits `moof`/`mdat`
-// with no sidx seen -- a file laid out that way isn't one of these
-// DASH-ready adaptive files, so there's nothing for MSE to index here.
 // One top-level box header: 32-bit size + fourcc, or 64-bit largesize when the
 // 32-bit field is exactly 1.
 function readMp4BoxHeader(data: Uint8Array, pos: number): { type: string; size: number } {
@@ -78,12 +72,16 @@ function isMediaDataBox(type: string): boolean {
 	return type === 'moof' || type === 'mdat';
 }
 
+// The init segment is everything before the sidx, the index is the box itself.
 function sidxRanges(data: Uint8Array, pos: number, size: number): SegmentBaseIndex {
 	const indexEnd = pos + size - 1;
 	if (indexEnd >= data.length) error(502, 'sidx box extends past the scanned window');
 	return { initRange: [0, pos - 1], indexRange: [pos, indexEnd] };
 }
 
+// Walks top-level boxes looking for `sidx`. Bails out once it hits `moof`/`mdat`
+// with no sidx seen, since a file laid out that way isn't one of these
+// DASH-ready adaptive files and there's nothing for MSE to index.
 function findMp4SegmentIndex(data: Uint8Array): SegmentBaseIndex {
 	let pos = 0;
 	while (pos + 8 <= data.length) {
@@ -96,7 +94,7 @@ function findMp4SegmentIndex(data: Uint8Array): SegmentBaseIndex {
 }
 
 // EBML variable-length integer. IDs keep their leading marker bit (it's
-// part of the ID's identity); sizes have it stripped (it only encodes the
+// part of the ID's identity), sizes have it stripped (it only encodes the
 // integer's byte length).
 function readVint(
 	data: Uint8Array,
@@ -113,7 +111,7 @@ function readVint(
 }
 
 // The leading zero bits of the first byte encode how many bytes the integer
-// occupies; the marker bit that terminates them doubles as the mask separating
+// occupies, and the marker bit that terminates them doubles as the mask separating
 // the length prefix from the value.
 function vintWidth(first: number): { length: number; mask: number } {
 	let length = 1;
@@ -125,8 +123,10 @@ function vintWidth(first: number): { length: number; mask: number } {
 	return { length, mask };
 }
 
+// Offsets are absolute, so callers can turn them straight into byte ranges.
 type EbmlElement = { id: number; start: number; bodyStart: number; size: number };
 
+// Lazy so callers can stop at the first Cluster without walking media data.
 function* ebmlChildren(data: Uint8Array, start: number, end: number): Generator<EbmlElement> {
 	let pos = start;
 	while (pos < end - 1 && pos < data.length) {
@@ -145,17 +145,8 @@ const SEGMENT_ID = 0x18538067;
 const CUES_ID = 0x1c53bb6b;
 const CLUSTER_ID = 0x1f43b675;
 
-// Matroska/webm Clusters are independently parseable, so unlike mp4 there's
-// no separate fragmentation step -- the encoder-provided Cues element
-// (mapping time -> Cluster byte offset) is already exactly the DASH
-// SegmentBase index webm needs. The init segment is everything before the
-// first Cluster (EBML header + Segment header + SeekHead/Info/Tracks/Cues,
-// whichever of those the encoder put up front) -- Shaka's WebM segment
-// index parser reads the init segment's Info element for the timecode
-// scale, so this range has to be genuinely fetchable/parseable, not just a
-// placeholder.
-// The first child element at `start`, which must be the id the caller expects --
-// both of webm's outer levels (EBML header, then Segment) are a single known
+// The first child element at `start`, which must be the id the caller expects.
+// Both of webm's outer levels (EBML header, then Segment) are a single known
 // element rather than something to search for.
 function expectFirstElement(
 	data: Uint8Array,
@@ -168,7 +159,7 @@ function expectFirstElement(
 	return element;
 }
 
-// Cues can appear before or after the first Cluster; the scan stops at the
+// Cues can appear before or after the first Cluster, and the scan stops at the
 // Cluster either way, since everything before it is the init segment.
 function findCuesAndFirstCluster(
 	data: Uint8Array,
@@ -182,6 +173,12 @@ function findCuesAndFirstCluster(
 	return { cues, firstCluster: undefined };
 }
 
+// Matroska/webm Clusters are independently parseable, so unlike mp4 there's
+// no separate fragmentation step. The encoder-provided Cues element (time ->
+// Cluster byte offset) is already exactly the DASH SegmentBase index webm
+// needs. The init segment is everything before the first Cluster. Shaka's
+// WebM index parser reads the init segment's Info element for the timecode
+// scale, so this range has to be genuinely parseable, not a placeholder.
 function findWebmSegmentIndex(data: Uint8Array): SegmentBaseIndex {
 	const header = expectFirstElement(data, 0, EBML_ID, 'Not an EBML file');
 	const segment = expectFirstElement(
@@ -197,14 +194,19 @@ function findWebmSegmentIndex(data: Uint8Array): SegmentBaseIndex {
 
 	return {
 		// Shaka parses whatever's at `indexRange` as one whole top-level EBML
-		// element (id+size header included) and checks that the id is Cues --
+		// element (id+size header included) and checks that the id is Cues,
 		// so this has to span the element's own header too, not just its
-		// body, the same as the mp4 sidx box's indexRange below.
+		// body, the same as the mp4 sidx box's indexRange above.
 		initRange: [0, firstCluster.start - 1],
 		indexRange: [cues.start, cues.bodyStart + cues.size - 1]
 	};
 }
 
+/**
+ * Reached through containerIndexCache.ts, not called directly. Throws a
+ * SvelteKit error if the file has no usable index (404) or is malformed or
+ * unreachable (502).
+ */
 export async function buildSegmentBaseIndex(
 	url: string,
 	container: 'mp4' | 'webm'

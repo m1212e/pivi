@@ -2,6 +2,8 @@
 	import ContentRow from '#lib/components/ContentRow.svelte';
 	import MediaCardSkeleton from '#lib/components/MediaCardSkeleton.svelte';
 
+	// Placeholder for VideoRow while an app's suggestions are still loading,
+	// so the shelf keeps its title and height instead of popping in.
 	let { title, count = 6 }: { title: string; count?: number } = $props();
 </script>
 

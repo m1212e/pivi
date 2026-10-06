@@ -1,7 +1,7 @@
-// Synthesized UI sound effects for the TV surface, in the spirit of Steam Big
-// Picture: short, soft, low-passed blips rather than harsh beeps. Generated
-// with WebAudio so there are no audio assets to ship, and every sound is
-// quiet by design -- this is feedback, not a notification.
+// Audible feedback for remote driven focus moves and selects (RemoteBridge) and
+// the login jingle (root layout), since a TV across the room gives little
+// visual cue that a phone swipe landed. Synthesized with WebAudio so there are
+// no assets to ship, and kept soft and quiet on purpose.
 
 type Note = {
 	freq: number;
@@ -12,8 +12,8 @@ type Note = {
 	type?: OscillatorType;
 	// Optional pitch glide to this frequency over the note's duration.
 	glideTo?: number;
-	// A band-passed noise burst centred on `freq` instead of an oscillator --
-	// gives a tap its physical contact texture.
+	// A band-passed noise burst centred on `freq` instead of an oscillator.
+	// Gives a tap its physical contact texture.
 	noise?: boolean;
 	// Resonance of the noise band-pass; higher rings more like a pitched tap.
 	q?: number;
@@ -26,6 +26,7 @@ const MASTER_GAIN = 0.5;
 let context: AudioContext | undefined;
 let master: GainNode | undefined;
 
+// Created lazily so nothing touches AudioContext during SSR or before it's needed.
 function ensureContext(): AudioContext | undefined {
 	if (typeof AudioContext === 'undefined') return undefined;
 	if (!context) {
@@ -72,7 +73,7 @@ if (typeof document !== 'undefined') {
 		document.addEventListener(type, unlock, { capture: true, passive: true });
 }
 
-// A generated room impulse (decaying stereo noise) -- no audio assets. Only
+// A generated room impulse (decaying stereo noise), no audio assets. Only
 // sounds that ask for a `wet` amount are sent to it, so taps stay dry.
 let reverb: ConvolverNode | undefined;
 
@@ -93,6 +94,7 @@ function reverbInput(ctx: AudioContext): ConvolverNode {
 
 let noiseBuffer: AudioBuffer | undefined;
 
+// Noise is cached because every tap would otherwise regenerate the same buffer.
 function noiseSource(
 	ctx: AudioContext,
 	freq: number,
@@ -143,10 +145,11 @@ function playNote(ctx: AudioContext, out: AudioNode, start: number, note: Note) 
 	osc.stop(t1 + 0.02);
 }
 
-// A fresh output bus into the shared master chain (and, for `wet` > 0, the
-// reverb too), or undefined when the browser's autoplay policy has the
-// context blocked. Each caller gets its own bus so it can fade or disconnect
-// independently of everything else.
+/**
+ * Lets ambient.ts share this AudioContext and master chain instead of opening a
+ * second one. Each bus can fade or disconnect on its own. Undefined while the
+ * autoplay policy blocks audio.
+ */
 export async function openBus(wet = 0): Promise<{ ctx: AudioContext; bus: GainNode } | undefined> {
 	const ctx = ensureContext();
 	if (!ctx || !master) return undefined;
@@ -191,7 +194,7 @@ const SOUNDS = {
 	],
 	// Landing on the home screen: a warm, slowly blooming chord rather than a
 	// bright arpeggio (which reads as an 8-bit jingle). Just three notes, a
-	// plain D major triad (D3 F#3 A3) -- the major third is what makes it
+	// plain D major triad (D3 F#3 A3), the major third is what makes it
 	// read as happy, and all of it sits low so nothing is sharp. Each pitch
 	// is doubled by a slightly detuned partner for a string-pad shimmer. Slow
 	// attacks, staggered entries from the bottom up, long decays; reverb is
@@ -206,11 +209,13 @@ const SOUNDS = {
 	]
 } satisfies Record<string, Note[]>;
 
+/** Keeps callers to the sounds that actually exist. */
 export type SoundName = keyof typeof SOUNDS;
 
 // How much of each sound goes through the reverb; anything not listed is dry.
 const REVERB_WET: Partial<Record<SoundName, number>> = { home: 0.45 };
 
+/** Fire and forget from UI code. Silently does nothing when the browser blocks audio. */
 export function playSound(name: SoundName) {
 	void play(SOUNDS[name], REVERB_WET[name]);
 }

@@ -2,12 +2,9 @@
 	import { onMount } from 'svelte';
 	import { Smartphone, Unplug } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	// The bare package, not a /node or /browser subpath — see rpcRal.ts for
-	// why (Vite can't consistently resolve those conditional-only exports
-	// for a component that's reachable from both a server and browser
-	// build). ensureRal() below installs the RAL createMessageConnection
-	// needs, which those subpaths would otherwise have done as a side
-	// effect of importing them.
+	// The bare package, as Vite can't resolve its conditional subpaths for a
+	// component in both the server and browser build (see rpcRal.ts).
+	// ensureRal() installs what those subpaths would have.
 	import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { PAIRING_WS_PORT } from '#lib/wsConfig';
@@ -62,35 +59,28 @@
 	import { isTextualInput, requestTextExit, setInputValue, submitInput } from '#lib/textEntry';
 	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
 
+	// Lives in the root layout and connects the TV page to the paired phone
+	// through the local relay. It turns the phone's gestures into focus moves,
+	// clicks and typing, and reports what is on screen so the phone only shows
+	// controls that apply.
 	let socket: WebSocket | undefined;
 	let connection: MessageConnection | undefined;
 	let currentEl: HTMLElement | null = null;
 
-	// Arbitrary and fixed: the remote only ever has one "finger" down at a
-	// time, and this never corresponds to a pointer the browser's own input
-	// pipeline tracks (see dispatchRemotePointer below), so there's nothing
-	// for it to collide with.
+	// Fixed, as the remote has one finger and the id is never one the browser tracks.
 	const REMOTE_POINTER_ID = -1;
 
-	// Keeps the explicit selection ring in sync with whatever actually holds
-	// focus, regardless of how it got there (remote swipe, direct tap, Tab
-	// key) — see the `.pivi-remote-focus` comment in layout.css. Also
-	// re-announces state, since moving onto/off a text field changes
-	// `hasTextInput` without a page navigation. Called both on real focus
-	// events and after DOM mutations (see the MutationObserver below), since
-	// a step of a form can swap out the focused element entirely — the focus
-	// silently drops to <body> with no `focusin` to react to.
-	// A focusable element (e.g. a profile link) can opt a specific descendant
-	// in to carry the visible ring instead of itself — say, a circular avatar
-	// inside a wider rectangular link — via `data-focus-ring-target`. Falls
-	// back to the focused element itself, and to nothing at all when focus has
-	// dropped to <body>.
+	// `data-focus-ring-target` lets a part, like a round avatar inside a wider
+	// link, carry the ring instead of the focused element.
 	function focusRingTarget(): HTMLElement | null {
 		const active = document.activeElement;
 		if (!(active instanceof HTMLElement) || active === document.body) return null;
 		return active.querySelector<HTMLElement>('[data-focus-ring-target]') ?? active;
 	}
 
+	// Keeps the `.pivi-remote-focus` ring on whatever holds focus, however it
+	// got there, and re-announces state. Also runs after DOM mutations, since a
+	// swapped form step drops focus to <body> without any focusin.
 	function onFocusChange() {
 		const next = focusRingTarget();
 		if (next !== currentEl) {
@@ -121,23 +111,18 @@
 		return active?.closest('[data-pivi-osk]') ? connectedOskTarget() : null;
 	}
 
+	// The field may have been removed while the keyboard still points at it.
 	function connectedOskTarget() {
 		return osk.target?.isConnected ? osk.target : null;
 	}
 
-	// Tells the phone what's actually on screen right now, so it only shows
-	// the PIN pad, keyboard, or back button when there's something for them
-	// to do here. Text-field targeting rides on plain DOM focus, the same
-	// thing a screen reader or a real keyboard already keys off, instead of
-	// a bespoke marker attribute, so any future page with a normal <input>
-	// gets remote-keyboard support with no extra wiring.
+	// Follows plain DOM focus instead of a marker attribute, so any <input>
+	// gets phone keyboard support without extra wiring.
 	function textState() {
 		const el = focusedTextInput();
 		return { hasTextInput: !!el, textValue: el?.value ?? '' };
 	}
 
-	// `playing`/position/duration/quality are only meaningful alongside
-	// `hasPlayer` anyway (no player, no video to report on).
 	function playerState() {
 		const playerEl = document.querySelector<HTMLElement>('[data-pivi-player]');
 		const playerVideo = playerEl?.querySelector<HTMLVideoElement>('video');
@@ -148,6 +133,7 @@
 		};
 	}
 
+	// Lets the phone show only the controls that apply to this screen.
 	function sendState() {
 		if (!connection) return;
 		sendNotification(connection, stateNotification, stateParamsSchema, {
@@ -156,17 +142,13 @@
 			suggestions: focusedSuggestions(),
 			...navigationFlagsFor(location.pathname),
 			profiles: pickerProfiles(),
-			// Sliced to the first three here (rather than trusting the phone
-			// to do it) so the phone doesn't need to know that limit is even a
-			// thing, it just renders whatever this sends.
+			// Capped here so the phone just renders what it gets.
 			apps: dashboardApps().slice(0, 3),
 			...playerState()
 		});
 	}
 
-	// What the player's own state fields are when there's no player at all --
-	// the schema requires them regardless of `hasPlayer`, and the phone
-	// ignores them in that case.
+	// The schema needs these even without a player, the phone ignores them then.
 	const NO_PLAYER_PROGRESS = {
 		position: 0,
 		duration: 0,
@@ -191,9 +173,7 @@
 		return (value ?? '').split(',').filter(Boolean).map(Number);
 	}
 
-	// A malformed/stale attribute caught mid-render falls back rather than
-	// crashing the whole state push -- the next one (they're frequent) carries
-	// the real value.
+	// An attribute caught mid-render falls back, the next push carries the real value.
 	function jsonAttr<T>(value: string | undefined, fallback: T): T {
 		try {
 			return value ? JSON.parse(value) : fallback;
@@ -202,10 +182,8 @@
 		}
 	}
 
-	// The player page's own position/quality/subtitle/diagnostics state,
-	// straight off `data-pivi-player-*` attributes (same idea as
-	// pickerProfiles/dashboardApps below) -- this component has no business
-	// knowing how the player itself computes any of these.
+	// Read from `data-pivi-player-*` attributes, so this layout component
+	// doesn't need to know how the player computes them.
 	function playerProgress(playerEl: HTMLElement | null) {
 		if (!playerEl) return { ...NO_PLAYER_PROGRESS };
 		const data = playerEl.dataset;
@@ -216,19 +194,15 @@
 			qualityOptions: numberListAttr(data.piviPlayerQualityOptions),
 			qualityModes: jsonAttr(data.piviPlayerQualityModes, NO_PLAYER_PROGRESS.qualityModes),
 			subtitleTracks: jsonAttr(data.piviPlayerSubtitleTracks, NO_PLAYER_PROGRESS.subtitleTracks),
-			// The empty attribute value is how the player page writes "off"
-			// (an attribute can't carry null), so it maps back to null here
-			// rather than to an empty-string language nothing would match.
+			// Attributes can't hold null, so the player writes "" for subtitles off.
 			subtitleLanguage: data.piviPlayerSubtitleLanguage || null,
 			diagnosticsOpen: data.piviPlayerDiagnosticsOpen === 'true',
 			volume: numberAttr(data.piviPlayerVolume)
 		};
 	}
 
-	// The pre-login picker's own profiles, read straight from its DOM (see
-	// `+page.svelte`'s `data-pivi-profile-*` attributes) rather than
-	// re-querying them -- this component lives in the root layout and has no
-	// business knowing about that page's own GraphQL query.
+	// Read from the profile picker's `data-pivi-profile-*` attributes, as the
+	// root layout shouldn't know that page's query.
 	function pickerProfiles() {
 		return [...document.querySelectorAll<HTMLElement>('[data-pivi-profile-id]')].map((el) => ({
 			id: el.dataset.piviProfileId!,
@@ -237,8 +211,7 @@
 		}));
 	}
 
-	// The home dashboard's own app shortcuts, same idea (see
-	// AppCard.svelte's `data-pivi-app-*` attributes).
+	// Same for the dashboard's AppCards, so the phone can launch apps.
 	function dashboardApps() {
 		return [...document.querySelectorAll<HTMLElement>('[data-pivi-app-id]')].map((el) => ({
 			id: el.dataset.piviAppId!,
@@ -260,17 +233,8 @@
 		return keyboardVisible() ? all.filter((el) => el.closest('[data-pivi-osk]')) : all;
 	}
 
-	// A slider (#lib/components/Slider.svelte) opts out of normal spatial nav
-	// along its own axis while it holds focus -- a swipe matching its
-	// orientation adjusts its value instead of moving focus (dispatched as a
-	// plain DOM event, the same way pressPinKey/setFocusedText below drive
-	// other on-screen controls rather than needing their own RPC messages);
-	// a swipe across the other axis still falls through to moveFocus, so
-	// swiping "off axis" carries focus away exactly like leaving any other
-	// control.
-	// Dispatches the swipe to the focused slider when its own axis matches the
-	// swipe's dominant axis. Returns whether it did, so the caller falls
-	// through to normal spatial-nav focus movement otherwise.
+	// An armed slider takes swipes along its own axis as `pivi-slider-adjust`.
+	// Returns false for off-axis swipes, so focus moves on like with any control.
 	function trySliderAdjust(active: HTMLElement, dx: number, dy: number): boolean {
 		const horizontal = active.getAttribute('data-pivi-slider-orientation') !== 'vertical';
 		const isHorizontalSwipe = Math.abs(dx) > Math.abs(dy);
@@ -280,10 +244,7 @@
 		return true;
 	}
 
-	// Only an armed slider (a press already activated it -- see Slider.svelte)
-	// claims a swipe; an unarmed one just sits there while swipes move focus
-	// normally, so landing on one and continuing past it doesn't nudge its
-	// value.
+	// Unarmed sliders let swipes pass, so moving past one doesn't nudge it.
 	function armedSlider(el: Element | null): HTMLElement | null {
 		if (!(el instanceof HTMLElement) || !el.hasAttribute('data-pivi-slider')) return null;
 		return el.getAttribute('data-pivi-slider-armed') === 'true' ? el : null;
@@ -296,16 +257,14 @@
 	}
 
 	function focusAndScroll(el: HTMLElement, els: HTMLElement[]) {
-		// Focus alone can jump instantly on some browsers regardless of the
-		// container's `scroll-behavior` (Safari in particular), so scroll it
-		// into view ourselves first and let focus land without re-scrolling.
+		// Safari jumps on focus regardless of `scroll-behavior`, so scroll
+		// smoothly first and focus without scrolling.
 		scrollFocusedIntoView(el, els);
 		el.focus({ preventScroll: true });
 	}
 
-	// Lightweight spatial navigation: from the focused element, pick the
-	// nearest other focusable element within a cone in the swipe direction,
-	// rather than a fixed tab order (see spatialNav.ts).
+	// Picks the nearest focusable in the swipe direction, as a tab order doesn't
+	// match a 2D TV layout (see spatialNav.ts).
 	function moveFocus(dx: number, dy: number) {
 		const els = focusableElements();
 		const move = planMove(els, document.activeElement, dx, dy);
@@ -315,12 +274,8 @@
 		else move.el.focus();
 	}
 
-	// Vertically, center whichever row (title included) or the top bar holds
-	// focus, and let the browser's own scroll clamping stop that short of the
-	// top/bottom of the page -- which is exactly "center it, except near an
-	// end". `scrollIntoView({block: 'nearest'})` instead reads as "stuck"
-	// rather than "arrived": it's satisfied the instant a shelf's title (now
-	// much larger while active) is still scrolled just off the top.
+	// Centers the focused row, browser clamping handles the page ends. `nearest`
+	// felt stuck, leaving the enlarged shelf title just offscreen.
 	function centerVertically(el: HTMLElement) {
 		// A sticky sidebar is always on screen, so scrolling the page to center
 		// it would only shove the content around.
@@ -334,10 +289,8 @@
 		});
 	}
 
-	// Any card moving out of frame just needs the shelf nudged enough to bring
-	// it back in. Done by hand (not `el.scrollIntoView({block: 'nearest'})`)
-	// because that also re-scrolls the window for the block axis -- undoing
-	// the vertical centering above, since both target the same window scroll.
+	// By hand, as `scrollIntoView` would also scroll the window and undo the
+	// vertical centering.
 	function nudgeShelf(shelf: HTMLElement, el: HTMLElement) {
 		const shelfRect = shelf.getBoundingClientRect();
 		const elRect = el.getBoundingClientRect();
@@ -348,9 +301,8 @@
 		}
 	}
 
-	// The first/last card in a shelf scrolls that shelf to its actual limit
-	// rather than just far enough to show the card -- `nearest` stops short of
-	// the end, which reads as the shelf refusing to finish scrolling.
+	// The first and last card scroll the shelf fully. `nearest` stops short,
+	// so the shelf seems to refuse to finish.
 	function scrollShelf(shelf: HTMLElement, el: HTMLElement, focusable: HTMLElement[]) {
 		const items = focusable.filter((candidate) => shelf.contains(candidate));
 		if (el === items[0]) return shelf.scrollTo({ left: 0, behavior: 'smooth' });
@@ -364,9 +316,8 @@
 		if (shelf) scrollShelf(shelf, el, focusable);
 	}
 
-	// Plays the `.pivi-press` scale animation on whatever was just clicked —
-	// a real tap, a mouse click, or the remote's synthetic `select` click all
-	// go through the same DOM `click` event, so one listener covers them all.
+	// Sound and `.pivi-press` feedback for taps, mouse and the remote's select
+	// alike, since they all end in a DOM click.
 	function onClick(event: MouseEvent) {
 		if (!(event.target instanceof HTMLElement)) return;
 		const target = event.target.closest<HTMLElement>(
@@ -381,14 +332,9 @@
 		target.classList.add('pivi-press');
 	}
 
-	// Gives whatever's focused a real pointerdown/pointerup with duration in
-	// between (see selectPress/selectReleaseNotification below), rather than
-	// the single synthetic click a remote press used to produce -- the only
-	// thing that lets HoldToConfirmButton's hold-to-confirm gesture actually
-	// run over the remote. A script-dispatched pointer event never auto-fires
-	// a `click` afterward the way a trusted device one does, so the release
-	// handler below still calls `.click()` itself for every other control
-	// that only ever listens for clicks.
+	// A real down and up with time between is what lets HoldToConfirmButton
+	// work over the remote. Script pointer events never fire a click, so the
+	// release handler clicks on its own.
 	function dispatchRemotePointer(
 		type: 'pointerdown' | 'pointerup' | 'pointercancel',
 		el: HTMLElement
@@ -404,16 +350,15 @@
 		);
 	}
 
+	// Not a .click(), so PinPad skips its key flash and nobody can read a
+	// phone-typed PIN off the TV.
 	function pressPinKey(key: string) {
-		// Not a real .click() -- PinPad listens for this event specifically so
-		// it can register the digit without its usual "which key was pressed"
-		// flash, since that flash is meant for someone entering a PIN directly
-		// on the TV, not for anyone nearby to read off a PIN typed on a phone.
 		document
 			.querySelector('[data-pivi-pinpad]')
 			?.dispatchEvent(new CustomEvent('pivi-remote-press', { detail: { key } }));
 	}
 
+	// Only the focused field's own suggestions, not another field's leftovers.
 	function focusedSuggestions() {
 		const el = focusedTextInput();
 		return el && osk.suggestions.owner === el ? $state.snapshot(osk.suggestions.items) : [];
@@ -440,6 +385,7 @@
 		if (el) submitInput(el);
 	}
 
+	// The phone has no Escape key. Blur covers fields that ignore the exit event.
 	function exitFocusedText() {
 		const el = focusedTextInput();
 		if (!el) return;
@@ -454,25 +400,15 @@
 		// Typing on the TV itself changes no DOM, but the phone must follow it.
 		document.addEventListener('input', scheduleFocusRecheck);
 		document.addEventListener('click', onClick);
-		// `play`/`pause` don't bubble, so a plain (bubbling) document listener
-		// would never see them fire on the player's own <video> -- capture does,
-		// since capturing listeners reach the target on the way down regardless
-		// of whether the event goes on to bubble back up.
+		// Media events don't bubble, so only capture sees the <video>'s.
 		document.addEventListener('play', scheduleFocusRecheck, true);
 		document.addEventListener('pause', scheduleFocusRecheck, true);
-		// `timeupdate` doesn't bubble either, same as play/pause -- keeps the
-		// phone's progress bar advancing during playback instead of only
-		// updating on the next unrelated state push.
+		// Keeps the phone's progress bar moving during playback.
 		document.addEventListener('timeupdate', scheduleFocusRecheck, true);
-		// `volumechange` doesn't bubble either -- keeps the phone's volume
-		// slider in sync with a volume change made on the TV side itself
-		// (its own slider, a remote's volume nudge already routed through
-		// here) instead of only updating on the next unrelated state push.
+		// Keeps the phone's volume slider in sync with changes made on the TV.
 		document.addEventListener('volumechange', scheduleFocusRecheck, true);
-		// Dispatched by the player page itself (bubbles normally) whenever its
-		// quality or diagnostics-panel state changes on its own, e.g. from a
-		// quality auto-pick or the TV's own Info button -- neither shows up as
-		// a DOM mutation the observer below would catch.
+		// For player changes with no DOM mutation, like a quality auto-pick or
+		// the TV's Info button.
 		document.addEventListener('pivi-player-state-changed', scheduleFocusRecheck);
 
 		const observer = new MutationObserver(scheduleFocusRecheck);
@@ -481,14 +417,8 @@
 		ensureRal();
 
 		const reader = new PushMessageReader();
-		// `socket?.` alone isn't enough of a guard -- calling `.send()` while
-		// the handshake hasn't finished yet (readyState CONNECTING) throws
-		// synchronously, and a focusin/mutation can fire sendState() that
-		// early during initial mount, before `onopen` below has run. Silently
-		// dropping the message when the socket isn't actually open yet
-		// matches how every other send on this connection already behaves
-		// best-effort (e.g. a phone that hasn't paired yet just never gets a
-		// stateNotification, rather than crashing the tab that would send it).
+		// Sending before the handshake finishes throws, and a focusin can trigger
+		// that during mount. Dropping is fine, a later state push follows.
 		const writer = new SinkMessageWriter((msg) => {
 			if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
 		});
@@ -497,9 +427,7 @@
 		onNotification(connection, moveNotification, moveParamsSchema, ({ dx, dy }) =>
 			handleMove(dx, dy)
 		);
-		// These carry no params, so there's nothing for a zod schema to
-		// enforce — registered directly on the connection instead of through
-		// the onNotification wrapper.
+		// No params, so there is no schema to validate.
 		connection.onNotification(selectPressNotification, () => {
 			if (document.activeElement instanceof HTMLElement) {
 				dispatchRemotePointer('pointerdown', document.activeElement);
@@ -512,34 +440,26 @@
 				el.click();
 			}
 		});
-		// A press that turned out to be the start of a swipe, not a real
-		// selection -- cancels whatever the pointerdown above started (e.g.
-		// unwinds HoldToConfirmButton's hold back to empty) without the
-		// release handler's `.click()`, which would otherwise fire a real
-		// selection on whatever's focused just because a swipe began under it.
+		// The press turned into a swipe, so undo the pointerdown without the
+		// click that would select whatever is focused.
 		connection.onNotification(selectCancelNotification, () => {
 			if (document.activeElement instanceof HTMLElement) {
 				dispatchRemotePointer('pointercancel', document.activeElement);
 			}
 		});
-		// Clicking the matching profile link (rather than just navigating
-		// directly) reuses its existing view-transition tagging and the
-		// `.pivi-press` feedback animation above, same as every other
-		// remote-driven interaction.
+		// Clicking the link instead of navigating keeps its view transition and
+		// press feedback.
 		onNotification(connection, selectProfileNotification, selectProfileParamsSchema, ({ id }) => {
 			document.querySelector<HTMLElement>(`[data-pivi-profile-id="${CSS.escape(id)}"]`)?.click();
 		});
 		onNotification(connection, selectAppNotification, selectAppParamsSchema, ({ id }) => {
 			document.querySelector<HTMLElement>(`[data-pivi-app-id="${CSS.escape(id)}"]`)?.click();
 		});
-		// A plain DOM event, not a click -- see remoteProtocol.ts's own comment
-		// on why (no single element to click for a volume nudge).
+		// A DOM event, as a volume nudge has no single element to click.
 		onNotification(connection, playerActionNotification, playerActionParamsSchema, ({ action }) => {
 			document.dispatchEvent(new CustomEvent('pivi-player-action', { detail: { action } }));
 		});
-		// Same plain-DOM-event handoff as playerActionNotification above, just
-		// carrying a value the player page needs (the seek target / picked
-		// quality) rather than a fixed action name.
+		// Same handoff, carrying the value the player page needs.
 		onNotification(connection, playerSeekNotification, playerSeekParamsSchema, ({ seconds }) => {
 			document.dispatchEvent(new CustomEvent('pivi-player-seek', { detail: { seconds } }));
 		});
@@ -650,15 +570,10 @@
 		};
 	});
 
-	// Re-announce state after every client-side navigation (this component
-	// lives in the root layout, so it survives navigation between routes).
-	// The previously-focused element is gone either way, so drop the ring
-	// eagerly instead of waiting on a stray focusin that may never come.
+	// This component survives navigation, so it refreshes the ring and state itself.
 	afterNavigate(() => {
-		// If the focused element lives in the root layout (e.g. the profile
-		// chip) rather than the page that just got swapped out, it survives
-		// navigation — so its ring has to be removed explicitly, not just
-		// dropped by nulling `currentEl`, or it's stuck there indefinitely.
+		// A focused layout element, like the profile chip, survives too, so its
+		// ring has to be removed explicitly.
 		currentEl?.classList.remove('pivi-remote-focus');
 		currentEl = null;
 		queueMicrotask(sendState);

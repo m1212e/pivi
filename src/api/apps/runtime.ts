@@ -5,13 +5,13 @@
 // its manifest is dropped, and URLs it hands back are held to the domains that
 // manifest declared.
 //
-// What an app may *do* isn't decided here — that's the sandbox it was started
+// What an app may *do* isn't decided here. That's the sandbox it was started
 // in (network, storage, cache). This file decides what the host will *believe*
 // and *forward* from it.
 //
-// The bare vscode-jsonrpc package, not a /node subpath — see rpcRal.ts for why
+// The bare vscode-jsonrpc package, not a /node subpath. See rpcRal.ts for why
 // (its conditional-only export doesn't resolve consistently under this
-// project's Vite setup); ensureRal() installs the RAL createMessageConnection
+// project's Vite setup), and ensureRal() installs the RAL createMessageConnection
 // needs.
 import { getHostLocale } from './hostLocale';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
@@ -50,6 +50,11 @@ import { appScreenSchema } from '#lib/apps/ui';
 import { sanitizeDashboard, sanitizeScreen } from './sanitize';
 import type { RunningSandbox, SandboxHandlers } from './sandbox/types';
 
+/**
+ * A running app as handed out by manager.ts's getApp to the screen, playback
+ * and stream code. Everything crossing it is already validated and filtered,
+ * so callers never touch the raw protocol.
+ */
 export type AppInstance = {
 	manifest: AppManifest;
 	getDashboard(): DashboardContribution | undefined;
@@ -67,8 +72,13 @@ export type AppInstance = {
 	dispose(): Promise<void>;
 };
 
+/** What changed, so subscribers only refetch the part that did. */
 export type AppUpdateKind = 'dashboard' | 'screen';
 
+/**
+ * Keeps this module to the protocol alone. Booting the sandbox and publishing
+ * updates are wired in by manager.ts (and by the sandbox e2e test).
+ */
 export type LoadAppOptions = {
 	manifest: AppManifest;
 	granted: readonly PermissionKey[];
@@ -84,13 +94,17 @@ export type LoadAppOptions = {
 // How long an app gets to say it's ready. Generous: it includes booting the
 // VM and the app's own startup.
 const READY_TIMEOUT_MS = 60_000;
+// How long a shutdown notification gets before the sandbox is killed anyway.
 const SHUTDOWN_GRACE_MS = 2_000;
+// Per log line, see createStderrLogger.
 const MAX_LOG_LINE = 2_000;
 
 function hasFeature(manifest: AppManifest, feature: Feature): boolean {
 	return manifest.features.includes(feature);
 }
 
+// Same rule for the app's own requests and the host's, so an app can't use the
+// host to reach a domain it was never allowed to.
 function urlAllowed(
 	manifest: AppManifest,
 	granted: readonly PermissionKey[],
@@ -123,11 +137,14 @@ function createStderrLogger(appId: string) {
 	};
 }
 
+// Latest accepted publish per kind, served to the UI without asking the app.
 type PublishedState = {
 	dashboard?: DashboardContribution;
 	screens: Map<string, AppScreen>;
 };
 
+// The app's inbound side. Each handler validates first and ignores what fails,
+// since the app is untrusted and a bad message must not take the host down.
 function wireNotifications(
 	connection: MessageConnection,
 	options: LoadAppOptions,
@@ -162,6 +179,11 @@ function wireNotifications(
 	});
 }
 
+/**
+ * Called by manager.ts to start an app. Resolves only once it is ready and
+ * speaks its manifest's protocol, and stops the sandbox otherwise, so callers
+ * never get a half-started app.
+ */
 export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	const { manifest, granted } = options;
 	const published: PublishedState = { screens: new Map() };
@@ -197,6 +219,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 					}
 				}
 			} catch {
+				// The splitter throws when a line exceeds its cap, which is app misbehavior.
 				console.error(`[app:${manifest.id}] message too large; stopping it`);
 				void sandbox.stop();
 			}
@@ -210,6 +233,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		}
 	});
 
+	// Write failures are ignored since a dead sandbox is reported through onExit.
 	const writer = new SinkMessageWriter((message) => {
 		sandbox.write(encodeMessage(message)).catch(() => {});
 	});
@@ -240,6 +264,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		clearTimeout(timeout);
 	}
 
+	// Only now, so the app doesn't act on a locale before it has been vetted.
 	connection.sendNotification(activateNotification, { locale: getHostLocale() });
 
 	return {

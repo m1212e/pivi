@@ -13,9 +13,10 @@ const wifiNetworkSchema = z.object({
 	saved: z.boolean()
 });
 
+/** Lets the /wifi page validate what it fetches against the same shape the server builds. */
 export const wifiManagementSchema = z.object({
 	// Whether this device can manage wifi at all (NetworkManager reachable and
-	// a wireless interface present) -- a wired-only box always reports false.
+	// a wireless interface present). A wired-only box always reports false.
 	available: z.boolean(),
 	mode: z.enum(['client', 'hotspot', 'disconnected']),
 	ssid: z.string().nullable(),
@@ -30,4 +31,5 @@ export const wifiManagementSchema = z.object({
 	connectingSsid: z.string().nullable(),
 	error: z.string().nullable()
 });
+/** Built by wifiManagementService, rendered by the /wifi page and WifiManagerPanel. */
 export type WifiManagementState = z.infer<typeof wifiManagementSchema>;
