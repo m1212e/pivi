@@ -48,6 +48,7 @@
 		textParamsSchema
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
+	import { formatTime } from '#lib/playback/time';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
@@ -395,13 +396,6 @@
 		sendNotification(connection, playerVolumeNotification, playerVolumeParamsSchema, {
 			volume: target
 		});
-	}
-
-	function formatTime(seconds: number): string {
-		if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-		const m = Math.floor(seconds / 60);
-		const s = Math.floor(seconds % 60);
-		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
 
 	// Values this phone sent recently, so the TV echoing them back isn't

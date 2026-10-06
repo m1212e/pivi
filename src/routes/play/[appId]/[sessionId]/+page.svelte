@@ -30,6 +30,34 @@
 		type DualTrackHandle,
 		type SegmentBaseIndex
 	} from '#lib/mse/dualTrackPlayer';
+	import {
+		DEFAULT_QUALITY,
+		QUALITY_OPTIONS,
+		bestInitialQuality,
+		isMseCandidate,
+		isQualityOption,
+		qualityModeFor as qualityModeOf,
+		toQualityMeta,
+		type QualityMeta,
+		type QualityMode,
+		type QualityOption
+	} from '#lib/playback/quality';
+	import { createSessionUrls, mimeTypeFor, nextSessionHref } from '#lib/playback/urls';
+	import { clampSeek, settleTimeUpdate, type SeekTarget } from '#lib/playback/seek';
+	import { nextSkipStep, skipTarget, type SkipSegment } from '#lib/playback/skipSegments';
+	import {
+		browserStorage,
+		clampVolume,
+		isOfferedSubtitle,
+		loadSkipActive,
+		loadSubtitleLanguage,
+		loadVolume,
+		saveSkipActive,
+		saveSubtitleLanguage,
+		saveVolume
+	} from '#lib/playback/preferences';
+	import { describeError } from '#lib/playback/errors';
+	import { bufferedAheadSeconds, formatTime } from '#lib/playback/time';
 
 	const READY_STATE_LABELS = [
 		'HAVE_NOTHING',
@@ -49,97 +77,23 @@
 	const sessionId = page.params.sessionId!;
 	// Set when the session was started from a sequence such as a playlist.
 	const context = page.url.searchParams.get('context');
-	const streamBaseUrl = `/api/stream/${encodeURIComponent(appId)}/${encodeURIComponent(sessionId)}`;
+	const urls = createSessionUrls(appId, sessionId);
+	const storage = browserStorage(browser);
 
-	function trackUrlFor(track: 'video' | 'audio', maxHeight: QualityOption = quality): string {
-		const params = new URLSearchParams({ quality: String(maxHeight) });
-		return `/api/stream-track/${encodeURIComponent(appId)}/${encodeURIComponent(sessionId)}/${track}?${params}`;
-	}
-
-	// `maxHeight` defaults to the currently-selected quality (every real
-	// playback call site wants that), but takes an explicit tier too --
-	// probeMse (below) needs to check other, not-yet-selected tiers, which
-	// each land on their own `resolveStreamCached`/segment-index cache entry
-	// (keyed by maxHeight), not the currently-playing one.
-	function indexUrlFor(
-		track: 'video' | 'audio',
-		container: 'mp4' | 'webm',
-		maxHeight: QualityOption = quality
-	): string {
-		const params = new URLSearchParams({ container, quality: String(maxHeight) });
-		return `/api/stream-track/${encodeURIComponent(appId)}/${encodeURIComponent(sessionId)}/${track}/index?${params}`;
-	}
-
-	// VP9/AV1 video and Opus audio need a WebM SourceBuffer; H.264 video and
-	// AAC audio need an MP4 one -- checked per track (not assumed to match
-	// between video and audio) since the same session's two tracks can be,
-	// and often are, different container families -- e.g. an avc1/mp4 video
-	// paired with an opus/webm audio track. Feeding a SourceBuffer bytes in a
-	// different container than its own codecs string declared is exactly
-	// what breaks the demuxer.
-	// The container each track is packaged in comes from the resolved stream
-	// itself (see host.ts's Container type comment) rather than being
-	// re-derived from the codec string here -- YouTube pairs vp9 with either
-	// container depending on format, and av1 with mp4 despite webm supporting
-	// it too, so guessing from vcodec/acodec alone gets it wrong in practice.
-	function mimeTypeFor(container: 'mp4' | 'webm', kind: 'video' | 'audio'): string {
-		return `${kind}/${container}`;
-	}
-
-	// The segment index endpoint (src/routes/api/stream-track/.../index)
-	// locates the sidx/Cues index already baked into the resolved CDN file --
-	// see src/api/apps/containerIndex.ts for why that's there to find at
-	// all. A 404 there (an mp4 with no sidx, a webm with no Cues) means this
-	// session genuinely can't do real progressive MSE buffering, so this
-	// throws and lets the caller fall back to the ffmpeg proxy rather than
-	// attaching Shaka to a manifest that would just hang mid-download.
+	// 404 means no sidx or Cues index, so MSE can't work and the caller falls back to ffmpeg.
 	async function fetchSegmentIndex(url: string): Promise<SegmentBaseIndex> {
 		const res = await fetch(url);
 		if (!res.ok) throw new Error(`Could not locate segment index (${res.status})`);
 		return res.json();
 	}
 
-	// A height cap on the requested stream (see apps/youtube/stream.ts) --
-	// always resolving/remuxing the true "best" available quality (sometimes
-	// 4K/8K) is more bitrate than a live remux-and-forward can reliably keep
-	// up with, which is what made playback choppy -- there's deliberately no
-	// "auto"/uncapped option for this reason (it also never adapted to
-	// anything at runtime; it was just a one-shot "resolve the literal best"
-	// pick, so it bought nothing a capped tier didn't already offer more
-	// safely). 720p defaults here for a second reason too: it's one of the
-	// handful of resolutions YouTube still serves as a single pre-muxed file,
-	// which the streaming proxy hands the browser directly with no remux at
-	// all (see its own comment) -- easily the biggest win for how long it
-	// takes playback to actually start. The list below still lets the viewer
-	// trade that startup speed for higher quality (or the other way, on a
-	// slow network) themselves.
-	const QUALITY_OPTIONS = [2160, 1440, 1080, 720, 480, 360] as const;
-	type QualityOption = (typeof QUALITY_OPTIONS)[number];
-	const DEFAULT_QUALITY = 720;
 	let quality = $state<QualityOption>(DEFAULT_QUALITY);
 
-	function streamUrlFor(seconds: number): string {
-		const params = new URLSearchParams({ t: String(seconds), quality: String(quality) });
-		return `${streamBaseUrl}?${params}`;
-	}
+	const streamUrlFor = (seconds: number) => urls.stream(seconds, quality);
 
-	type QualityMeta = {
-		direct: boolean;
-		vcodec: string;
-		acodec: string | null;
-		videoContainer: 'mp4' | 'webm';
-		audioContainer: 'mp4' | 'webm' | null;
-	};
-
-	// Metadata only (title, duration, codecs) -- never the raw stream URLs,
-	// which stay entirely server-side. Fetched once up front rather than
-	// kept live: unlike the dashboard's cards, nothing about a single
-	// playback session's own title/duration changes while this page is open,
-	// so this doesn't need to react to a later quality change on its own --
-	// `maxHeight` here is only to land on the same cache entry the initial
-	// playback setup (also DEFAULT_QUALITY) resolves. `direct`/codecs *do*
-	// depend on quality (a lower cap is more likely to hit a pre-muxed
-	// format), so qualityMeta below tracks them per option.
+	// Metadata only, raw stream URLs stay on the server.
+	// Fetched once, title and duration don't change mid-session.
+	// Codecs depend on the tier, so qualityMeta tracks them per option.
 	const info = await client.liveQuery.appPlaybackInfo({
 		__args: { appId, sessionId, maxHeight: DEFAULT_QUALITY },
 		title: true,
@@ -152,10 +106,7 @@
 		subtitleTracks: { language: true, label: true, kind: true }
 	});
 
-	// See #lib/apps/host's SubtitleTrack for the app-facing side of this
-	// same shape -- `url`/`format` deliberately never cross into this query at
-	// all (see playback.ts's own comment), so this local type is narrower than
-	// the app-facing one on purpose, not just a duplicate of it.
+	// Narrower than the app-facing SubtitleTrack on purpose. Url and format never reach the client.
 	type SubtitleTrack = {
 		language: string;
 		label: string | null;
@@ -169,50 +120,21 @@
 		}))
 	);
 
-	// The Select's own option list -- `null` (Off) always leads, since it's
-	// not a real track and has nowhere else meaningful to sort into.
+	// Off (null) always comes first.
 	const subtitleOptions = $derived<(string | null)[]>([
 		null,
 		...subtitleTracks.map((t) => t.language)
 	]);
 
-	function subtitleUrlFor(language: string): string {
-		return `/api/stream-subtitle/${encodeURIComponent(appId)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(language)}`;
-	}
-
-	// A per-viewer convenience like the volume preference below -- `null`
-	// means captions off. Not defaulted on even when tracks exist: the whole
-	// point of a subtitle picker is opting in, and defaulting to whatever
-	// language happened to be picked for some other, unrelated video would be
-	// a stranger surprise than just starting off.
-	const SUBTITLE_LANGUAGE_STORAGE_KEY = 'pivi:player:subtitleLanguage';
-	function loadStoredSubtitleLanguage(): string | null {
-		if (!browser) return null;
-		try {
-			return localStorage.getItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
-		} catch {
-			return null;
-		}
-	}
-	let subtitleLanguage = $state<string | null>(loadStoredSubtitleLanguage());
+	// null means captions off.
+	let subtitleLanguage = $state<string | null>(loadSubtitleLanguage(storage));
 
 	function selectSubtitle(language: string | null) {
 		subtitleLanguage = language;
-		if (!browser) return;
-		try {
-			if (language) localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
-			else localStorage.removeItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
-		} catch {
-			// Private browsing / storage disabled -- nothing to persist to.
-		}
+		saveSubtitleLanguage(storage, language);
 	}
 
-	// An app-provided skippable section (a SponsorBlock segment, for the
-	// YouTube app) -- see #lib/apps/host's SkipSegment for the
-	// app-facing side of this same shape. Fetched in the background (not
-	// a top-level await like `info` above) since nothing about starting
-	// playback depends on it, and most sessions won't have any at all.
-	type SkipSegment = { startSeconds: number; endSeconds: number; label: string };
+	// Fetched in the background, starting playback doesn't depend on it.
 	let skipSegments = $state<SkipSegment[]>([]);
 	client.query
 		.appSkipSegments({
@@ -226,62 +148,18 @@
 		})
 		.catch(() => {});
 
-	// Per quality tier: whether it's direct or proxied, and its codecs --
-	// shown as a per-option icon in the quality list (below) rather than
-	// just for whichever one happens to be selected, so the choice between
-	// speed and resolution is visible up front instead of something you find
-	// out by switching, and read again by selectQuality() to set up
-	// playback for the new tier without a second round trip. `undefined`
-	// means still resolving -- finding out requires the same per-app
-	// resolution actually playing that quality would (there's no way to know
-	// generically without asking), so this fires one request per remaining
-	// option in the background rather than blocking on all of them before
-	// the page can render.
-	function toQualityMeta(result: {
-		direct: boolean;
-		vcodec: string;
-		acodec: string | null;
-		videoContainer: string;
-		audioContainer: string | null;
-	}): QualityMeta {
-		return {
-			direct: result.direct,
-			vcodec: result.vcodec,
-			acodec: result.acodec,
-			// The server only ever reports these two containers (see host.ts's
-			// Container schema) -- GraphQL just doesn't have an enum-of-string-
-			// literals scalar to express that in the generated client type.
-			videoContainer: result.videoContainer as 'mp4' | 'webm',
-			audioContainer: result.audioContainer as 'mp4' | 'webm' | null
-		};
-	}
-
-	// Whether a tier actually has a locatable sidx/Cues index -- `acodec`/
-	// `audioContainer` alone can't tell you this (YouTube resolves an audio
-	// track for essentially every tier, direct ones included), so unlike the
-	// rest of qualityMeta, this can only be found out by actually asking the
-	// segment-index endpoint the same question setupMsePlayback itself would.
-	// `undefined` means not yet probed (or never a candidate -- direct/no-
-	// audio tiers are never MSE candidates in the first place and are never
-	// probed at all); the qualityButton snippet shows no icon for either of
-	// those "don't know yet" cases, same as qualityMeta's own undefined.
+	// Per tier: direct or proxied, and codecs. Shown as icons in the quality list.
+	// undefined means still resolving.
+	// Whether a tier has a usable sidx or Cues index. Only the index endpoint can tell.
+	// undefined means not probed yet, or never an MSE candidate.
 	let mseAvailability = $state<Partial<Record<QualityOption, boolean>>>({});
-
-	// The only tiers MSE is even a candidate for: proxied (not direct), with a
-	// separate audio track to pair the video one with. A type guard, so the
-	// two callers that go on to hand `meta` to setupMsePlayback get the
-	// non-null acodec/audioContainer for free.
-	type MseQualityMeta = QualityMeta & { acodec: string; audioContainer: 'mp4' | 'webm' };
-	function isMseCandidate(meta: QualityMeta): meta is MseQualityMeta {
-		return !meta.direct && !!meta.acodec && !!meta.audioContainer;
-	}
 
 	async function probeMse(option: QualityOption, meta: QualityMeta) {
 		if (!isMseCandidate(meta)) return;
 		try {
 			await Promise.all([
-				fetchSegmentIndex(indexUrlFor('video', meta.videoContainer, option)),
-				fetchSegmentIndex(indexUrlFor('audio', meta.audioContainer, option))
+				fetchSegmentIndex(urls.trackIndex('video', meta.videoContainer, option)),
+				fetchSegmentIndex(urls.trackIndex('audio', meta.audioContainer, option))
 			]);
 			mseAvailability = { ...mseAvailability, [option]: true };
 		} catch {
@@ -293,36 +171,10 @@
 		[DEFAULT_QUALITY]: info ? toQualityMeta(info) : undefined
 	});
 
-	type QualityMode = 'direct' | 'mse' | 'ffmpeg';
+	const qualityModeFor = (option: QualityOption): QualityMode | undefined =>
+		qualityModeOf(qualityMeta[option], mseAvailability[option]);
 
-	// Mirrors setupPlayback's own branching (direct / MSE / ffmpeg fallback),
-	// but MSE specifically can't be predicted from meta alone -- acodec/
-	// audioContainer are present for nearly every tier regardless of whether a
-	// locatable sidx/Cues index actually exists (see probeMse) -- so this
-	// reflects mseAvailability's real, probed answer instead of just guessing
-	// "has an audio track" means MSE will actually work. `undefined` means
-	// still resolving (or never a candidate) -- both the quality list below
-	// and the phone (see qualityModes) show no icon for either case.
-	// Tri-state: `undefined` while the probe is still out, and ffmpeg once
-	// it's come back saying there's no usable index after all.
-	function probedMseMode(option: QualityOption): QualityMode | undefined {
-		const available = mseAvailability[option];
-		if (available === undefined) return undefined;
-		return available ? 'mse' : 'ffmpeg';
-	}
-
-	function qualityModeFor(option: QualityOption): QualityMode | undefined {
-		const meta = qualityMeta[option];
-		if (!meta) return undefined;
-		if (meta.direct) return 'direct';
-		if (!isMseCandidate(meta)) return 'ffmpeg';
-		return probedMseMode(option);
-	}
-
-	// Same per-option modes as qualityButton's own icons, keyed by quality so
-	// the phone's quality picker (see RemoteBridge.svelte's sendState) can
-	// show the exact same direct/adaptive/proxied indicator instead of
-	// guessing from the bare quality number alone.
+	// Same modes as the list icons, so the phone shows the same indicators.
 	const qualityModes = $derived(
 		Object.fromEntries(
 			QUALITY_OPTIONS.map((option) => [option, qualityModeFor(option)]).filter(
@@ -331,9 +183,7 @@
 		)
 	);
 
-	// The top-level `info` fetch above already resolved DEFAULT_QUALITY, so
-	// this reuses it instead of firing a second, identical request for the
-	// same tier.
+	// info already resolved the default tier, don't ask twice.
 	async function resolveQualityMeta(option: QualityOption): Promise<QualityMeta | undefined> {
 		if (option === DEFAULT_QUALITY) return info ? toQualityMeta(info) : undefined;
 		const result = await client.query
@@ -349,12 +199,7 @@
 		return result ? toQualityMeta(result) : undefined;
 	}
 
-	// Fired for every tier up front (not just the one that ends up selected)
-	// so the quality list's own icons (see qualityButton) reflect real,
-	// probed availability rather than a guess, same as before -- but now
-	// also so the initial-playback pick below can wait for all of them to
-	// settle and choose the actual best tier instead of just assuming
-	// DEFAULT_QUALITY.
+	// Resolve every tier up front so the icons are real and the initial pick can compare them.
 	const qualityResolutions = QUALITY_OPTIONS.map(async (option) => {
 		const meta = await resolveQualityMeta(option);
 		if (!meta) return;
@@ -362,196 +207,50 @@
 		await probeMse(option, meta);
 	});
 
-	// Picks the highest resolution that's actually confirmed to support real
-	// MSE playback (QUALITY_OPTIONS is already ordered highest to lowest)
-	// once every tier has been probed -- falling back to the old
-	// DEFAULT_QUALITY pick only if none of them do, so a session with no
-	// MSE-capable tier at all still starts exactly like before.
+	// Start on the best tier confirmed for MSE, else the default.
 	let readyForInitialAttach = $state(false);
 	Promise.allSettled(qualityResolutions).then(() => {
-		const bestMse = QUALITY_OPTIONS.find((option) => mseAvailability[option] === true);
-		quality = bestMse ?? DEFAULT_QUALITY;
+		quality = bestInitialQuality(mseAvailability);
 		readyForInitialAttach = true;
 	});
-
-	// A per-viewer convenience (this browser's own volume preference, not
-	// anything shared/durable), so localStorage is the right place for it
-	// rather than anything server-side. Guarded with SvelteKit's own
-	// `browser` check (this file's top-level await also runs during SSR) --
-	// not a try/catch, since some runtimes (Bun included) stub a
-	// `localStorage` global server-side that warns instead of throwing,
-	// so a throw-based guard wouldn't actually catch it. Still wrapped for
-	// the separate case of private-browsing/storage-disabled contexts,
-	// which really do throw.
-	const VOLUME_STORAGE_KEY = 'pivi:player:volume';
-	function loadStoredVolume(): number {
-		if (!browser) return 1;
-		try {
-			const stored = Number(localStorage.getItem(VOLUME_STORAGE_KEY));
-			return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 1;
-		} catch {
-			return 1;
-		}
-	}
-
-	// Same idea as the volume preference above -- whether to actually act on
-	// an app's skippable sections at all, remembered across sessions rather
-	// than re-decided per segment. Defaults on: the whole point of the
-	// feature is not having to react to every sponsor read individually, and
-	// only the exact people who'd rather watch through them ever need to
-	// touch this.
-	const SKIP_ACTIVE_STORAGE_KEY = 'pivi:player:skipActive';
-	function loadStoredSkipActive(): boolean {
-		if (!browser) return true;
-		try {
-			const stored = localStorage.getItem(SKIP_ACTIVE_STORAGE_KEY);
-			return stored === null ? true : stored === 'true';
-		} catch {
-			return true;
-		}
-	}
 
 	let videoEl: HTMLVideoElement | undefined = $state();
 	let playing = $state(false);
 	let currentTime = $state(0);
-	let volume = $state(loadStoredVolume());
+	let volume = $state(loadVolume(storage));
 	let errorMessage = $state<string | null>(null);
-	// Starts true -- the stream only starts arriving once the browser opens
-	// the request, so there's always a real buffering gap before the first
-	// frame, not just on a seek/quality change. `waiting` fires whenever
-	// playback stalls for lack of data (not just at start), `playing` and
-	// `canplay` both mean there's enough buffered to actually show something.
+	// True from the start, the first frame always has a gap.
 	let buffering = $state(true);
 
-	// A seek reopens the stream from a new server-side offset (see the
-	// streaming proxy's own comment on why) rather than doing an in-place
-	// `currentTime` seek -- so the video element's own `currentTime` only
-	// ever measures "how far into *this* request are we," and the position
-	// actually shown/reported has to add back whatever offset the last seek
-	// started from.
+	// An ffmpeg seek reopens the stream at a new offset, so the element clock only counts from there.
 	let seekOffset = $state(0);
 	const position = $derived(seekOffset + currentTime);
 
-	// Where the last seek asked to land, until playback has actually got
-	// there. Two things go wrong without it, and both read as the progress
-	// bar (here and on the phone, which mirrors this same `position`) jumping
-	// around after a scrub:
-	//   - the <video> element keeps reporting the *old* time for a beat after
-	//     a seek is issued -- a native seek isn't instant, and Shaka's is a
-	//     whole buffer switch -- so the bar snaps back to where playback was
-	//     and only then jumps to where it was dragged to;
-	//   - an ffmpeg re-open moves `seekOffset` immediately while the element
-	//     is still reporting the previous request's `currentTime`, which adds
-	//     the two together into a position way past either of them.
-	// So `currentTime` is set optimistically to the target the moment a seek
-	// is issued, and time updates that would contradict it are ignored until
-	// one actually lands near the target (or it's clearly never going to --
-	// a seek past the real end of a stream whose reported duration was too
-	// generous, say -- at which point the reported time wins again).
-	let seekTarget = $state<number | null>(null);
-	let seekTargetAt = 0;
-	const SEEK_LANDED_SECONDS = 1.5;
-	const SEEK_GIVE_UP_MS = 8000;
+	// Where the last seek should land, until playback gets there.
+	// Without it the progress bar jumps after a scrub. The element reports the old
+	// time for a moment and an ffmpeg reopen adds the offset twice.
+	let seekTarget = $state<SeekTarget>(null);
 
 	function applyTimeUpdate(next: number) {
-		if (seekTarget !== null) {
-			const landed = Math.abs(seekOffset + next - seekTarget) <= SEEK_LANDED_SECONDS;
-			if (!landed && performance.now() - seekTargetAt < SEEK_GIVE_UP_MS) return;
-			seekTarget = null;
-		}
-		currentTime = next;
+		const settled = settleTimeUpdate(seekTarget, seekOffset, next, performance.now());
+		seekTarget = settled.target;
+		if (settled.apply) currentTime = next;
 	}
 	const duration = info?.duration ?? 0;
 	const title = info?.title ?? '';
-	// The progress slider's own displayed value -- tracks `position` while
-	// idle, but takes over during an active drag/swipe (see Slider's
-	// liveValue/onCommit props), so scrubbing shows where you're dragging
-	// to, not where playback currently is.
+	// Slider value. Follows position until the user drags.
 	let scrubPosition = $state(0);
 
-	function formatTime(seconds: number): string {
-		if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-		const m = Math.floor(seconds / 60);
-		const s = Math.floor(seconds % 60);
-		return `${m}:${s.toString().padStart(2, '0')}`;
-	}
-
-	// Best-effort human-readable summary of whatever a failure handed us --
-	// a SourceBuffer 'error' event carries no structured detail of its own
-	// (the actual decode complaint goes to the browser's own console
-	// independently), a thrown codec-support check is a plain Error, and a
-	// native <video> error is a MediaError with a real code/message. Used to
-	// fill in lastFallbackReason so the diagnostics panel has *something*
-	// concrete rather than just "it failed."
-	// A shaka.util.Error -- duck-typed rather than importing shaka's own types
-	// here, since this file otherwise treats the library as opaque behind
-	// #lib/mse/dualTrackPlayer.
-	function isShakaError(
-		err: unknown
-	): err is { category: unknown; code: unknown; message: unknown } {
-		if (!err || typeof err !== 'object') return false;
-		return ['category', 'code', 'message'].every((key) => key in err);
-	}
-
-	function targetName(target: EventTarget | null): string {
-		if (!target || !target.constructor) return 'unknown target';
-		return target.constructor.name;
-	}
-
-	function describeVideoEvent(err: Event): string {
-		const target = err.target;
-		const mediaError = target instanceof HTMLVideoElement ? target.error : null;
-		if (!mediaError) return `${err.type} event on ${targetName(target)}`;
-		return `MediaError ${mediaError.code}: ${mediaError.message || '(no message)'}`;
-	}
-
-	// The shaka case is handled separately since it's a duck-typed shape
-	// rather than an instanceof check like the rest.
-	function describeNonShakaError(err: unknown): string {
-		if (err instanceof DOMException) return `${err.name}: ${err.message}`;
-		if (err instanceof Error) return err.message;
-		if (err instanceof Event) return describeVideoEvent(err);
-		return String(err);
-	}
-
-	function describeError(err: unknown): string {
-		if (isShakaError(err)) {
-			return `Shaka error (category ${err.category}, code ${err.code}): ${err.message}`;
-		}
-		return describeNonShakaError(err);
-	}
-
-	// Three ways this page actually gets bytes onto the screen, in order of
-	// preference:
-	// - 'direct': the resolved stream is already one self-contained URL (see
-	//   src/routes/api/stream's own comment) -- a plain <video src>, the
-	//   fastest and simplest path, with real native seeking.
-	// - 'mse': separate video/audio tracks fed through two MediaSource
-	//   SourceBuffers via #lib/mse/dualTrackPlayer, each pulled over HTTP
-	//   Range through the byte-range proxy (src/routes/api/stream-track) --
-	//   no server-side muxing at all, the browser buffers/decodes exactly
-	//   like a real DASH player would.
-	// - 'ffmpeg': falls back to the old live-remux proxy (src/routes/api/
-	//   stream) when MSE isn't supported for this codec/browser at all, or a
-	//   dual-track pump fails at runtime -- the one path guaranteed to work
-	//   everywhere, at the cost of everything that made it worth replacing.
+	// Three ways to play, best first.
+	// direct: one URL, plain <video src>, native seeking.
+	// mse: separate tracks via Shaka over the range proxy, no remuxing.
+	// ffmpeg: live remux proxy. Works everywhere but slowest, so last resort.
 	let mode = $state<'direct' | 'mse' | 'ffmpeg'>('ffmpeg');
 	let dualTrackHandle: DualTrackHandle | undefined;
-	// A dual-track session's video and audio pumps can each independently
-	// report a runtime failure (see attachDualTrackSource's onError) -- if
-	// both fail around the same time, that's two calls to fallbackToFfmpeg
-	// in quick succession. Without this guard, the second call would tear
-	// down and reassign videoEl.src again right in the middle of the first
-	// call's own reload, touching a SourceBuffer that first call had already
-	// started discarding -- which is exactly what threw "not, or is no
-	// longer, usable" instead of the fallback recovering cleanly.
+	// Video and audio pumps can both fail at once. A second fallback would tear
+	// down a SourceBuffer the first one is already discarding.
 	let fallenBack = false;
-	// Whatever triggered the last fallback, in whichever detail is actually
-	// available -- shown in the diagnostics panel below so this is visible
-	// without needing to go dig through the console, and logged either way
-	// so it's captured regardless of which of the two paths that can call
-	// fallbackToFfmpeg (a labeled MSE track error, or the plain native
-	// onerror below) ends up firing first.
+	// Shown in the diagnostics panel so nobody has to dig through the console.
 	let lastFallbackReason = $state<string | null>(null);
 
 	function fallbackToFfmpeg(resumeSeconds: number, reason: string) {
@@ -571,15 +270,8 @@
 		videoEl.play().catch(() => {});
 	}
 
-	// (Re)attaches playback for a given quality tier's resolved metadata,
-	// optionally resuming at a specific position -- used both for the
-	// initial load and for a quality switch, which is otherwise exactly a
-	// fresh setup against a different (possibly direct vs. proxied, possibly
-	// differently-codec'd) resolved stream. Async because attaching Shaka
-	// (attachDualTrackSource) genuinely is -- it fetches and parses a real
-	// manifest before resolving -- so a failure there is a rejection to
-	// catch, not a synchronous throw the way the old hand-rolled pump's
-	// codec-support check was.
+	// Also used for quality switches, which are a fresh setup on a different stream.
+	// Async because attaching Shaka loads a manifest.
 	function setupDirectPlayback(el: HTMLVideoElement, resumeSeconds: number) {
 		mode = 'direct';
 		el.src = streamUrlFor(0);
@@ -597,14 +289,14 @@
 	) {
 		try {
 			const [videoIndex, audioIndex] = await Promise.all([
-				fetchSegmentIndex(indexUrlFor('video', meta.videoContainer)),
-				fetchSegmentIndex(indexUrlFor('audio', meta.audioContainer))
+				fetchSegmentIndex(urls.trackIndex('video', meta.videoContainer, quality)),
+				fetchSegmentIndex(urls.trackIndex('audio', meta.audioContainer, quality))
 			]);
 			dualTrackHandle = await attachDualTrackSource(
 				el,
 				{
-					videoUrl: trackUrlFor('video'),
-					audioUrl: trackUrlFor('audio'),
+					videoUrl: urls.track('video', quality),
+					audioUrl: urls.track('audio', quality),
 					videoMimeType: mimeTypeFor(meta.videoContainer, 'video'),
 					audioMimeType: mimeTypeFor(meta.audioContainer, 'audio'),
 					videoCodec: meta.vcodec,
@@ -617,10 +309,7 @@
 				resumeSeconds
 			);
 			mode = 'mse';
-			// Unlike setupDirectPlayback/fallbackToFfmpeg's plain <video src>,
-			// Shaka's player.load() never autoplays on its own -- without this,
-			// the manifest loads and buffers but playback just sits paused
-			// until the viewer manually hits play.
+			// Shaka doesn't autoplay on load.
 			el.play().catch(() => {});
 		} catch (err) {
 			fallbackToFfmpeg(resumeSeconds, `MSE setup failed: ${describeError(err)}`);
@@ -635,10 +324,7 @@
 		dualTrackHandle = undefined;
 		buffering = true;
 		seekOffset = 0;
-		// A fresh attach resumes at `resumeSeconds` (the direct/MSE paths seek
-		// there once metadata is in, the ffmpeg one re-opens from there), so
-		// show that straight away instead of the outgoing stream's last
-		// reported time, which belongs to a stream that no longer exists.
+		// Show the resume point now, the old stream's time is stale.
 		currentTime = resumeSeconds;
 		seekTarget = null;
 
@@ -656,10 +342,7 @@
 	function reloadFfmpegStream(el: HTMLVideoElement, seconds: number) {
 		buffering = true;
 		seekOffset = seconds;
-		// The new request starts at `seconds` on the server side, so this
-		// one's own clock restarts at zero -- reset it here rather than
-		// waiting for the element to get around to it, or `position` reads as
-		// `seconds` plus the *previous* request's elapsed time in between.
+		// The new request starts at 0 on its own clock. Reset so position doesn't add the old elapsed time.
 		currentTime = 0;
 		el.src = streamUrlFor(seconds);
 		el.load();
@@ -668,23 +351,18 @@
 
 	function seek(seconds: number) {
 		if (!videoEl || duration <= 0) return;
-		const clamped = Math.max(0, Math.min(duration, seconds));
+		const clamped = clampSeek(seconds, duration);
 		const el = videoEl;
-		// A real file the CDN serves with Range support gets an ordinary, exact,
-		// native seek (no server round trip at all); mse hands it to Shaka.
+		// Direct streams seek natively, mse goes through Shaka.
 		const seekActions: Record<typeof mode, () => void> = {
 			direct: () => (el.currentTime = clamped),
 			mse: () => dualTrackHandle?.seek(clamped),
 			ffmpeg: () => reloadFfmpegStream(el, clamped)
 		};
 		seekActions[mode]();
-		// Show the target immediately, and ignore contradicting time updates
-		// until it's actually reached -- see `seekTarget` above. The ffmpeg
-		// path has already put `position` exactly on `clamped` via
-		// reloadFfmpegStream's own offset/reset, so only the two in-place
-		// modes need the optimistic write.
-		seekTarget = clamped;
-		seekTargetAt = performance.now();
+		// Show the target now and ignore stale updates, see seekTarget.
+		// ffmpeg already moved position via its offset reset.
+		seekTarget = { seconds: clamped, issuedAt: performance.now() };
 		if (mode !== 'ffmpeg') currentTime = clamped - seekOffset;
 	}
 
@@ -692,79 +370,31 @@
 		seek(position + deltaSeconds);
 	}
 
-	// Whether to actually act on the app's skippable sections at all --
-	// persisted (see loadStoredSkipActive above), not a per-segment decision,
-	// so toggling it once is remembered for every later segment/session
-	// rather than having to react to each one individually.
-	let skipActive = $state(loadStoredSkipActive());
+	// Persisted so it doesn't need deciding per segment.
+	let skipActive = $state(loadSkipActive(storage));
 
-	// How far ahead of a segment's own start to reveal the toggle -- there's
-	// no countdown number shown (see the template), just enough lead time
-	// for the checkbox to actually be reachable before the segment starts.
-	const SKIP_LEAD_SECONDS = 3;
 	let activeSkipSegment = $state<SkipSegment | null>(null);
-	// Segments already resolved (skipped, or played through because
-	// skipActive was off at the time) this session -- keyed by reference, not
-	// time, so scrubbing back into one doesn't immediately reappear.
+	// Keyed by reference so scrubbing back into a segment doesn't bring it back.
 	const decidedSkipSegments = new SvelteSet<SkipSegment>();
 
-	// Entirely driven by `position` (itself only advancing on real
-	// `ontimeupdate` events, i.e. actual playback) -- shows the toggle once
-	// position enters the lead window before an undecided segment, and
-	// decides it the moment position reaches the segment's own start: skips
-	// ahead if skipActive is on, or just lets the segment play if it's off.
-	// No timer of its own, so pausing anywhere in the lead window genuinely
-	// freezes it instead of a decision firing on schedule regardless of
-	// whether anyone's watching.
-	// Reached the segment: mark it decided either way, and jump past it if
-	// skipping is on and playback is actually running (a paused viewer
-	// scrubbing through one shouldn't be yanked forward).
 	function resolveSkipSegment(segment: SkipSegment) {
 		decidedSkipSegments.add(segment);
 		activeSkipSegment = null;
-		if (skipActive && playing) seek(segment.endSeconds);
-	}
-
-	// The next undecided segment whose lead window the playhead is already
-	// inside, if any.
-	function upcomingSkipSegment(): SkipSegment | null {
-		return (
-			skipSegments.find(
-				(segment) =>
-					!decidedSkipSegments.has(segment) &&
-					position >= segment.startSeconds - SKIP_LEAD_SECONDS &&
-					position < segment.startSeconds
-			) ?? null
-		);
-	}
-
-	// A segment starting right at the video's beginning never has a lead
-	// window to enter, so playback is already inside it once it starts. Waits
-	// for real playback (not just the `play` event, which fires before any
-	// data is loaded) or the seek would be a no-op that still marks it decided.
-	const SKIP_IMMEDIATE_START_SECONDS = 1;
-	function segmentAtVideoStart(): SkipSegment | null {
-		return (
-			skipSegments.find(
-				(segment) =>
-					!decidedSkipSegments.has(segment) &&
-					segment.startSeconds <= SKIP_IMMEDIATE_START_SECONDS &&
-					position >= segment.startSeconds &&
-					position < segment.endSeconds
-			) ?? null
-		);
-	}
-
-	function pickNextSkipSegment() {
-		const atStart = playing && !buffering ? segmentAtVideoStart() : null;
-		if (atStart) resolveSkipSegment(atStart);
-		else activeSkipSegment = upcomingSkipSegment();
+		const target = skipTarget(segment, skipActive, playing);
+		if (target !== null) seek(target);
 	}
 
 	$effect(() => {
-		const active = activeSkipSegment;
-		if (!active) pickNextSkipSegment();
-		else if (position >= active.startSeconds) resolveSkipSegment(active);
+		const step = nextSkipStep({
+			segments: skipSegments,
+			decided: decidedSkipSegments,
+			active: activeSkipSegment,
+			position,
+			playing,
+			buffering
+		});
+		if (step.kind === 'resolve') resolveSkipSegment(step.segment);
+		else activeSkipSegment = step.segment;
 	});
 
 	function togglePlayPause() {
@@ -773,12 +403,7 @@
 		else videoEl.pause();
 	}
 
-	// The phone's own "player controls" tab drives playback through this
-	// plain DOM event (see RemoteBridge.svelte's playerActionNotification
-	// handler) instead of clicking a specific button, so it works exactly
-	// the same regardless of `locked` -- unlike the trackpad's swipe-driven
-	// focus, which still respects disabled={locked} like every other
-	// control here.
+	// The phone drives playback through DOM events so it works while controls are locked.
 	const PLAYER_ACTIONS = {
 		playPause: () => togglePlayPause(),
 		seekBack: () => seekBy(-10),
@@ -790,34 +415,22 @@
 			const { action } = (event as CustomEvent<{ action: keyof typeof PLAYER_ACTIONS }>).detail;
 			PLAYER_ACTIONS[action]?.();
 		}
-		// The phone's own progress-bar drag and quality picker (see
-		// RemoteBridge.svelte's playerSeek/playerQuality handlers) -- both
-		// need to bypass `locked` exactly like PLAYER_ACTIONS above, so they
-		// call straight into `seek`/`selectQuality` rather than clicking an
-		// element.
+		// Seek and quality from the phone skip `locked` too.
 		function onRemoteSeek(event: Event) {
 			const { seconds } = (event as CustomEvent<{ seconds: number }>).detail;
 			seek(seconds);
 		}
 		function onRemoteQuality(event: Event) {
 			const { quality: target } = (event as CustomEvent<{ quality: number }>).detail;
-			if ((QUALITY_OPTIONS as readonly number[]).includes(target)) {
-				selectQuality(target as QualityOption);
-			}
+			if (isQualityOption(target)) selectQuality(target);
 		}
 		function onRemoteSubtitle(event: Event) {
 			const { language } = (event as CustomEvent<{ language: string | null }>).detail;
-			// Only a language the session actually offers (or `null`, Off) --
-			// a stale pick from a phone still showing the previous session's
-			// track list would otherwise point <track> at a URL with nothing
-			// behind it.
-			if (language === null || subtitleTracks.some((t) => t.language === language)) {
-				selectSubtitle(language);
-			}
+			if (isOfferedSubtitle(subtitleTracks, language)) selectSubtitle(language);
 		}
 		function onRemoteVolume(event: Event) {
 			const { volume: target } = (event as CustomEvent<{ volume: number }>).detail;
-			volume = Math.min(1, Math.max(0, target));
+			volume = clampVolume(target);
 		}
 		document.addEventListener('pivi-player-action', onRemoteAction);
 		document.addEventListener('pivi-player-seek', onRemoteSeek);
@@ -833,64 +446,28 @@
 		};
 	});
 
-	// Tells RemoteBridge to re-announce state right away -- quality, the
-	// subtitle pick and the diagnostics panel can change from the TV side
-	// itself (a manual pick, the Info button), and none of them shows up as a
-	// DOM mutation its observer would otherwise catch.
+	// Quality, subtitle pick and the info panel change without a DOM mutation RemoteBridge would see.
 	$effect(() => {
 		void quality;
 		void subtitleLanguage;
 		void diagnosticsOpen;
-		// Position too: RemoteBridge's own `timeupdate` listener runs before
-		// this page has rendered the new value into its `data-pivi-player-*`
-		// attributes, so that push always carries the previous tick's
-		// position. This effect runs after the DOM is updated, so the push it
-		// triggers is the one that's actually current -- without it the
-		// phone's progress bar trails the TV's by a tick permanently, and by
-		// a whole seek right after scrubbing.
+		// Position too. RemoteBridge's timeupdate push runs before this page renders
+		// the new value, so the phone's progress bar would trail by a tick.
 		void position;
 		document.dispatchEvent(new CustomEvent('pivi-player-state-changed'));
 	});
 
-	// One-way the other direction from `onvolumechange` below: that keeps
-	// `volume` in sync when the element's volume changes on its own (e.g. a
-	// fresh <video> defaulting to 1), this pushes a change made *through* the
-	// slider back onto the element. Guarded so the two don't fight -- without
-	// it, onvolumechange re-firing from this same assignment would re-run
-	// this effect right back into another (no-op, but pointless) assignment.
+	// Pushes slider changes onto the element. Guarded so it doesn't fight onvolumechange.
 	$effect(() => {
 		if (videoEl && Math.abs(videoEl.volume - volume) > 0.001) videoEl.volume = volume;
 	});
 
-	// Remembered for next time -- otherwise every fresh playback session
-	// starts back at full volume regardless of what was last set.
-	$effect(() => {
-		if (!browser) return;
-		try {
-			localStorage.setItem(VOLUME_STORAGE_KEY, String(volume));
-		} catch {
-			// Private browsing / storage disabled -- nothing to persist to.
-		}
-	});
+	// Remembered for the next session.
+	$effect(() => saveVolume(storage, volume));
+	$effect(() => saveSkipActive(storage, skipActive));
 
-	$effect(() => {
-		if (!browser) return;
-		try {
-			localStorage.setItem(SKIP_ACTIVE_STORAGE_KEY, String(skipActive));
-		} catch {
-			// Private browsing / storage disabled -- nothing to persist to.
-		}
-	});
-
-	// Native <track> elements (below) exist independently of `mode`/`videoEl`
-	// -- they're declared once from `subtitleTracks` and stay put across a
-	// quality switch or MSE/direct/ffmpeg fallback (none of those touch the
-	// <video> element's own children, only its src/manifest attachment), so
-	// this effect's only job is keeping their `mode` in sync with which
-	// language (if any) is actually picked. A track's cues are only fetched
-	// once its own mode leaves 'disabled', so switching languages -- or
-	// turning captions off entirely -- costs nothing for every track that
-	// isn't the selected one.
+	// The <track> elements stay put across quality switches and fallbacks.
+	// Only the selected one leaves 'disabled', so cues load for just that language.
 	$effect(() => {
 		if (!videoEl) return;
 		const tracks = videoEl.textTracks;
@@ -899,14 +476,8 @@
 		}
 	});
 
-	// Sets up the very first playback once the <video> element exists *and*
-	// the best-quality pick above has settled -- guarded so later, unrelated
-	// qualityMeta updates (a manual selectQuality, say) don't re-trigger it;
-	// this effect's only job is the one-time initial attach. Always
-	// autoplays (setupPlayback's own paths all end in a real .play() call)
-	// regardless of whether a previous visit to this session left off
-	// paused -- there's no persisted play/pause state to honor in the first
-	// place, so a fresh visit always starts playing from 0, same as before.
+	// One-time initial attach once the video exists and the quality pick settled.
+	// Always starts from 0, there's no saved play state.
 	let initialized = false;
 	function attachInitialPlayback() {
 		const meta = qualityMeta[quality];
@@ -918,21 +489,15 @@
 		attachInitialPlayback();
 	});
 
-	// Tears down the Shaka player when the page is left -- otherwise it'd
-	// keep fetching after nobody's watching, the same class of bug the
-	// streaming proxy's own cancel() handling exists to prevent.
+	// Stop Shaka fetching after leaving the page.
 	$effect(() => {
 		return () => {
 			dualTrackHandle?.destroy().catch(() => {});
 		};
 	});
 
-	// A quality switch is a genuinely different resolved stream (possibly a
-	// different mode entirely, not just a different bitrate), so it's
-	// handled as a fresh setupPlayback rather than a plain seek/reload.
-	// qualityMeta already has (or will shortly have) this option's metadata
-	// from the background resolution above; only fetch it directly if
-	// picked before that finished.
+	// A quality switch can change the whole mode, so it's a fresh setupPlayback.
+	// Fetch the meta here only if the background resolve hasn't finished.
 	function selectQuality(target: QualityOption) {
 		if (target === quality) return;
 		const resumeAt = position;
@@ -966,8 +531,7 @@
 		history.back();
 	}
 
-	// A failed lookup counts as no next entry, same as a session without a
-	// sequence.
+	// A failed lookup counts as no next entry.
 	async function nextSessionId(sequence: string): Promise<string | undefined> {
 		try {
 			const result = await client.query.appNextSession({
@@ -980,47 +544,27 @@
 		}
 	}
 
-	// Plays the next entry of the sequence this session came from, or leaves
-	// when there is none. Replacing the entry keeps one back press enough.
+	// Plays the next entry or leaves. Replacing the entry keeps one back press enough.
 	async function onVideoEnded() {
 		if (!context) return goBack();
 		const nextId = await nextSessionId(context);
 		if (nextId) {
-			const next = new URLSearchParams({ context });
-			return goto(`/play/${encodeURIComponent(appId)}/${encodeURIComponent(nextId)}?${next}`, {
-				replaceState: true
-			});
+			return goto(nextSessionHref(appId, nextId, context), { replaceState: true });
 		}
 		goBack();
 	}
 
-	// Hidden (not unmounted -- see the template's own note on why) after a
-	// stretch of no interaction, but only while actually playing; pausing
-	// keeps it up indefinitely, same idea as the home page's own idle timer
-	// (IDLE_TIMEOUT_MS there) but gated on playback state instead of always
-	// running.
+	// Hidden only while playing, paused keeps it up.
 	let controlsVisible = $state(true);
 	const CONTROLS_IDLE_MS = 3000;
 	let idleTimeout: ReturnType<typeof setTimeout> | undefined;
 
-	// Every control except play/pause is pulled out of both the remote's
-	// focus/selection candidates and pointer/keyboard input entirely while
-	// this holds (see the `disabled`/`inert` bindings below) -- so a stray
-	// swipe or tap while the overlay isn't even visible can't land on (and
-	// silently trigger) something the viewer never actually saw was there.
-	// Always false while paused: showControls() below only ever sets
-	// controlsVisible false while playing, and immediately re-shows the
-	// moment playback pauses for any reason (the `playing`-reading effect
-	// further down), so "locked" and "actually playing" can't drift apart.
+	// While hidden, everything but play/pause is out of reach so a stray swipe
+	// can't trigger something the viewer never saw.
 	const locked = $derived(!controlsVisible);
 	let playPauseButton = $state<HTMLButtonElement>();
 
-	// Focused the moment it exists, so arriving on this page (by remote
-	// swipe/select, same as everywhere else) already lands somewhere sane
-	// instead of nothing being focused at all. One-time guard, same idea as
-	// the initial playback attach above -- later focus changes (hideControls,
-	// a viewer moving focus elsewhere) are all deliberate and shouldn't be
-	// fought by this re-running.
+	// Focus something on arrival, one time only.
 	let focusedOnMount = false;
 	$effect(() => {
 		if (playPauseButton && !focusedOnMount) {
@@ -1029,14 +573,8 @@
 		}
 	});
 
-	// Moving focus onto the play/pause button ourselves, synchronously, at
-	// the exact moment we hide (rather than reactively off `locked`) is what
-	// keeps this from racing the browser's own focus-reset behavior once
-	// whatever was previously focused becomes `disabled` -- that reset can
-	// land on `<body>` and fire its own focusin first, which would otherwise
-	// re-show the controls we just decided to hide before our own call ever
-	// runs. Doing it here moves focus away while the previous target is
-	// still enabled, a perfectly normal focus change.
+	// Move focus before hiding. Once the old target is disabled the browser resets
+	// focus to <body> and its focusin would re-show the controls.
 	function hideControls() {
 		controlsVisible = false;
 		suppressNextFocusActivity = true;
@@ -1049,25 +587,15 @@
 		if (playing) idleTimeout = setTimeout(hideControls, CONTROLS_IDLE_MS);
 	}
 
-	// Reads `playing` synchronously, so this re-runs (re-arming or cancelling
-	// the countdown) the moment playback actually starts/stops, not just on
-	// the next unrelated interaction -- otherwise pressing Play wouldn't
-	// start the countdown, and pausing wouldn't reliably cancel one already
-	// in flight, until something else happened to trigger showControls.
+	// Reads `playing` so the countdown re-arms or cancels as playback starts and stops.
 	$effect(() => {
 		showControls();
 	});
 
-	// hideControls()'s own focus() call is a real DOM focus change, which
-	// the focusin listener below would otherwise treat as fresh activity and
-	// immediately re-show what was just hidden -- this tells it to ignore
-	// exactly that one, synthetic move.
+	// Ignore the focusin from hideControls' own focus() call.
 	let suppressNextFocusActivity = false;
 
-	// Document-level, not just this page's own root: a remote swipe/select
-	// lands as a real focusin/click on whatever element it drove (see
-	// RemoteBridge.svelte), so this reacts to remote-driven interaction the
-	// same as a direct mouse/touch/keyboard one, with no extra wiring.
+	// Document level so remote driven focus and clicks count as activity too.
 	$effect(() => {
 		const activityEvents = ['click', 'keydown', 'mousemove', 'touchstart'] as const;
 		for (const event of activityEvents) document.addEventListener(event, showControls);
@@ -1088,10 +616,7 @@
 		};
 	});
 
-	// A subset of shaka.extern.Stats -- not imported from the library itself
-	// (this file doesn't otherwise touch Shaka's types directly, since
-	// attachDualTrackSource's own return type stays deliberately opaque
-	// here), just the handful of fields worth surfacing in the panel below.
+	// Subset of shaka's Stats, avoids importing its types here.
 	type ShakaStats = {
 		estimatedBandwidth: number;
 		streamBandwidth: number;
@@ -1102,10 +627,7 @@
 		stallsDetected: number;
 	};
 
-	// A live snapshot of whatever's actually happening, for the info panel
-	// below -- most of this (readyState, buffered ranges, Shaka's own
-	// playback stats) isn't reactive on its own, so it's polled rather than
-	// derived, and only while the panel's actually open.
+	// Polled, none of this is reactive. Only runs while the panel is open.
 	let diagnosticsOpen = $state(false);
 	let diagnostics = $state({
 		resolution: '—',
@@ -1115,18 +637,8 @@
 		shakaStats: null as ShakaStats | null
 	});
 
-	function findBufferedRangeEnd(buffered: TimeRanges, currentTime: number): number | undefined {
-		for (let i = 0; i < buffered.length; i++) {
-			if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i))
-				return buffered.end(i);
-		}
-		return undefined;
-	}
-
 	function bufferedAheadSecondsFor(el: HTMLVideoElement | undefined): number {
-		if (!el) return 0;
-		const rangeEnd = findBufferedRangeEnd(el.buffered, el.currentTime);
-		return rangeEnd === undefined ? 0 : rangeEnd - el.currentTime;
+		return el ? bufferedAheadSeconds(el.buffered, el.currentTime) : 0;
 	}
 
 	function resolutionLabel(el: HTMLVideoElement | undefined): string {
@@ -1236,14 +748,8 @@
 	</div>
 {/snippet}
 
-<!-- Flows over the video like the rest of the app's chrome (see HeroBanner's
-     own top/bottom scrims) rather than pushing it into a letterboxed area --
-     these are real focusable buttons the phone remote's swipe-to-focus +
-     tap-to-select navigation drives exactly like every other screen. Faded
-     out (not unmounted -- opacity + pointer-events, see controlsVisible
-     above) rather than removed while idle and playing, so a remote-driven
-     focus/click can still reach them to bring the UI back; always shown
-     while paused so paused playback doesn't leave the screen looking dead. -->
+<!-- Overlays sit on top of the video. Faded instead of unmounted while idle so
+     remote focus can still reach them and bring the UI back. -->
 {#snippet topOverlay()}
 	<div
 		class="absolute inset-x-0 top-0 bg-linear-to-b from-slate-950/85 via-slate-950/20 to-transparent px-6 pt-6 pb-16 transition-opacity duration-300 sm:px-10 {controlsVisible
@@ -1281,11 +787,7 @@
 	</div>
 {/snippet}
 
-<!-- Content for one Select option/trigger -- see Select.svelte's own comment
-     on `onLight` (renamed here to match the param's actual meaning: whether
-     this particular rendering sits on the selected row's solid white
-     background, not the trigger's own dark translucent one, regardless of
-     whether `option` is the current quality). -->
+<!-- onLight: this rendering sits on the selected row's white background. -->
 {#snippet qualityOption(opt: QualityOption, onLight: boolean)}
 	{@const mode = qualityModeFor(opt)}
 	<span>{opt}p</span>
@@ -1315,16 +817,9 @@
 	{/if}
 {/snippet}
 
-<!-- Deliberately the one control on this whole page that's NOT
-     `disabled={locked}` and NOT nested inside bottomOverlay's fading
-     container -- a skippable section is approaching regardless of whether
-     the rest of the UI happens to be on screen, so unlike every other
-     control here, this one has to stay both visible and genuinely
-     selectable (not just synthetically click-through-focus like play/pause)
-     the whole time. Positioned to land in the gap between the quality list
-     and the playback-controls group in bottomOverlay's own row below --
-     approximated with fixed offsets rather than measured, since it has to
-     hold that position on its own even while that row is faded out. -->
+<!-- Not locked and outside the fading container, since a skip is coming
+     whether or not the rest of the UI is visible. Offsets are fixed because
+     it has to hold its spot while the row below is faded out. -->
 {#snippet skipSegmentBanner()}
 	{#if activeSkipSegment}
 		<div class="absolute right-40 bottom-16 z-10 sm:right-48 sm:bottom-20">
@@ -1354,14 +849,8 @@
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'}"
 	>
-		<!-- Three equal grid tracks (not a plain flex row) so the middle
-		     column -- playback controls -- sits at the row's true center
-		     regardless of how wide the side columns end up: with a flex
-		     `justify-between` row instead, adding the subtitle picker as a
-		     fourth item (or it not being there at all, for a session with no
-		     tracks) shifted the visual center of the remaining items around,
-		     throwing play/pause off-center depending on what else happened to
-		     be showing. -->
+		<!-- Three grid tracks instead of flex, so the playback controls stay
+		     centered whatever the side columns contain. -->
 		<div class="grid grid-cols-3 items-end gap-6">
 			<!-- Volume: vertical, bottom-left -->
 			<div class="flex flex-col items-center gap-2 justify-self-start">
@@ -1416,18 +905,11 @@
 				</button>
 			</div>
 
-			<!-- Subtitles above Quality, bottom-right -- one column, not two
-			     side by side, so this whole group's own width (and therefore
-			     the middle column's centering) doesn't change depending on
-			     whether the subtitle picker happens to be shown at all. -->
+			<!-- One column so the group's width, and the centering, doesn't depend on
+			     whether the subtitle picker shows. -->
 			<div class="flex flex-col items-center gap-3 justify-self-end">
-				<!-- Subtitles: a Select rather than a flat list of buttons -- a
-				     session's caption tracks (manual plus every auto-translated
-				     variant an app reports) can run into the dozens, which a
-				     flat always-expanded list turns into an unusable wall of
-				     controls. Only shown at all once a track list has actually
-				     come back -- most sessions have none, and an "Off"-only
-				     picker would just be visual noise for no real choice. -->
+				<!-- A Select since caption tracks can run into the dozens. Hidden without
+				     tracks, an Off-only picker is no choice. -->
 				{#if subtitleTracks.length > 0}
 					<div class="flex flex-col items-center gap-2">
 						<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
@@ -1445,10 +927,7 @@
 					</div>
 				{/if}
 
-				<!-- Quality: a Select, same reasoning as Subtitles above -- fewer
-				     options here (QUALITY_OPTIONS is a fixed handful), but kept
-				     consistent with the same collapsed-by-default control rather
-				     than the old always-expanded list. -->
+				<!-- Quality: a Select for consistency with Subtitles. -->
 				<div class="flex flex-col items-center gap-2">
 					<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
 						<Gauge class="size-4" />
@@ -1505,9 +984,7 @@
 	{#if errorMessage}
 		{@render errorScreen()}
 	{:else}
-		<!-- No src/autoplay here -- setupPlayback (see script) owns videoEl.src
-		     imperatively, since which mode it ends up in (direct/mse/ffmpeg)
-		     isn't known until it actually tries. -->
+		<!-- No src here, setupPlayback sets it since the mode isn't known until it tries. -->
 		<video
 			bind:this={videoEl}
 			class="size-full object-contain"
@@ -1520,14 +997,9 @@
 			oncanplay={() => (buffering = false)}
 			onended={onVideoEnded}
 			onerror={() => {
-				// A direct/MSE failure fires this same native error event
-				// alongside our own JS-level handling (attachDualTrackSource's
-				// onError) -- showing the fatal screen here unconditionally
-				// would swap {#if errorMessage} to the error branch and destroy
-				// this <video> element out from under a fallback that's only
-				// just starting, before it gets a chance to load. Only once
-				// we're already on the last-resort ffmpeg path is there
-				// nothing left to fall back to.
+				// Direct and MSE failures fire this too, next to our own handling.
+				// Showing the error screen would destroy the <video> mid fallback.
+				// Only show it on ffmpeg, where nothing is left to fall back to.
 				if (mode === 'ffmpeg') {
 					errorMessage = m.stream_stopped();
 				} else {
@@ -1541,19 +1013,14 @@
 				}
 			}}
 		>
-			<!-- Independent of `mode` (direct/mse/ffmpeg) entirely -- Shaka only
-			     ever manages the element's src/MediaSource attachment, never its
-			     <track> children, so these render (and the browser's own native
-			     caption rendering layers on top) the exact same way regardless of
-			     which playback path is actually feeding the video itself. `mode`
-			     starts 'disabled' on every one of these by default; the effect
-			     above is what actually turns the selected language on. -->
+			<!-- Independent of mode. Shaka never touches <track> children, and the effect
+			     above turns on the selected language. -->
 			{#each subtitleTracks as track (track.language)}
 				<track
 					kind="subtitles"
 					srclang={track.language}
 					label={track.label ?? track.language}
-					src={subtitleUrlFor(track.language)}
+					src={urls.subtitle(track.language)}
 				/>
 			{/each}
 		</video>
@@ -1571,12 +1038,7 @@
 </div>
 
 <style>
-	/* A subtitle track (see the <track> elements above) is rendered entirely
-	   by the browser, not this page -- its cue text otherwise keeps whatever
-	   alignment its own VTT file specifies per cue (some app-provided
-	   tracks, YouTube's auto-generated ones included, leave that unset or set
-	   it to something other than centered). Forcing it here keeps captions
-	   reading the same way regardless of what a given track's own file says. */
+	/* Some tracks leave cue alignment unset or not centered. Force it for consistent captions. */
 	video::cue {
 		text-align: center;
 	}
