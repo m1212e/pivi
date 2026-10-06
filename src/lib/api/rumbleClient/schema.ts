@@ -415,6 +415,20 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'qualities',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: { name: 'Int', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						},
+						args: []
+					},
+					{
 						name: 'subtitleTracks',
 						type: {
 							kind: 'NON_NULL',

@@ -15,7 +15,13 @@
 		saveSubtitleLanguage,
 		saveVolume
 	} from '#lib/playback/preferences';
-	import { DEFAULT_QUALITY, toQualityMeta, type QualityOption } from '#lib/playback/quality';
+	import {
+		normalizeQualities,
+		preferredStartHeight,
+		startQuality,
+		toQualityMeta,
+		type QualityOption
+	} from '#lib/playback/quality';
 	import { createQualityCatalog } from '#lib/playback/qualityCatalog.svelte';
 	import {
 		announcePlayerStateChange,
@@ -40,6 +46,11 @@
 	const urls = createSessionUrls(appId, sessionId);
 	const storage = browserStorage(browser);
 
+	// Physical pixels, so a 4K TV scaled to 1080 CSS pixels still counts as 2160.
+	const preferredHeight = preferredStartHeight(
+		browser ? window.screen.height * window.devicePixelRatio : undefined
+	);
+
 	// What differs per quality tier. Codecs depend on the tier, so they are
 	// asked for again on every switch.
 	const TIER_FIELDS = {
@@ -53,25 +64,31 @@
 	// Metadata only, raw stream URLs stay on the server.
 	// Fetched once, title and duration don't change mid-session.
 	const info = await client.liveQuery.appPlaybackInfo({
-		__args: { appId, sessionId, maxHeight: DEFAULT_QUALITY },
+		__args: { appId, sessionId, maxHeight: preferredHeight },
 		title: true,
 		duration: true,
+		qualities: true,
 		...TIER_FIELDS,
 		subtitleTracks: { language: true, label: true, kind: true }
 	});
 	const duration = info?.duration ?? 0;
 	const title = info?.title ?? '';
+	// Empty for an app without a quality choice, then nothing is capped or offered.
+	const qualities = normalizeQualities(info?.qualities);
+	const initialQuality = startQuality(qualities, preferredHeight);
 	const subtitleTracks = $derived(toSubtitleTracks(info?.subtitleTracks));
 
 	let videoEl: HTMLVideoElement | undefined = $state();
 	let playPauseButton = $state<HTMLButtonElement>();
-	let quality = $state<QualityOption>(DEFAULT_QUALITY);
+	let quality = $state<QualityOption | undefined>(initialQuality);
 	let volume = $state(loadVolume(storage));
 	// null means captions off.
 	let subtitleLanguage = $state<string | null>(loadSubtitleLanguage(storage));
 
 	const catalog = createQualityCatalog({
 		urls,
+		qualities,
+		startQuality: initialQuality,
 		defaultMeta: info ? toQualityMeta(info) : undefined,
 		fetchMeta: (option) =>
 			client.query
@@ -112,7 +129,7 @@
 		getFocusTarget: () => playPauseButton
 	});
 
-	// Start on the best tier confirmed for MSE, else the default. Always from 0,
+	// Start on the best tier confirmed for MSE, else the start tier. Always from 0,
 	// there's no saved play state.
 	let readyForInitialAttach = $state(false);
 	catalog.resolveAll().then(() => {
@@ -123,7 +140,7 @@
 	const canAttach = $derived(!!videoEl && readyForInitialAttach);
 	function attachInitialPlayback() {
 		attached = true;
-		const meta = catalog.meta[quality];
+		const meta = catalog.metaFor(quality);
 		if (meta) engine.setupPlayback(meta, 0);
 	}
 	$effect(() => {
@@ -158,7 +175,8 @@
 			onQuality: selectQuality,
 			onSubtitle: selectSubtitle,
 			onVolume: (target) => (volume = clampVolume(target)),
-			getSubtitleTracks: () => subtitleTracks
+			getSubtitleTracks: () => subtitleTracks,
+			getQualities: () => qualities
 		})
 	);
 
@@ -177,6 +195,7 @@
 		playerBridgeAttributes({
 			position: engine.position,
 			duration,
+			qualities,
 			quality,
 			qualityModes: catalog.modes,
 			subtitleLanguage,
@@ -278,7 +297,7 @@
 			<DiagnosticsPanel
 				mode={engine.mode}
 				{quality}
-				meta={catalog.meta[quality]}
+				meta={catalog.metaFor(quality)}
 				snapshot={diagnostics.snapshot}
 				position={engine.position}
 				{duration}
@@ -297,6 +316,7 @@
 			{duration}
 			{subtitleTracks}
 			{subtitleLanguage}
+			{qualities}
 			{quality}
 			modeFor={catalog.modeFor}
 			onTogglePlay={engine.togglePlayPause}

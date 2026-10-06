@@ -14,7 +14,7 @@ type Deps = {
 	urls: SessionUrls;
 	duration: number;
 	getVideo: () => HTMLVideoElement | undefined;
-	getQuality: () => QualityOption;
+	getQuality: () => QualityOption | undefined;
 };
 
 // Fallback reason for the diagnostics panel when the element itself errors.

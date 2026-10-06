@@ -12,14 +12,19 @@ export function createSessionUrls(appId: string, sessionId: string) {
 	const app = encodeURIComponent(appId);
 	const session = encodeURIComponent(sessionId);
 	const trackBase = `/api/stream-track/${app}/${session}`;
+	// An app without quality tiers gets no cap at all.
+	const qualityParam = (quality: QualityOption | undefined): Record<string, string> =>
+		quality === undefined ? {} : { quality: String(quality) };
 
 	return {
-		stream: (seconds: number, quality: QualityOption) =>
-			`/api/stream/${app}/${session}?${new URLSearchParams({ t: String(seconds), quality: String(quality) })}`,
-		track: (track: TrackKind, quality: QualityOption) =>
-			`${trackBase}/${track}?${new URLSearchParams({ quality: String(quality) })}`,
-		trackIndex: (track: TrackKind, container: Container, quality: QualityOption) =>
-			`${trackBase}/${track}/index?${new URLSearchParams({ container, quality: String(quality) })}`,
+		stream: (seconds: number, quality: QualityOption | undefined) =>
+			`/api/stream/${app}/${session}?${new URLSearchParams({ t: String(seconds), ...qualityParam(quality) })}`,
+		track: (track: TrackKind, quality: QualityOption | undefined) => {
+			const query = new URLSearchParams(qualityParam(quality)).toString();
+			return `${trackBase}/${track}${query && `?${query}`}`;
+		},
+		trackIndex: (track: TrackKind, container: Container, quality: QualityOption | undefined) =>
+			`${trackBase}/${track}/index?${new URLSearchParams({ container, ...qualityParam(quality) })}`,
 		subtitle: (language: string) =>
 			`/api/stream-subtitle/${app}/${session}/${encodeURIComponent(language)}`
 	};

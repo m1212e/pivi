@@ -16,6 +16,7 @@
 		duration,
 		subtitleTracks,
 		subtitleLanguage,
+		qualities,
 		quality,
 		modeFor,
 		onTogglePlay,
@@ -33,7 +34,8 @@
 		duration: number;
 		subtitleTracks: SubtitleTrack[];
 		subtitleLanguage: string | null;
-		quality: QualityOption;
+		qualities: readonly QualityOption[];
+		quality: QualityOption | undefined;
 		modeFor: (option: QualityOption) => QualityMode | undefined;
 		onTogglePlay: () => void;
 		onSeekBy: (deltaSeconds: number) => void;
@@ -58,6 +60,7 @@
 		<TrackPickers
 			{subtitleTracks}
 			{subtitleLanguage}
+			{qualities}
 			{quality}
 			{modeFor}
 			{locked}

@@ -16,7 +16,7 @@ async function fetchSegmentIndex(url: string): Promise<SegmentBaseIndex> {
 export async function fetchTrackIndexes(
 	urls: SessionUrls,
 	meta: MseQualityMeta,
-	quality: QualityOption
+	quality: QualityOption | undefined
 ): Promise<{ videoIndex: SegmentBaseIndex; audioIndex: SegmentBaseIndex }> {
 	const [videoIndex, audioIndex] = await Promise.all([
 		fetchSegmentIndex(urls.trackIndex('video', meta.videoContainer, quality)),

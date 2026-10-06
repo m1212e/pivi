@@ -51,6 +51,7 @@ type AppPlaybackInfo = {
 	acodec: string | null;
 	videoContainer: string;
 	audioContainer: string | null;
+	qualities: number[];
 	subtitleTracks: AppSubtitleTrack[];
 };
 
@@ -67,6 +68,7 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 		// so the player gets it from here.
 		videoContainer: t.exposeString('videoContainer'),
 		audioContainer: t.exposeString('audioContainer', { nullable: true }),
+		qualities: t.exposeIntList('qualities'),
 		subtitleTracks: t.field({
 			type: [AppSubtitleTrackRef],
 			resolve: (parent) => parent.subtitleTracks
@@ -110,6 +112,7 @@ schemaBuilder.queryFields((t) => ({
 				acodec,
 				videoContainer,
 				audioContainer,
+				qualities,
 				subtitleTracks
 			} = await resolveStreamCached(args.appId, args.sessionId, app, args.maxHeight ?? undefined);
 			return {
@@ -120,6 +123,7 @@ schemaBuilder.queryFields((t) => ({
 				acodec: acodec ?? null,
 				videoContainer,
 				audioContainer: audioContainer ?? null,
+				qualities: qualities ?? [],
 				subtitleTracks: toGraphqlSubtitleTracks(subtitleTracks)
 			};
 		}

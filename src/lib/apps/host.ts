@@ -69,6 +69,10 @@ export const resolvedStreamSchema = z.object({
 	audioContainer: containerSchema.optional(),
 	title: z.string(),
 	duration: z.number(),
+	// Video heights the app can serve through `maxHeight`, so the player offers
+	// exactly these. Absent or empty for an app without a quality choice, then
+	// the player shows no picker and never sends a cap.
+	qualities: z.array(z.number().int().positive()).optional(),
 	// Absent (not just empty) for an app that has no subtitle source at
 	// all. Same "optional, treated as none" convention resolveSkipSegments
 	// uses for an app with no handler registered.

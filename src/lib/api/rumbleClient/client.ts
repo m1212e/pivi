@@ -83,6 +83,7 @@ export type AppPlaybackInfo = {
 	audioContainer: String | null;
 	direct: Boolean;
 	duration: Float;
+	qualities: Int[];
 	subtitleTracks: () => AppSubtitleTrack[];
 	title: String;
 	vcodec: String;

@@ -134,7 +134,7 @@
 		<span class="w-10 text-xs text-white/60 tabular-nums">{formatTime(tv.duration)}</span>
 	</div>
 
-	{#if tv.qualityOptions.length > 0}
+	{#if tv.qualityOptions.length > 1}
 		<div
 			class="flex flex-col items-center gap-2"
 			in:fly|global={{ y: 24, duration: 400, delay: 210 }}

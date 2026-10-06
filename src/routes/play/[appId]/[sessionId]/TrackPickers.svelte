@@ -2,12 +2,13 @@
 	import { Captions, Gauge, Layers, Server, Sparkles, Zap } from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
 	import Select from '#lib/components/Select.svelte';
-	import { QUALITY_OPTIONS, type QualityMode, type QualityOption } from '#lib/playback/quality';
+	import type { QualityMode, QualityOption } from '#lib/playback/quality';
 	import { subtitleOptions, type SubtitleTrack } from '#lib/playback/subtitles';
 
 	let {
 		subtitleTracks,
 		subtitleLanguage,
+		qualities,
 		quality,
 		modeFor,
 		locked,
@@ -17,7 +18,9 @@
 		subtitleTracks: SubtitleTrack[];
 		/** null means captions off. */
 		subtitleLanguage: string | null;
-		quality: QualityOption;
+		/** Tiers the app offers, highest first. One or none is no choice, so the picker hides. */
+		qualities: readonly QualityOption[];
+		quality: QualityOption | undefined;
 		modeFor: (option: QualityOption) => QualityMode | undefined;
 		locked: boolean;
 		onSubtitle: (language: string | null) => void;
@@ -79,18 +82,20 @@
 		</div>
 	{/if}
 
-	<div class="flex flex-col items-center gap-2">
-		<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
-			<Gauge class="size-4" />
-			Quality
-		</span>
-		<Select
-			value={quality}
-			onChange={onQuality}
-			options={QUALITY_OPTIONS}
-			label={m.quality()}
-			disabled={locked}
-			option={qualityOption}
-		/>
-	</div>
+	{#if qualities.length > 1}
+		<div class="flex flex-col items-center gap-2">
+			<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
+				<Gauge class="size-4" />
+				Quality
+			</span>
+			<Select
+				value={quality ?? qualities[0]}
+				onChange={onQuality}
+				options={qualities}
+				label={m.quality()}
+				disabled={locked}
+				option={qualityOption}
+			/>
+		</div>
+	{/if}
 </div>

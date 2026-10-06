@@ -28,7 +28,8 @@
 		lastFallbackReason
 	}: {
 		mode: PlaybackMode;
-		quality: QualityOption;
+		/** Undefined for an app without quality tiers. */
+		quality: QualityOption | undefined;
 		meta: QualityMeta | undefined;
 		snapshot: Diagnostics;
 		position: number;
@@ -39,7 +40,7 @@
 
 	const rows = $derived<[label: string, value: string][]>([
 		['mode', mode],
-		['quality', `${quality}p`],
+		['quality', quality === undefined ? '—' : `${quality}p`],
 		['direct', String(meta?.direct ?? '—')],
 		['vcodec', meta?.vcodec ?? '—'],
 		['acodec', meta?.acodec ?? '—'],

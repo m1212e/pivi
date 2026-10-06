@@ -3,7 +3,7 @@
 // attributes, so neither side needs to know how the other is implemented.
 import { DOM_EVENTS } from '#lib/domEvents';
 import { clampVolume, isOfferedSubtitle } from './preferences';
-import { QUALITY_OPTIONS, isQualityOption, type QualityMode, type QualityOption } from './quality';
+import { isOfferedQuality, type QualityMode, type QualityOption } from './quality';
 
 /** Transport buttons on the phone's player tab, dispatched by RemoteBridge as `DOM_EVENTS.playerAction`. */
 export type PlayerAction = 'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo';
@@ -12,11 +12,13 @@ export type PlayerAction = 'playPause' | 'seekBack' | 'seekForward' | 'toggleInf
 export type RemoteHandlers = {
 	onAction: (action: PlayerAction) => void;
 	onSeek: (seconds: number) => void;
+	/** Only called for a tier the session actually offers. */
 	onQuality: (quality: QualityOption) => void;
 	/** Only called for null (off) or a language the session actually offers. */
 	onSubtitle: (language: string | null) => void;
 	onVolume: (volume: number) => void;
 	getSubtitleTracks: () => readonly { language: string }[];
+	getQualities: () => readonly QualityOption[];
 };
 
 function listen<T>(name: string, handler: (detail: T) => void): () => void {
@@ -37,7 +39,7 @@ export function bindRemotePlayerEvents(handlers: RemoteHandlers): () => void {
 		),
 		listen<{ seconds: number }>(DOM_EVENTS.playerSeek, ({ seconds }) => handlers.onSeek(seconds)),
 		listen<{ quality: number }>(DOM_EVENTS.playerQuality, ({ quality }) => {
-			if (isQualityOption(quality)) handlers.onQuality(quality);
+			if (isOfferedQuality(handlers.getQualities(), quality)) handlers.onQuality(quality);
 		}),
 		listen<{ language: string | null }>(DOM_EVENTS.playerSubtitle, ({ language }) => {
 			if (isOfferedSubtitle(handlers.getSubtitleTracks(), language)) handlers.onSubtitle(language);
@@ -60,7 +62,8 @@ export function announcePlayerStateChange() {
 type BridgeState = {
 	position: number;
 	duration: number;
-	quality: QualityOption;
+	qualities: readonly QualityOption[];
+	quality: QualityOption | undefined;
 	qualityModes: Partial<Record<QualityOption, QualityMode>>;
 	subtitleLanguage: string | null;
 	subtitleTracks: readonly { language: string; label: string | null; kind: string }[];
@@ -75,7 +78,7 @@ export function playerBridgeAttributes(state: BridgeState) {
 		'data-pivi-player-position': state.position,
 		'data-pivi-player-duration': state.duration,
 		'data-pivi-player-quality': state.quality,
-		'data-pivi-player-quality-options': QUALITY_OPTIONS.join(','),
+		'data-pivi-player-quality-options': state.qualities.join(','),
 		'data-pivi-player-quality-modes': JSON.stringify(state.qualityModes),
 		// An attribute can't carry null, empty string stands for off.
 		'data-pivi-player-subtitle-language': state.subtitleLanguage ?? '',

@@ -1,13 +1,21 @@
 // Quality tiers and how each one plays. Shared by the TV player, its quality
 // picker and the phone remote so all three show the same tiers and mode icons.
 
-/** Tiers the quality picker offers. Ordered highest to lowest, `bestInitialQuality` relies on that. */
-export const QUALITY_OPTIONS = [2160, 1440, 1080, 720, 480, 360] as const;
-/** A tier the picker offers, guarded by isQualityOption for input from the phone. */
-export type QualityOption = (typeof QUALITY_OPTIONS)[number];
+/** A video height the app offers. The list differs per app and session, it comes with the resolved stream. */
+export type QualityOption = number;
 
-/** Tier the player opens on before the others are probed. Often served pre-muxed, so it starts fastest. */
-export const DEFAULT_QUALITY: QualityOption = 720;
+// Used when the screen size is unknown. Often served pre-muxed, so it starts fastest.
+const FALLBACK_START_HEIGHT = 720;
+
+/**
+ * Cap for the first resolve, before the app has said which tiers it has.
+ * Anything above the screen's pixel height can't look better, so that is the
+ * ceiling. Only a preference, `startQuality` picks the closest tier the app
+ * really offers.
+ */
+export function preferredStartHeight(screenHeightPx: number | undefined): number {
+	return screenHeightPx && screenHeightPx > 0 ? Math.round(screenHeightPx) : FALLBACK_START_HEIGHT;
+}
 
 /** Containers the stream resolver reports, needed to build the MSE MIME types. */
 export type Container = 'mp4' | 'webm';
@@ -26,9 +34,26 @@ export type QualityMeta = {
 /** Narrowed by isMseCandidate, so the MSE setup can rely on a separate audio track. */
 export type MseQualityMeta = QualityMeta & { acodec: string; audioContainer: Container };
 
-/** Drops quality values from the phone that the TV doesn't offer. */
-export function isQualityOption(value: number): value is QualityOption {
-	return (QUALITY_OPTIONS as readonly number[]).includes(value);
+/** Highest first without duplicates, so tiers always read the same however the app ordered them. */
+export function normalizeQualities(raw: readonly number[] | undefined): QualityOption[] {
+	return [...new Set(raw ?? [])].sort((a, b) => b - a);
+}
+
+/** Drops quality values from the phone that the session doesn't offer. */
+export function isOfferedQuality(qualities: readonly number[], value: number): boolean {
+	return qualities.includes(value);
+}
+
+/**
+ * Tier the player opens on before the others are probed, the highest one under
+ * the preferred height. Undefined when the app has no quality choice.
+ */
+export function startQuality(
+	qualities: readonly number[],
+	preferredHeight: number
+): QualityOption | undefined {
+	const ordered = normalizeQualities(qualities);
+	return ordered.find((option) => option <= preferredHeight) ?? ordered.at(-1);
 }
 
 /** Converts the play page's GraphQL result. The server only reports mp4 or webm, GraphQL just has no literal union type. */
@@ -74,9 +99,14 @@ export function qualityModeFor(
 	return mseAvailable ? 'mse' : 'ffmpeg';
 }
 
-/** Lets the player open on the highest tier confirmed for real MSE instead of always the default. */
+/**
+ * Lets the player open on the highest tier confirmed for real MSE instead of
+ * always the start tier. Expects `qualities` highest first.
+ */
 export function bestInitialQuality(
-	mseAvailability: Partial<Record<QualityOption, boolean>>
-): QualityOption {
-	return QUALITY_OPTIONS.find((option) => mseAvailability[option] === true) ?? DEFAULT_QUALITY;
+	qualities: readonly number[],
+	mseAvailability: Partial<Record<QualityOption, boolean>>,
+	fallback: QualityOption | undefined
+): QualityOption | undefined {
+	return qualities.find((option) => mseAvailability[option] === true) ?? fallback;
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-	DEFAULT_QUALITY,
 	bestInitialQuality,
-	isQualityOption,
+	isOfferedQuality,
+	normalizeQualities,
+	preferredStartHeight,
+	startQuality,
 	qualityModeFor,
 	strategyFor,
 	type QualityMeta
@@ -54,15 +56,38 @@ describe('quality strategy', () => {
 		expect(qualityModeFor(meta({ audioContainer: null }), undefined)).toBe('ffmpeg');
 	});
 
-	it('starts on the highest confirmed MSE tier, else the default', () => {
-		expect(bestInitialQuality({ 1080: true, 720: true, 2160: false })).toBe(1080);
-		expect(bestInitialQuality({ 2160: false, 1080: false })).toBe(DEFAULT_QUALITY);
-		expect(bestInitialQuality({})).toBe(DEFAULT_QUALITY);
+	it('starts on the highest confirmed MSE tier, else the start tier', () => {
+		const tiers = [2160, 1080, 720];
+		expect(bestInitialQuality(tiers, { 1080: true, 720: true, 2160: false }, 720)).toBe(1080);
+		expect(bestInitialQuality(tiers, { 2160: false, 1080: false }, 720)).toBe(720);
+		expect(bestInitialQuality(tiers, {}, 720)).toBe(720);
+		expect(bestInitialQuality([], {}, undefined)).toBeUndefined();
 	});
 
-	it('only accepts offered tiers', () => {
-		expect(isQualityOption(720)).toBe(true);
-		expect(isQualityOption(999)).toBe(false);
+	it('only accepts tiers the session offers', () => {
+		expect(isOfferedQuality([1080, 720], 720)).toBe(true);
+		expect(isOfferedQuality([1080, 720], 999)).toBe(false);
+		expect(isOfferedQuality([], 720)).toBe(false);
+	});
+
+	it('orders offered tiers highest first without duplicates', () => {
+		expect(normalizeQualities([480, 1080, 480, 720])).toEqual([1080, 720, 480]);
+		expect(normalizeQualities(undefined)).toEqual([]);
+	});
+
+	it('starts on the highest tier under the preferred height, or the nearest above', () => {
+		expect(startQuality([2160, 1080, 720, 360], 720)).toBe(720);
+		expect(startQuality([2160, 1080, 480], 720)).toBe(480);
+		expect(startQuality([2160, 1080], 720)).toBe(1080);
+		expect(startQuality([2160, 1080, 720], 2160)).toBe(2160);
+		expect(startQuality([], 720)).toBeUndefined();
+	});
+
+	it('prefers the screen height, 720 when unknown', () => {
+		expect(preferredStartHeight(2160)).toBe(2160);
+		expect(preferredStartHeight(1079.6)).toBe(1080);
+		expect(preferredStartHeight(undefined)).toBe(720);
+		expect(preferredStartHeight(0)).toBe(720);
 	});
 });
 
@@ -231,6 +256,8 @@ describe('urls', () => {
 		expect(urls.trackIndex('audio', 'webm', 480)).toBe(
 			'/api/stream-track/yt%2Fapp/a%20b/audio/index?container=webm&quality=480'
 		);
+		expect(urls.stream(0, undefined)).toBe('/api/stream/yt%2Fapp/a%20b?t=0');
+		expect(urls.track('audio', undefined)).toBe('/api/stream-track/yt%2Fapp/a%20b/audio');
 		expect(urls.subtitle('pt-BR')).toBe('/api/stream-subtitle/yt%2Fapp/a%20b/pt-BR');
 	});
 

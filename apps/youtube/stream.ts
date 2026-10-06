@@ -57,6 +57,8 @@ type YtDlpInfo = {
 	acodec?: string;
 	ext?: string;
 	requested_formats?: YtDlpFormat[];
+	// Every format yt-dlp knows for the video, audio-only ones have no height.
+	formats?: { height?: number | null; vcodec?: string }[];
 	subtitles?: Record<string, YtDlpSubtitleEntry[]>;
 	automatic_captions?: Record<string, YtDlpSubtitleEntry[]>;
 };
@@ -151,7 +153,18 @@ function containerFrom(ext: string): 'mp4' | 'webm' {
 // just because one happened to exist under the cap.
 function formatSelector(maxHeight: number | undefined): string {
 	if (!maxHeight) return 'bestvideo+bestaudio/best';
-	return `best[height=${maxHeight}]/bestvideo[height<=${maxHeight}]+bestaudio/best[height<=${maxHeight}]`;
+	// The trailing fallback keeps a cap below the smallest format from failing.
+	return `best[height=${maxHeight}]/bestvideo[height<=${maxHeight}]+bestaudio/best[height<=${maxHeight}]/bestvideo+bestaudio/best`;
+}
+
+// What the player's picker offers. Only heights with a real video stream,
+// highest first.
+function extractQualities(info: YtDlpInfo): number[] {
+	const heights = new Set<number>();
+	for (const format of info.formats ?? []) {
+		if (format.height && format.vcodec && format.vcodec !== 'none') heights.add(format.height);
+	}
+	return [...heights].sort((a, b) => b - a);
 }
 
 function extractTracks(videoId: string, info: YtDlpInfo) {
@@ -206,6 +219,7 @@ function toResolvedStream(
 		...audioFieldsFor(video, audio),
 		title: info.title,
 		duration: info.duration,
+		qualities: extractQualities(info),
 		subtitleTracks: extractSubtitleTracks(info)
 	};
 }
