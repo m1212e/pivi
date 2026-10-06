@@ -6,6 +6,9 @@ const SEEK_LANDED_SECONDS = 1.5;
 // A seek that never lands (past the real end) stops being trusted after this.
 const SEEK_GIVE_UP_MS = 8000;
 
+/** How far the back and forward buttons, on the TV and the phone, jump. */
+export const SEEK_STEP_SECONDS = 10;
+
 export function clampSeek(seconds: number, duration: number): number {
 	return Math.max(0, Math.min(duration, seconds));
 }

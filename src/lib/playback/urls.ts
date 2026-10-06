@@ -2,6 +2,7 @@
 import type { Container, QualityOption } from './quality';
 
 export type TrackKind = 'video' | 'audio';
+export type SessionUrls = ReturnType<typeof createSessionUrls>;
 
 export function createSessionUrls(appId: string, sessionId: string) {
 	const app = encodeURIComponent(appId);
