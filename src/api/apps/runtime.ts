@@ -13,6 +13,7 @@
 // (its conditional-only export doesn't resolve consistently under this
 // project's Vite setup); ensureRal() installs the RAL createMessageConnection
 // needs.
+import { getHostLocale } from './hostLocale';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 import { ensureRal } from '#lib/rpcRal';
 import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
@@ -27,11 +28,14 @@ import type { DashboardContribution } from '#lib/apps/dashboard';
 import type { AppScreen, UiEvent } from '#lib/apps/ui';
 import {
 	activateNotification,
+	localeNotification,
 	publishDashboardNotification,
 	publishScreenNotification,
 	readyNotification,
 	readyParamsSchema,
 	resolvedStreamSchema,
+	resolveNextRequest,
+	resolveNextResultSchema,
 	resolveSkipSegmentsRequest,
 	resolveSkipSegmentsResultSchema,
 	resolveStreamRequest,
@@ -51,8 +55,10 @@ export type AppInstance = {
 	getDashboard(): DashboardContribution | undefined;
 	getScreen(screenId: string): AppScreen | undefined;
 	sendUiEvent(event: UiEvent): void;
+	setLocale(locale: string): void;
 	resolveStream(sessionId: string, maxHeight?: number): Promise<ResolvedStream>;
 	resolveSkipSegments(sessionId: string): Promise<SkipSegment[]>;
+	resolveNext(sessionId: string, context: string): Promise<string | undefined>;
 	// Whether the host may fetch (or show) a URL this app supplied: the
 	// app has to have been granted network, and the URL has to be on one of
 	// the domains its manifest declared. Anything else is the app trying to
@@ -234,13 +240,17 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		clearTimeout(timeout);
 	}
 
-	connection.sendNotification(activateNotification);
+	connection.sendNotification(activateNotification, { locale: getHostLocale() });
 
 	return {
 		manifest,
 		getDashboard: () => published.dashboard,
 		getScreen: (screenId) => published.screens.get(screenId),
 		allowsUrl: (url) => urlAllowed(manifest, granted, url),
+
+		setLocale(locale) {
+			connection.sendNotification(localeNotification, { locale });
+		},
 
 		sendUiEvent(event) {
 			if (hasFeature(manifest, 'screen')) connection.sendNotification(uiEventNotification, event);
@@ -261,6 +271,17 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 			} catch {
 				// A failing or malformed answer is treated as nothing to report.
 				return [];
+			}
+		},
+
+		async resolveNext(sessionId, context) {
+			if (!hasFeature(manifest, 'playback')) return undefined;
+			try {
+				const result = await connection.sendRequest(resolveNextRequest, { sessionId, context });
+				return resolveNextResultSchema.parse(result).sessionId;
+			} catch {
+				// Apps that don't sequence playback just don't answer.
+				return undefined;
 			}
 		},
 

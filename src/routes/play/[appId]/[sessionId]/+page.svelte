@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as m from '#lib/paraglide/messages';
+	import Button from '#lib/components/Button.svelte';
 	import {
 		ArrowLeft,
 		Play,
@@ -20,6 +21,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { browser } from '$app/env';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { client } from '#lib/api/rumbleClient/client';
 	import Slider from '#lib/components/Slider.svelte';
 	import Select from '#lib/components/Select.svelte';
@@ -45,6 +47,8 @@
 
 	const appId = page.params.appId!;
 	const sessionId = page.params.sessionId!;
+	// Set when the session was started from a sequence such as a playlist.
+	const context = page.url.searchParams.get('context');
 	const streamBaseUrl = `/api/stream/${encodeURIComponent(appId)}/${encodeURIComponent(sessionId)}`;
 
 	function trackUrlFor(track: 'video' | 'audio', maxHeight: QualityOption = quality): string {
@@ -942,6 +946,28 @@
 		history.back();
 	}
 
+	// Plays the next entry of the sequence this session came from, or leaves
+	// when there is none. Replacing the entry keeps one back press enough.
+	async function onVideoEnded() {
+		if (!context) return goBack();
+		try {
+			const result = await client.query.appNextSession({
+				__args: { appId, sessionId, context },
+				sessionId: true
+			});
+			const nextId = result?.sessionId;
+			if (nextId) {
+				const next = new URLSearchParams({ context });
+				return goto(`/play/${encodeURIComponent(appId)}/${encodeURIComponent(nextId)}?${next}`, {
+					replaceState: true
+				});
+			}
+		} catch {
+			// Fall through to leaving, same as a session without a sequence.
+		}
+		goBack();
+	}
+
 	// Hidden (not unmounted -- see the template's own note on why) after a
 	// stretch of no interaction, but only while actually playing; pausing
 	// keeps it up indefinitely, same idea as the home page's own idle timer
@@ -1118,13 +1144,9 @@
 	<div class="flex size-full flex-col items-center justify-center gap-3 text-white">
 		<p class="text-lg font-medium">{m.playback_failed()}</p>
 		<p class="max-w-sm text-center text-sm text-white/60">{errorMessage}</p>
-		<button
-			type="button"
-			onclick={goBack}
-			class="mt-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-slate-950 hover:bg-white/90 focus:outline-none"
-		>
+		<Button variant="solid" size="md" onclick={goBack} class="mt-2">
 			{m.back()}
-		</button>
+		</Button>
 	</div>
 {/snippet}
 
@@ -1470,7 +1492,7 @@
 			onwaiting={() => (buffering = true)}
 			onplaying={() => (buffering = false)}
 			oncanplay={() => (buffering = false)}
-			onended={goBack}
+			onended={onVideoEnded}
 			onerror={() => {
 				// A direct/MSE failure fires this same native error event
 				// alongside our own JS-level handling (attachDualTrackSource's

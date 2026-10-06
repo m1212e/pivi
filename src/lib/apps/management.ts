@@ -62,7 +62,6 @@ const updateCheckSummarySchema = z.object({
 	pending: z.array(z.string()),
 	failed: z.array(z.string())
 });
-export type UpdateCheckSummary = z.infer<typeof updateCheckSummarySchema>;
 
 export const appsStateSchema = z.object({
 	apps: z.array(installedAppSchema),

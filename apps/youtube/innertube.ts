@@ -57,6 +57,24 @@ export let innertube = await Innertube.create({
 	enable_session_cache: false
 });
 
+// The host's language and region, from its `host/activate`. Without them
+// YouTube answers in English with English-ranked results, however the account
+// is set up in the web app.
+let localeOptions: { lang?: string; location?: string } = {};
+
+export function setLocale(tag: string) {
+	try {
+		const { language, region } = new Intl.Locale(tag);
+		localeOptions = { lang: language, location: region };
+	} catch {
+		localeOptions = {};
+	}
+	// A session that already exists keeps what it was created with.
+	const client = innertube.session.context.client;
+	if (localeOptions.lang) client.hl = localeOptions.lang;
+	if (localeOptions.location) client.gl = localeOptions.location;
+}
+
 // The *first* successful device-code login only ever emits 'auth', never
 // 'update-credentials' — that event is exclusively for later background token
 // refreshes. Both have to be persisted, or a fresh sign-in is lost on restart.
@@ -79,6 +97,7 @@ export async function loadStoredSession(): Promise<void> {
 	const stored = await getStoredTokens();
 
 	const next = await Innertube.create({
+		...localeOptions,
 		cache: new UniversalCache(false),
 		enable_session_cache: false
 	});

@@ -14,9 +14,19 @@ import { dbAppStore, type InstalledApp } from './store';
 import { dropStreamCache } from './streamCache';
 import { ANY_DASHBOARD_EVENT } from './events';
 import { appPubSub } from './pubsub';
+import { onHostLocaleChanged } from './hostLocale';
 import type { AppProcessControl } from './deps';
 
 const instances = new Map<string, Promise<AppInstance>>();
+// A VM still shutting down. Its sandbox name is the app's, so booting the next
+// one before this settles makes the two collide and the new one gets killed.
+const stopping = new Map<string, Promise<void>>();
+// Instances whose VM has finished booting, for callers that must not wait on it.
+const started = new Map<string, AppInstance>();
+
+onHostLocaleChanged((locale) => {
+	for (const app of started.values()) app.setLocale(locale);
+});
 
 async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 	const user = await getActiveProfileUser();
@@ -55,11 +65,18 @@ export function getApp(appId: string): Promise<AppInstance> {
 	if (existing) return existing;
 
 	const instance = (async () => {
+		await stopping.get(appId);
 		const row = await dbAppStore.find(appId);
 		if (!row || !row.enabled) throw new Error(`Unknown app: ${appId}`);
 		return spawnApp(row);
 	})();
 	instances.set(appId, instance);
+	instance.then(
+		(app) => {
+			if (instances.get(appId) === instance) started.set(appId, app);
+		},
+		() => {}
+	);
 	// An app that failed to start shouldn't stay failed forever.
 	instance.catch(() => {
 		if (instances.get(appId) === instance) instances.delete(appId);
@@ -67,27 +84,35 @@ export function getApp(appId: string): Promise<AppInstance> {
 	return instance;
 }
 
-// Every enabled app that started successfully. One that fails to start is
-// logged and left out rather than taking every other app's listing down.
-// With no profile active there's nothing to run them for.
-export async function getAllApps(): Promise<AppInstance[]> {
+// Starts every enabled app in the background and returns whichever are already
+// up, so a caller (the home screen) can render right away and pick the rest up
+// from the dashboard push events once they've booted.
+export async function getStartedApps(): Promise<{ appId: string; app?: AppInstance }[]> {
 	if (!(await getActiveProfileUser())) return [];
 
 	const rows = (await dbAppStore.list()).filter((row) => row.enabled);
-	const results = await Promise.allSettled(rows.map((row) => getApp(row.appId)));
-	return results.flatMap((result, index) => {
-		if (result.status === 'fulfilled') return [result.value];
-		console.error(`[apps] ${rows[index].appId} failed to start:`, result.reason);
-		return [];
+	return rows.map((row) => {
+		void getApp(row.appId).catch((error) =>
+			console.error(`[apps] ${row.appId} failed to start:`, error)
+		);
+		return { appId: row.appId, app: started.get(row.appId) };
 	});
 }
 
 async function stopApp(appId: string): Promise<void> {
 	const instance = instances.get(appId);
 	instances.delete(appId);
+	started.delete(appId);
 	dropStreamCache(appId);
 	if (!instance) return;
-	await instance.then((app) => app.dispose()).catch(() => {});
+
+	const done = instance.then((app) => app.dispose()).catch(() => {});
+	// Chained on any earlier stop too, so overlapping stops settle in order.
+	const settled = Promise.all([stopping.get(appId), done]).then(() => {
+		if (stopping.get(appId) === settled) stopping.delete(appId);
+	});
+	stopping.set(appId, settled);
+	await settled;
 }
 
 // Stops every running app, in parallel — used when the server shuts down, so

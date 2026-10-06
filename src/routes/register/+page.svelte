@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Button from '#lib/components/Button.svelte';
+	import TextField from '#lib/components/TextField.svelte';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import { usernameError } from '#lib/username';
 	import { client } from '#lib/api/rumbleClient/client';
@@ -12,7 +14,7 @@
 	let usernameTouched = $state(false);
 	let pin = $state('');
 	let message = $state<string>();
-	let usernameInput: HTMLInputElement | undefined = $state();
+	let usernameField: TextField | undefined = $state();
 
 	const trimmedUsername = $derived(username.trim());
 	const nameError = $derived(usernameError(trimmedUsername));
@@ -47,7 +49,7 @@
 	});
 
 	$effect(() => {
-		if (step === 'name') usernameInput?.focus();
+		if (step === 'name') usernameField?.focus();
 	});
 </script>
 
@@ -72,31 +74,31 @@
 	<div class="flex flex-col items-center gap-8">
 		{#if step === 'name'}
 			<h1 class="text-2xl font-semibold text-white/95">{m.choose_username()}</h1>
-			<input
-				bind:this={usernameInput}
+			<TextField
+				bind:this={usernameField}
 				bind:value={username}
-				onblur={() => (usernameTouched = true)}
-				onkeydown={(event) => {
-					if (event.key === 'Enter') {
-						event.preventDefault();
-						goToPin();
-					}
-				}}
+				label={m.choose_username()}
 				placeholder={m.username_placeholder()}
 				autocomplete="username"
-				class="w-64 rounded-full bg-white/12 px-6 py-3 text-center text-lg text-white placeholder-white/40 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+				center
+				class="w-64 rounded-full bg-white/12 px-6 py-3 text-lg shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
+				onblur={() => (usernameTouched = true)}
+				onEnter={(event) => {
+					event.preventDefault();
+					goToPin();
+				}}
 			/>
 			{#if usernameTouched && trimmedUsername.length > 0 && nameError}
 				<p class="-mt-4 text-sm font-medium text-rose-400">{nameError}</p>
 			{/if}
-			<button
-				type="button"
+			<Button
+				variant="solid"
+				size="md"
 				onclick={goToPin}
 				disabled={!trimmedUsername || !!nameError}
-				class="rounded-full bg-white px-8 py-3 text-base font-semibold text-indigo-950 transition focus:outline-none enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-30"
 			>
 				{m.next()}
-			</button>
+			</Button>
 		{:else}
 			<h1 class="text-2xl font-semibold text-white/95">{m.set_pin()}</h1>
 			<PinPad bind:value={pin} error={message} showKeypad={false} />

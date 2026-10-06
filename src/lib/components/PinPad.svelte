@@ -8,6 +8,7 @@
 		value = $bindable(''),
 		error = null,
 		showKeypad = true,
+		autofocus = false,
 		oncomplete,
 		onkey
 	}: {
@@ -20,6 +21,8 @@
 		// bridge drives it by clicking [data-key] buttons directly (see
 		// RemoteBridge.svelte's pressPinKey).
 		showKeypad?: boolean;
+		// Focuses the "1" key on mount so TV remote navigation starts there.
+		autofocus?: boolean;
 		oncomplete?: (pin: string) => void;
 		onkey?: (key: string) => void;
 	} = $props();
@@ -71,6 +74,11 @@
 		}
 		node.addEventListener('pivi-remote-press', onRemotePress);
 		return () => node.removeEventListener('pivi-remote-press', onRemotePress);
+	});
+
+	$effect(() => {
+		if (!autofocus || !showKeypad) return;
+		root?.querySelector<HTMLButtonElement>('[data-key="1"]')?.focus();
 	});
 
 	const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];

@@ -129,6 +129,20 @@ export const resolveSkipSegmentsRequest = new RequestType<
 	void
 >('plugin/resolveSkipSegments');
 
+// What to play once a session has ended, for apps that play in sequence
+// (a playlist). `context` is whatever the app put on the session action.
+// No `sessionId` in the answer means there is nothing after this one.
+export const resolveNextParamsSchema = z.object({
+	sessionId: z.string(),
+	context: z.string().optional()
+});
+export const resolveNextResultSchema = z.object({ sessionId: z.string().optional() });
+export const resolveNextRequest = new RequestType<
+	z.infer<typeof resolveNextParamsSchema>,
+	z.infer<typeof resolveNextResultSchema>,
+	void
+>('plugin/resolveNext');
+
 // Outbound network access isn't an RPC: it's the `network` permission, enforced
 // by the sandbox for exactly the manifest's declared domains (see
 // src/api/apps/sandbox). Likewise persistent and disposable state are the
@@ -137,10 +151,21 @@ export const resolveSkipSegmentsRequest = new RequestType<
 
 // Host -> app
 
-export const activateNotification = new NotificationType0('host/activate');
+// The host's language and region (a BCP 47 tag like `de-DE`), so an app can
+// ask its backend for results in the language the person actually reads.
+export const activateParamsSchema = z.object({ locale: z.string() });
+export const activateNotification = new NotificationType<z.infer<typeof activateParamsSchema>>(
+	'host/activate'
+);
 
 export const uiEventNotification = new NotificationType<z.infer<typeof uiEventSchema>>(
 	'host/uiEvent'
+);
+
+// The host's language changed after the app started, e.g. the TV's browser
+// language became known once a page was opened.
+export const localeNotification = new NotificationType<z.infer<typeof activateParamsSchema>>(
+	'host/locale'
 );
 
 export const shutdownNotification = new NotificationType0('host/shutdown');

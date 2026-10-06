@@ -5,11 +5,16 @@
 	// Generic horizontal shelf shared by every dashboard row (continue watching,
 	// apps, future recommendation rows) so scroll/keyboard behavior only lives
 	// in one place.
+	// `inset: false` drops the side padding for a row placed inside a page that
+	// already has its own (an app's screen), so it lines up with the content
+	// around it instead of being indented twice.
 	let {
 		title,
+		inset = true,
 		children
 	}: {
 		title: string;
+		inset?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -31,7 +36,7 @@
 		if (event.detail.inView) revealed = true;
 	}}
 >
-	<h2 class="pivi-row-title px-8 text-xl font-semibold text-white/90 sm:px-12">
+	<h2 class="pivi-row-title text-xl font-semibold text-white/90 {inset ? 'px-8 sm:px-12' : ''}">
 		{title}
 	</h2>
 	<!-- `overflow-x-auto` computes `overflow-y` to `auto` too (per spec, once
@@ -46,7 +51,9 @@
 	     to that edge instead of just far enough to bring the card into view. -->
 	<div
 		data-pivi-hscroll
-		class="pivi-row-fade flex scrollbar-none gap-10 overflow-x-auto px-8 py-10 sm:px-12"
+		class="pivi-row-fade flex scrollbar-none gap-10 overflow-x-auto py-10 {inset
+			? 'px-8 sm:px-12'
+			: ''}"
 	>
 		{#if revealed}
 			{@render children()}

@@ -12,6 +12,7 @@
 	import {
 		backNotification,
 		enterNotification,
+		exitTextNotification,
 		goHomeNotification,
 		keyNotification,
 		keyParamsSchema,
@@ -39,6 +40,10 @@
 		selectProfileParamsSchema,
 		stateNotification,
 		stateParamsSchema,
+		textEntryModeNotification,
+		textEntryModeParamsSchema,
+		suggestionNotification,
+		suggestionParamsSchema,
 		textNotification,
 		textParamsSchema
 	} from '#lib/pairing/remoteProtocol';
@@ -56,6 +61,7 @@
 		Hand,
 		Info,
 		Keyboard,
+		KeyboardOff,
 		Layers,
 		Pause,
 		Play,
@@ -80,6 +86,7 @@
 	// needs at this instant, with no manual tab-picking.
 	let hasPinPad = $state(false);
 	let hasTextInput = $state(false);
+	let suggestions = $state<string[]>([]);
 	let canGoBack = $state(false);
 	let canGoHome = $state(false);
 	let profiles = $state<{ id: string; username: string; image: string | null }[]>([]);
@@ -224,6 +231,24 @@
 	let pin = $state('');
 	let text = $state('');
 	let textInput: HTMLInputElement | undefined = $state();
+
+	// With the trackpad chosen on purpose, the TV types with its own on-screen
+	// keyboard instead. Reported even while no field is focused, so the TV
+	// already knows when one appears.
+	const phoneKeyboard = $derived(manualOverride !== 'trackpad');
+
+	function reportTextEntryMode() {
+		if (!connection || !connected) return;
+		sendNotification(connection, textEntryModeNotification, textEntryModeParamsSchema, {
+			phoneKeyboard
+		});
+	}
+
+	$effect(() => {
+		void connected;
+		void phoneKeyboard;
+		reportTextEntryMode();
+	});
 
 	// visualViewport shrinks when the on-screen keyboard opens, unlike window.innerHeight.
 	// We use that gap to smoothly translate the input up above the keyboard.
@@ -378,8 +403,13 @@
 		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
 
+	// Values this phone sent recently, so the TV echoing them back isn't
+	// mistaken for an edit made on the TV (the echo can lag behind typing).
+	let recentlySent: string[] = [];
+
 	function onTextInput() {
 		if (!connection) return;
+		recentlySent = [...recentlySent.slice(-19), text];
 		sendNotification(connection, textNotification, textParamsSchema, { value: text });
 	}
 
@@ -387,8 +417,17 @@
 		event.preventDefault();
 		connection?.sendNotification(enterNotification);
 		navigator.vibrate?.(8);
-		text = '';
-		onTextInput();
+	}
+
+	function pickSuggestion(value: string) {
+		if (!connection) return;
+		sendNotification(connection, suggestionNotification, suggestionParamsSchema, { value });
+		navigator.vibrate?.(8);
+	}
+
+	function onTextExit() {
+		connection?.sendNotification(exitTextNotification);
+		navigator.vibrate?.(8);
 	}
 
 	onMount(() => {
@@ -416,6 +455,17 @@
 		onNotification(connection, stateNotification, stateParamsSchema, (state) => {
 			hasPinPad = state.hasPinPad;
 			hasTextInput = state.hasTextInput;
+			suggestions = state.hasTextInput ? state.suggestions : [];
+			// Cheap and idempotent, and covers a TV that reloaded and forgot.
+			if (state.hasTextInput) reportTextEntryMode();
+			if (!state.hasTextInput) recentlySent = [];
+			if (
+				state.hasTextInput &&
+				state.textValue !== text &&
+				!recentlySent.includes(state.textValue)
+			) {
+				text = state.textValue;
+			}
 			canGoBack = state.canGoBack;
 			canGoHome = state.canGoHome;
 			profiles = state.profiles;
@@ -547,6 +597,19 @@
 
 {#snippet keyboardTab()}
 	<form onsubmit={onTextSubmit} class="flex w-full max-w-sm flex-col items-center gap-3">
+		{#if suggestions.length > 0}
+			<div class="flex w-full flex-wrap justify-center gap-2" aria-label={m.osk_suggestions()}>
+				{#each suggestions.slice(0, 6) as suggestion (suggestion)}
+					<button
+						type="button"
+						onclick={() => pickSuggestion(suggestion)}
+						class="max-w-full rounded-full bg-white/12 px-4 py-2 text-sm text-white/90 ring-1 ring-white/25 transition hover:bg-white/20 focus:outline-none"
+					>
+						<span class="block truncate">{suggestion}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
 		<input
 			bind:this={textInput}
 			bind:value={text}
@@ -555,13 +618,23 @@
 			placeholder={m.type_here_placeholder()}
 			class="w-full rounded-full bg-white/12 px-6 py-4 text-center text-lg text-white placeholder-white/40 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
 		/>
-		<button
-			type="submit"
-			aria-label={m.enter()}
-			class="w-full rounded-full bg-white px-6 py-4 text-lg font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none"
-		>
-			{m.enter()}
-		</button>
+		<div class="flex w-full gap-3">
+			<button
+				type="button"
+				onclick={onTextExit}
+				aria-label={m.exit_text_entry()}
+				class="flex shrink-0 items-center justify-center rounded-full bg-white/12 px-5 py-4 text-white/80 ring-1 ring-white/25 transition hover:bg-white/20 focus:outline-none"
+			>
+				<KeyboardOff class="size-6" />
+			</button>
+			<button
+				type="submit"
+				aria-label={m.enter()}
+				class="flex-1 rounded-full bg-white px-6 py-4 text-lg font-medium text-slate-950 transition hover:bg-white/90 focus:outline-none"
+			>
+				{m.enter()}
+			</button>
+		</div>
 	</form>
 {/snippet}
 

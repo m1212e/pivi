@@ -46,6 +46,7 @@
 	"info": "Info",
 	"type_here_placeholder": "Type here…",
 	"enter": "Enter",
+	"exit_text_entry": "Done typing",
 	"backspace": "Backspace",
 	"use_phone_to_enter_pin": "Use your phone to enter the PIN",
 	"not_paired_title": "Not paired",
@@ -148,5 +149,13 @@
 	"quality_mode_mse": "Adaptive streaming — video and audio buffered separately in the browser, no server-side remuxing",
 	"quality_mode_ffmpeg": "Proxied — being relayed and remuxed through this server",
 	"subtitles_auto_generated": "Auto-generated — not a real, human-authored caption track",
-	"background_music": "Background music"
+	"background_music": "Background music",
+	"osk_label": "On-screen keyboard",
+	"osk_search": "Search",
+	"osk_go": "Go",
+	"osk_done": "Done",
+	"osk_shift": "Shift",
+	"osk_space": "Space",
+	"osk_backspace": "Backspace",
+	"osk_suggestions": "Suggestions"
 }

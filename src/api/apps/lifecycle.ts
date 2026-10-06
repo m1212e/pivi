@@ -44,11 +44,8 @@ export function startAppHost() {
 	// removes on the next start.
 	process.once('sveltekit:shutdown', () => void stopAllApps());
 
-	// Every six hours, plus once shortly after boot — not at boot itself, when the
+	// Hourly, plus once shortly after boot — not at boot itself, when the
 	// network (and the profile picker the user is looking at) is still settling.
-	cron.schedule(
-		'17 */6 * * *',
-		() => void runUpdateCheck().catch(logFailure('update check failed'))
-	);
+	cron.schedule('17 * * * *', () => void runUpdateCheck().catch(logFailure('update check failed')));
 	setTimeout(() => void runUpdateCheck().catch(logFailure('update check failed')), 2 * 60_000);
 }

@@ -34,7 +34,23 @@ export const textNotification = new NotificationType<z.infer<typeof textParamsSc
 	'remote/text'
 );
 
+// Whether the phone shows its own keyboard for text fields (as opposed to
+// sitting on the trackpad). The TV only opens its on-screen keyboard when it
+// does not, so the two never compete.
+export const textEntryModeParamsSchema = z.object({ phoneKeyboard: z.boolean() });
+export const textEntryModeNotification = new NotificationType<
+	z.infer<typeof textEntryModeParamsSchema>
+>('remote/textEntryMode');
+
+// The phone picked one of the suggestions the TV listed in its state.
+export const suggestionParamsSchema = z.object({ value: z.string() });
+export const suggestionNotification = new NotificationType<z.infer<typeof suggestionParamsSchema>>(
+	'remote/suggestion'
+);
+
 export const enterNotification = new NotificationType0('remote/enter');
+// Leaves text entry on the focused field without submitting it.
+export const exitTextNotification = new NotificationType0('remote/exitText');
 export const requestStateNotification = new NotificationType0('remote/requestState');
 
 // A profile tapped in the phone's own profile grid (see stateParamsSchema's
@@ -128,6 +144,12 @@ const subtitleTrackSchema = z.object({
 export const stateParamsSchema = z.object({
 	hasPinPad: z.boolean(),
 	hasTextInput: z.boolean(),
+	// What the focused text field holds right now, so the phone's keyboard
+	// starts from it and follows edits made on the TV.
+	textValue: z.string().default(''),
+	// Suggestions the focused text field offers, for the phone to show above
+	// its keyboard.
+	suggestions: z.array(z.string()).default([]),
 	canGoBack: z.boolean(),
 	// Whether the "Home" button on the phone is worth showing -- true only
 	// while the TV is actually inside an app or the player, i.e. somewhere

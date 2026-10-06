@@ -84,7 +84,7 @@ const MAX_ICON_BYTES = 16 * 1024;
 // appIconDataUrl() below, never inserted as markup: a browser won't run script
 // or fetch anything from an SVG loaded that way. This check is defense in
 // depth on top of that, not the thing actually keeping it safe.
-export const appIconSchema = z
+const appIconSchema = z
 	.string()
 	.max(MAX_ICON_BYTES, 'Icon is too large')
 	.refine((svg) => /^\s*(<\?xml[^>]*\?>\s*)?<svg[\s>]/i.test(svg), 'Expected an <svg> document')

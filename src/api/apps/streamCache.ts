@@ -30,6 +30,10 @@ async function assertSafeStream(app: AppInstance, stream: ResolvedStream): Promi
 }
 
 const cache = new Map<string, { value: ResolvedStream; expiresAt: number }>();
+// Resolutions still running. The video and audio tracks and the player page ask
+// for the same stream at once, and every extra yt-dlp in the app's small VM is
+// a chance for the out-of-memory killer to take the whole app down.
+const inFlight = new Map<string, Promise<ResolvedStream>>();
 
 // An app that was restarted or had a permission revoked must not keep serving
 // streams it resolved under the old terms.
@@ -53,8 +57,15 @@ export async function resolveStreamCached(
 	const hit = cache.get(key);
 	if (hit && hit.expiresAt > Date.now()) return hit.value;
 
-	const value = await app.resolveStream(sessionId, maxHeight);
-	await assertSafeStream(app, value);
-	cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
-	return value;
+	const running = inFlight.get(key);
+	if (running) return running;
+
+	const resolution = (async () => {
+		const value = await app.resolveStream(sessionId, maxHeight);
+		await assertSafeStream(app, value);
+		cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+		return value;
+	})().finally(() => inFlight.delete(key));
+	inFlight.set(key, resolution);
+	return resolution;
 }

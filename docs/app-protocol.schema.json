@@ -26,7 +26,33 @@
 			"method": "host/activate",
 			"from": "host",
 			"kind": "notification",
-			"description": "Sent once after ready: the app may start publishing."
+			"description": "Sent once after ready: the app may start publishing.",
+			"params": {
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"type": "object",
+				"properties": {
+					"locale": {
+						"type": "string"
+					}
+				},
+				"required": ["locale"]
+			}
+		},
+		{
+			"method": "host/locale",
+			"from": "host",
+			"kind": "notification",
+			"description": "The host language changed since activate. Same params.",
+			"params": {
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"type": "object",
+				"properties": {
+					"locale": {
+						"type": "string"
+					}
+				},
+				"required": ["locale"]
+			}
 		},
 		{
 			"method": "host/shutdown",
@@ -111,6 +137,9 @@
 														},
 														"sessionId": {
 															"type": "string"
+														},
+														"context": {
+															"type": "string"
 														}
 													},
 													"required": ["type", "sessionId"]
@@ -188,6 +217,9 @@
 															"const": "session"
 														},
 														"sessionId": {
+															"type": "string"
+														},
+														"context": {
 															"type": "string"
 														}
 													},
@@ -287,9 +319,6 @@
 									"wrap": {
 										"type": "boolean"
 									},
-									"scroll": {
-										"type": "boolean"
-									},
 									"title": {
 										"type": "string"
 									},
@@ -319,6 +348,295 @@
 														"const": "session"
 													},
 													"sessionId": {
+														"type": "string"
+													},
+													"context": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "sessionId"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "deepLink"
+													},
+													"target": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "target"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "openOnPhone"
+													},
+													"url": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "url"]
+											}
+										]
+									},
+									"grow": {
+										"type": "boolean"
+									},
+									"alignStart": {
+										"type": "boolean"
+									},
+									"justify": {
+										"type": "string",
+										"enum": ["between", "around"]
+									},
+									"center": {
+										"type": "boolean"
+									},
+									"panel": {
+										"type": "boolean"
+									},
+									"onSelect": {
+										"type": "string"
+									},
+									"sticky": {
+										"type": "boolean"
+									},
+									"onReachEnd": {
+										"type": "string"
+									}
+								},
+								"required": ["type", "direction", "children"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "text"
+									},
+									"value": {
+										"type": "string"
+									},
+									"variant": {
+										"type": "string",
+										"enum": ["title", "subtitle", "body", "headline", "display"]
+									},
+									"lines": {
+										"type": "number"
+									}
+								},
+								"required": ["type", "value"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "icon"
+									},
+									"path": {
+										"type": "string"
+									},
+									"size": {
+										"type": "string",
+										"enum": ["normal", "large"]
+									}
+								},
+								"required": ["type", "path"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "spinner"
+									},
+									"label": {
+										"type": "string"
+									}
+								},
+								"required": ["type"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "skeleton"
+									},
+									"shape": {
+										"type": "string",
+										"enum": ["video", "poster", "avatar"]
+									}
+								},
+								"required": ["type"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "mediaCard"
+									},
+									"title": {
+										"type": "string"
+									},
+									"meta": {
+										"type": "string"
+									},
+									"image": {
+										"type": "string"
+									},
+									"shape": {
+										"type": "string",
+										"enum": ["video", "poster", "avatar"]
+									},
+									"stacked": {
+										"type": "boolean"
+									},
+									"badge": {
+										"type": "string"
+									},
+									"progress": {
+										"type": "number"
+									},
+									"action": {
+										"oneOf": [
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "screen"
+													},
+													"screenId": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "screenId"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "session"
+													},
+													"sessionId": {
+														"type": "string"
+													},
+													"context": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "sessionId"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "deepLink"
+													},
+													"target": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "target"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "openOnPhone"
+													},
+													"url": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "url"]
+											}
+										]
+									},
+									"onSelect": {
+										"type": "string"
+									}
+								},
+								"required": ["type", "title", "meta", "image"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "shelf"
+									},
+									"title": {
+										"type": "string"
+									},
+									"children": {
+										"type": "array",
+										"items": {
+											"$ref": "#/$defs/__schema0"
+										}
+									}
+								},
+								"required": ["type", "title", "children"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"const": "hero"
+									},
+									"title": {
+										"type": "string"
+									},
+									"description": {
+										"type": "string"
+									},
+									"image": {
+										"type": "string"
+									},
+									"badge": {
+										"type": "string"
+									},
+									"source": {
+										"type": "string"
+									},
+									"action": {
+										"oneOf": [
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "screen"
+													},
+													"screenId": {
+														"type": "string"
+													}
+												},
+												"required": ["type", "screenId"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"type": {
+														"type": "string",
+														"const": "session"
+													},
+													"sessionId": {
+														"type": "string"
+													},
+													"context": {
 														"type": "string"
 													}
 												},
@@ -353,27 +671,7 @@
 										]
 									}
 								},
-								"required": ["type", "direction", "children"]
-							},
-							{
-								"type": "object",
-								"properties": {
-									"type": {
-										"type": "string",
-										"const": "text"
-									},
-									"value": {
-										"type": "string"
-									},
-									"variant": {
-										"type": "string",
-										"enum": ["title", "subtitle", "body"]
-									},
-									"lines": {
-										"type": "number"
-									}
-								},
-								"required": ["type", "value"]
+								"required": ["type", "title", "description", "action"]
 							},
 							{
 								"type": "object",
@@ -435,6 +733,9 @@
 													},
 													"sessionId": {
 														"type": "string"
+													},
+													"context": {
+														"type": "string"
 													}
 												},
 												"required": ["type", "sessionId"]
@@ -466,6 +767,20 @@
 												"required": ["type", "url"]
 											}
 										]
+									},
+									"variant": {
+										"type": "string",
+										"enum": ["solid", "soft", "nav"]
+									},
+									"selected": {
+										"type": "boolean"
+									},
+									"icon": {
+										"type": "string"
+									},
+									"size": {
+										"type": "string",
+										"enum": ["sm", "md", "lg"]
 									}
 								},
 								"required": ["type", "label"]
@@ -504,6 +819,18 @@
 									},
 									"secret": {
 										"type": "boolean"
+									},
+									"search": {
+										"type": "boolean"
+									},
+									"onInput": {
+										"type": "string"
+									},
+									"suggestions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
 									},
 									"onSubmit": {
 										"type": "string"
@@ -674,6 +1001,35 @@
 					}
 				},
 				"required": ["segments"]
+			}
+		},
+		{
+			"method": "plugin/resolveNext",
+			"from": "host",
+			"kind": "request",
+			"feature": "playback",
+			"description": "The session to play after this one ended, from the context its action carried. Optional, answer with no sessionId when there is none.",
+			"params": {
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"type": "object",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					},
+					"context": {
+						"type": "string"
+					}
+				},
+				"required": ["sessionId"]
+			},
+			"result": {
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"type": "object",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					}
+				}
 			}
 		}
 	]

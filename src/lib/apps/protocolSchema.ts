@@ -9,12 +9,17 @@ import { dashboardContributionSchema } from './dashboard';
 import { appScreenSchema, uiEventSchema } from './ui';
 import {
 	activateNotification,
+	activateParamsSchema,
+	localeNotification,
 	publishDashboardNotification,
 	publishScreenNotification,
 	PROTOCOL_VERSION,
 	readyNotification,
 	readyParamsSchema,
 	resolvedStreamSchema,
+	resolveNextParamsSchema,
+	resolveNextRequest,
+	resolveNextResultSchema,
 	resolveSkipSegmentsParamsSchema,
 	resolveSkipSegmentsRequest,
 	resolveSkipSegmentsResultSchema,
@@ -51,7 +56,15 @@ const METHODS: MethodSpec[] = [
 		method: activateNotification.method,
 		from: 'host',
 		kind: 'notification',
-		description: 'Sent once after ready: the app may start publishing.'
+		description: 'Sent once after ready: the app may start publishing.',
+		params: activateParamsSchema
+	},
+	{
+		method: localeNotification.method,
+		from: 'host',
+		kind: 'notification',
+		description: 'The host language changed since activate. Same params.',
+		params: activateParamsSchema
 	},
 	{
 		method: shutdownNotification.method,
@@ -101,6 +114,16 @@ const METHODS: MethodSpec[] = [
 		description: 'Skippable stretches of a session’s stream.',
 		params: resolveSkipSegmentsParamsSchema,
 		result: resolveSkipSegmentsResultSchema
+	},
+	{
+		method: resolveNextRequest.method,
+		from: 'host',
+		kind: 'request',
+		feature: 'playback',
+		description:
+			'The session to play after this one ended, from the context its action carried. Optional, answer with no sessionId when there is none.',
+		params: resolveNextParamsSchema,
+		result: resolveNextResultSchema
 	}
 ];
 

@@ -17,7 +17,7 @@
 import { schemaBuilder } from '../rumble';
 import { defaultAppDeps } from '../apps/deps';
 import { ANY_DASHBOARD_EVENT, APP_LIST_EVENT } from '../apps/events';
-import { getAllApps, getApp } from '../apps/manager';
+import { getApp, getStartedApps } from '../apps/manager';
 import { dbAppStore } from '../apps/store';
 import { appPubSub } from '../apps/pubsub';
 import { hasAvailableUpdate } from '../apps/updateAvailability';
@@ -124,15 +124,19 @@ async function resolveApps(): Promise<AppInfo[]> {
 	);
 }
 
+// Doesn't wait for apps that are still booting: they report `cards: null`
+// (the frontend's loading state) and publish their dashboard once up.
 async function resolveDashboards(): Promise<AppDashboard[]> {
-	const apps = await getAllApps();
-	return apps
-		.filter((app) => app.manifest.features.includes('dashboard'))
-		.map((app) => {
-			const dashboard = app.getDashboard();
+	const apps = await getStartedApps();
+	const rows = await dbAppStore.list();
+	return rows
+		.filter((row) => row.enabled && row.approvedManifest.features.includes('dashboard'))
+		.filter((row) => apps.some((entry) => entry.appId === row.appId))
+		.map((row) => {
+			const dashboard = apps.find((entry) => entry.appId === row.appId)?.app?.getDashboard();
 			return {
-				appId: app.manifest.id,
-				appName: app.manifest.name,
+				appId: row.approvedManifest.id,
+				appName: row.approvedManifest.name,
 				cards: dashboard
 					? dashboard.cards.map((card) => ({
 							id: card.id,

@@ -1,13 +1,14 @@
 {
 	"id": "youtube",
 	"name": "YouTube",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"protocol": 1,
 	"features": ["dashboard", "screen", "playback", "skipSegments"],
 	"permissions": ["network", "storage", "cache"],
 	"network": {
 		"domains": [
 			"www.youtube.com",
+			"suggestqueries-clients6.youtube.com",
 			"*.googleapis.com",
 			"accounts.google.com",
 			"*.googlevideo.com",

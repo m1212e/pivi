@@ -10,3 +10,12 @@ export type VideoSummary = {
 	// see tvTiles.ts's own comment on where this comes from).
 	durationText: string;
 };
+
+// A playlist as shown in the Playlists tab. `id` is the plain playlist id
+// (no `VL` prefix), `thumbnailUrl` is '' when the tile carried none.
+export type PlaylistSummary = {
+	id: string;
+	title: string;
+	subtitle: string;
+	thumbnailUrl: string;
+};

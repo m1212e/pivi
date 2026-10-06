@@ -24,9 +24,17 @@ const execFileAsync = promisify(execFile);
 // yt-dlp's -j output for one video is a few hundred KB of JSON.
 const MAX_OUTPUT_BYTES = 64 << 20;
 
-async function runYtDlp(args: string[]): Promise<string> {
-	const { stdout } = await execFileAsync(BINARY, args, { maxBuffer: MAX_OUTPUT_BYTES });
-	return stdout;
+// One yt-dlp at a time. With its challenge solver it takes most of the
+// sandbox's memory, so two at once get the app killed.
+let queue: Promise<unknown> = Promise.resolve();
+
+function runYtDlp(args: string[]): Promise<string> {
+	const run = queue.then(async () => {
+		const { stdout } = await execFileAsync(BINARY, args, { maxBuffer: MAX_OUTPUT_BYTES });
+		return stdout;
+	});
+	queue = run.catch(() => {});
+	return run;
 }
 
 // A subset of yt-dlp's own `-j` (dump single JSON) output — only the fields

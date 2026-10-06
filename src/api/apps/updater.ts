@@ -8,6 +8,7 @@
 // and the old version keeps running meanwhile.
 import { parseImageRef } from '#lib/apps/imageRef';
 import { diffManifests } from '#lib/apps/manifestDiff';
+import { availabilityCache } from './availabilityCache';
 import type { AppDeps } from './deps';
 import type { AppImage } from './image';
 import { AppError } from './installer';
@@ -76,7 +77,17 @@ async function applyImage(
 	await deps.backend.removeImage(referenceFor(row, row.imageDigest));
 }
 
+// The badge's cached answer is dropped whenever this runs, since the outcome
+// (applied, parked, rolled back) changes what it should say.
 export async function checkForUpdate(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
+	try {
+		return await runCheck(deps, appId);
+	} finally {
+		availabilityCache.forget(appId);
+	}
+}
+
+async function runCheck(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	const row = await deps.store.find(appId);
 	if (!row) throw new AppError(`No app "${appId}" is installed`);
 
@@ -133,6 +144,25 @@ export async function checkForUpdate(deps: AppDeps, appId: string): Promise<Upda
 	}
 }
 
+const inFlight = new Set<string>();
+
+// For callers that notice a new digest on their own (the home screen's badge
+// check) and want it applied without waiting for the next scheduled run. A
+// check already running for the app makes this a no-op, so repeated page loads
+// can't stack up pulls or restarts.
+export async function checkForUpdateOnce(
+	deps: AppDeps,
+	appId: string
+): Promise<UpdateOutcome | undefined> {
+	if (inFlight.has(appId)) return undefined;
+	inFlight.add(appId);
+	try {
+		return await checkForUpdate(deps, appId);
+	} finally {
+		inFlight.delete(appId);
+	}
+}
+
 // Every app, one after another: this runs in the background, and pulls are
 // heavy enough that doing several at once would only slow each other down.
 export async function checkAllForUpdates(deps: AppDeps): Promise<Record<string, UpdateOutcome>> {
@@ -147,6 +177,7 @@ export async function approvePendingUpdate(deps: AppDeps, appId: string): Promis
 	const row = await deps.store.find(appId);
 	if (!row?.pendingUpdate) throw new AppError('There is no update waiting for approval');
 	await applyImage(deps, row, row.pendingUpdate.image, row.pendingUpdate.manifest);
+	availabilityCache.forget(appId);
 }
 
 export async function rejectPendingUpdate(deps: AppDeps, appId: string): Promise<void> {
@@ -157,4 +188,5 @@ export async function rejectPendingUpdate(deps: AppDeps, appId: string): Promise
 		ignoredDigest: row.pendingUpdate.image.digest
 	});
 	await deps.backend.removeImage(referenceFor(row, row.pendingUpdate.image.digest));
+	availabilityCache.forget(appId);
 }

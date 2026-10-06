@@ -46,6 +46,7 @@
 	"info": "Info",
 	"type_here_placeholder": "Hier eingeben…",
 	"enter": "Eingabe",
+	"exit_text_entry": "Fertig",
 	"backspace": "Löschen",
 	"use_phone_to_enter_pin": "Benutze dein Handy, um die PIN einzugeben",
 	"not_paired_title": "Nicht gekoppelt",
@@ -148,5 +149,13 @@
 	"quality_mode_mse": "Adaptives Streaming — Video und Audio werden getrennt im Browser gepuffert, kein Remuxing auf dem Server",
 	"quality_mode_ffmpeg": "Über Proxy — wird über diesen Server weitergeleitet und neu gemuxt",
 	"subtitles_auto_generated": "Automatisch generiert — keine echte, von Menschen erstellte Untertitelspur",
-	"background_music": "Hintergrundmusik"
+	"background_music": "Hintergrundmusik",
+	"osk_label": "Bildschirmtastatur",
+	"osk_search": "Suchen",
+	"osk_go": "Los",
+	"osk_done": "Fertig",
+	"osk_shift": "Umschalt",
+	"osk_space": "Leertaste",
+	"osk_backspace": "Löschen",
+	"osk_suggestions": "Vorschläge"
 }

@@ -6,6 +6,7 @@
 	// never a native dialog a remote could never answer.
 	//
 	// It sends nothing itself: whoever renders it passes the actions in.
+	import TextField from './TextField.svelte';
 	import { AlertCircle, Check, Lock, LoaderCircle, RefreshCw, Wifi, WifiOff } from '@lucide/svelte';
 	import type { WifiManagementState } from '#lib/wifi/management';
 	import { wifiStatusLabel } from '#lib/wifi/status';
@@ -26,6 +27,12 @@
 	// Which network's password is being typed. Null means the list is showing.
 	let selected = $state<WifiNetwork | null>(null);
 	let password = $state('');
+	let passwordField: TextField | undefined = $state();
+
+	// The password field appears right after picking a network.
+	$effect(() => {
+		passwordField?.focus();
+	});
 
 	function pick(network: WifiNetwork) {
 		// An open network has no password to ask for, and a saved one already has
@@ -75,23 +82,20 @@
 		onsubmit={submitPassword}
 		class="flex flex-col gap-3 rounded-3xl bg-white/10 p-4 ring-1 ring-white/20"
 	>
-		<label class="flex flex-col gap-1.5 text-sm text-white/60" for="wifi-password">
+		<div class="flex flex-col gap-1.5 text-sm text-white/60">
 			<span class="flex items-center gap-1.5">
 				<Lock class="size-3.5" />
 				{m.wifi_password_for({ ssid: network.ssid })}
 			</span>
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				id="wifi-password"
-				type="password"
-				autocomplete="off"
-				autofocus
+			<TextField
+				bind:this={passwordField}
 				bind:value={password}
-				enterkeyhint="go"
+				label={m.wifi_password_for({ ssid: network.ssid })}
 				placeholder={m.wifi_password_placeholder()}
-				class="rounded-2xl bg-white/12 px-4 py-3 text-white placeholder-white/30 ring-1 ring-white/25 focus:outline-none"
+				secret
+				class="rounded-2xl bg-white/12 px-4 py-3 ring-1 ring-white/25"
 			/>
-		</label>
+		</div>
 		<div class="flex gap-2">
 			<button
 				type="submit"

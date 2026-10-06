@@ -13,13 +13,13 @@ export type SuggestedApp = {
 	publicKey?: string;
 };
 
-export const SUGGESTED_APPS: SuggestedApp[] = [
+const SUGGESTED_APPS: SuggestedApp[] = [
 	{
 		id: 'youtube',
 		name: 'YouTube',
 		description: 'Browse and watch YouTube on the TV',
 		icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="10" fill="#FF0000"/><path d="M20 16L32 24L20 32Z" fill="#FFFFFF"/></svg>',
-		image: 'localhost:5055/pivi-youtube:0.1.0'
+		image: 'localhost:5055/pivi-youtube'
 	}
 ];
 

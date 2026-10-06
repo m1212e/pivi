@@ -13,12 +13,34 @@
 import { YTNodes } from 'youtubei.js';
 import type { Innertube } from 'youtubei.js';
 import type { VideoSummary } from './youtubeClient';
-import { collectTiles } from './tvTiles';
+import { collectTiles, findContinuationToken } from './tvTiles';
+import { browseTvMore } from './tvLibrary';
 
-export async function fetchTvHomeFeed(innertube: Innertube): Promise<VideoSummary[]> {
+// A page is everything the response holds: cutting it off would skip the tiles
+// the continuation token already points past.
+const PAGE_LIMIT = 1000;
+
+export type FeedPage = {
+	videos: VideoSummary[];
+	// Pass to fetchTvHomeMore for the next page, undefined when there is none.
+	continuation?: string;
+};
+
+function toPage(data: unknown): FeedPage {
+	return { videos: collectTiles(data, PAGE_LIMIT), continuation: findContinuationToken(data) };
+}
+
+export async function fetchTvHomeFeed(innertube: Innertube): Promise<FeedPage> {
 	const endpoint = new YTNodes.NavigationEndpoint({
 		browseEndpoint: { browseId: 'FEwhat_to_watch' }
 	});
 	const response = (await endpoint.call(innertube.actions, { client: 'TV' })) as { data: unknown };
-	return collectTiles(response.data, 15);
+	return toPage(response.data);
+}
+
+export async function fetchTvHomeMore(
+	innertube: Innertube,
+	continuation: string
+): Promise<FeedPage> {
+	return toPage(await browseTvMore(innertube, continuation));
 }

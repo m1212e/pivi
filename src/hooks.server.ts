@@ -1,12 +1,23 @@
 import { redirect } from '@sveltejs/kit';
 import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { getActiveProfileUser } from '#api/activeProfile';
+import { noteBrowserLocale } from '#api/apps/hostLocale';
 import { getLanAddress } from '#api/lan';
 import { createPairingToken, isPairingTokenValid, PAIRING_TOKEN_TTL_MS } from '#api/pairing';
 import { getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
 
 const PAIRING_COOKIE = 'pairing_token';
+
+// Only the TV's own pages say what language apps should use, not the paired
+// phone's remote page or API calls.
+const handleHostLocale: Handle = ({ event, resolve }) => {
+	const { pathname } = event.url;
+	if (!pathname.startsWith('/remote') && !pathname.startsWith('/api/')) {
+		noteBrowserLocale(event.request.headers.get('accept-language'));
+	}
+	return resolve(event);
+};
 
 const handleParaglide: Handle = ({ event, resolve }) =>
 	paraglideMiddleware(event.request, ({ request, locale }) => {
@@ -74,4 +85,9 @@ const handlePairing: Handle = ({ event, resolve }) => {
 	return resolve(event);
 };
 
-export const handle: Handle = sequence(handleParaglide, handlePairing, handleActiveProfile);
+export const handle: Handle = sequence(
+	handleHostLocale,
+	handleParaglide,
+	handlePairing,
+	handleActiveProfile
+);

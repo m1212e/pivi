@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
+	import Button from '#lib/components/Button.svelte';
 
 	let {
 		title,
@@ -78,15 +79,12 @@
 		<p class="max-w-xl text-sm text-white/70 sm:text-base">{description}</p>
 
 		<div class="mt-2 flex gap-3" in:fly={{ y: 20, duration: 450, delay: 260 }}>
-			<a
-				{href}
-				class="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-white/90 focus:outline-none sm:text-base"
-			>
+			<Button {href} variant="solid" size="md">
 				<svg viewBox="0 0 24 24" fill="currentColor" class="size-5">
 					<path d="M8 5v14l11-7z" />
 				</svg>
 				Play
-			</a>
+			</Button>
 		</div>
 	</div>
 </div>

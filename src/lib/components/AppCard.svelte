@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { appAccentGradient } from '#lib/appAccent';
-	import { appIconDataUrl } from '#lib/apps/manifest';
+	import AppIcon from '#lib/components/AppIcon.svelte';
 	import * as m from '#lib/paraglide/messages';
 
 	let {
@@ -20,8 +19,6 @@
 		secondaryColor?: string | null;
 		hasUpdate?: boolean;
 	} = $props();
-
-	const gradient = $derived(appAccentGradient(id, primaryColor, secondaryColor));
 </script>
 
 <a
@@ -33,16 +30,15 @@
 	data-pivi-app-secondary-color={secondaryColor || undefined}
 	class="group flex w-28 shrink-0 flex-col items-center gap-2 focus:outline-none sm:w-32"
 >
-	<span
+	<AppIcon
+		{id}
+		{name}
+		{icon}
+		{primaryColor}
+		{secondaryColor}
 		data-focus-ring-target
-		class="pivi-card relative flex size-20 items-center justify-center rounded-2xl text-lg font-semibold text-white/90 uppercase transition group-hover:scale-105 sm:size-24"
-		style="background: {gradient}; --pivi-glow: {gradient}"
+		class="pivi-card size-20 transition group-hover:scale-105 sm:size-24"
 	>
-		{#if icon}
-			<img src={appIconDataUrl(icon)} alt="" class="size-10 object-contain" />
-		{:else}
-			{name.slice(0, 1)}
-		{/if}
 		{#if hasUpdate}
 			<!-- A plain dot, not a count or a "Update available" label spelled
 			     out on the tile itself -- the icon is too small for text, and
@@ -54,6 +50,6 @@
 				class="absolute -top-1 -right-1 size-4 rounded-full bg-indigo-400 ring-2 ring-slate-950 sm:size-5"
 			></span>
 		{/if}
-	</span>
+	</AppIcon>
 	<span class="truncate text-xs font-medium text-white/70">{name}</span>
 </a>

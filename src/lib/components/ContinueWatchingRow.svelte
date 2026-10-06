@@ -1,6 +1,6 @@
 <script lang="ts">
 	import ContentRow from '#lib/components/ContentRow.svelte';
-	import ContinueWatchingCard from '#lib/components/ContinueWatchingCard.svelte';
+	import MediaCard from '#lib/components/MediaCard.svelte';
 
 	let {
 		title,
@@ -13,9 +13,9 @@
 
 <ContentRow {title}>
 	{#each items as item (item.id)}
-		<ContinueWatchingCard
+		<MediaCard
 			title={item.title}
-			subtitle={item.subtitle}
+			meta={item.subtitle}
 			image={item.image}
 			progress={item.progress}
 		/>

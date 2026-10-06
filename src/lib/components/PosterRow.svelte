@@ -1,6 +1,6 @@
 <script lang="ts">
 	import ContentRow from '#lib/components/ContentRow.svelte';
-	import PosterCard from '#lib/components/PosterCard.svelte';
+	import MediaCard from '#lib/components/MediaCard.svelte';
 
 	let {
 		title,
@@ -13,6 +13,6 @@
 
 <ContentRow {title}>
 	{#each items as item (item.id)}
-		<PosterCard title={item.title} meta={item.meta} image={item.image} />
+		<MediaCard shape="poster" title={item.title} meta={item.meta} image={item.image} />
 	{/each}
 </ContentRow>

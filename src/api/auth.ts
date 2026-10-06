@@ -1,5 +1,6 @@
 import { hashPin, verifyPin } from '#lib/crypto/pin';
 import { clearActiveProfile, setActiveProfile } from './activeProfile';
+import { getStartedApps } from './apps/manager';
 import { db } from './db';
 import { user } from './db/schema';
 import { userPubsub } from './handlers/user';
@@ -78,6 +79,8 @@ export async function loginWithPin(username: string, pin: string) {
 
 	loginAttempts.delete(username);
 	setActiveProfile(existing.id);
+	// Boot the apps now so they're ready by the time /home asks for them.
+	void getStartedApps();
 	return existing;
 }
 

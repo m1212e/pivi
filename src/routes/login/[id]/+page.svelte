@@ -82,7 +82,7 @@
 
 		<h1 class="text-2xl font-semibold text-white/95">{m.enter_pin_for({ name: label })}</h1>
 
-		<PinPad bind:value={pin} error={message} />
+		<PinPad bind:value={pin} error={message} autofocus />
 
 		{#if pairing.remoteUrl}
 			<div

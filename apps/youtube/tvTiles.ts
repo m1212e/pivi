@@ -1,8 +1,8 @@
 // Shared "walk a raw TV InnerTube response for video tiles" logic --
-// tvHomeFeed.ts and tvSearch.ts call different endpoints but both get back
+// tvHomeFeed.ts and tvLibrary.ts call different endpoints but both get back
 // the same tileRenderer-shaped response, so this is one place to parse it
-// instead of two.
-import type { VideoSummary } from './youtubeClient';
+// instead of two. Search answers in another shape, see tvSearch.ts.
+import type { PlaylistSummary, VideoSummary } from './youtubeClient';
 
 // Recursively finds every "tile" (TV's video-card renderer) anywhere in the
 // response, regardless of which shelf/section it's nested under. Robust to
@@ -165,4 +165,57 @@ export function collectTiles(root: unknown, limit: number): VideoSummary[] {
 		if (addUniqueTile(tile as Tile, seen, results, limit)) break;
 	}
 	return results;
+}
+
+// The Playlists tab's tiles use the same renderer as videos, just with a
+// playlist content type and the playlist id as contentId. Some responses
+// prefix that id with `VL` (the browse id form), so it's stripped to keep one
+// canonical id.
+function tileToPlaylist(tile: Tile): PlaylistSummary | null {
+	if (!tile.contentId || tile.contentType !== 'TILE_CONTENT_TYPE_PLAYLIST') return null;
+
+	const meta = tileMetadataOf(tile);
+	const thumbnails = tile.header?.tileHeaderRenderer?.thumbnail?.thumbnails ?? [];
+	return {
+		id: tile.contentId.replace(/^VL/, ''),
+		title: titleOf(meta),
+		subtitle: firstLineText(meta?.lines),
+		thumbnailUrl: thumbnails[thumbnails.length - 1]?.url ?? ''
+	};
+}
+
+export function collectPlaylists(root: unknown, limit: number): PlaylistSummary[] {
+	const tiles: Record<string, unknown>[] = [];
+	findTiles(root, tiles);
+
+	const seen = new Set<string>();
+	const results: PlaylistSummary[] = [];
+	for (const tile of tiles) {
+		const playlist = tileToPlaylist(tile as Tile);
+		if (!playlist || seen.has(playlist.id)) continue;
+		seen.add(playlist.id);
+		results.push(playlist);
+		if (results.length >= limit) break;
+	}
+	return results;
+}
+
+// The token for the next page of a TV browse response, or undefined on the
+// last page. Seen in two shapes (a continuation item's command, or a
+// `nextContinuationData` entry), and a page can carry several (one per shelf),
+// so the last one found wins since the page-level one comes after its shelves.
+export function findContinuationToken(root: unknown): string | undefined {
+	let token: string | undefined;
+	const visit = (node: unknown) => {
+		if (!node || typeof node !== 'object') return;
+		if (Array.isArray(node)) return node.forEach(visit);
+		const obj = node as Record<string, unknown>;
+		const command = obj.continuationCommand as { token?: unknown } | undefined;
+		if (typeof command?.token === 'string') token = command.token;
+		const next = obj.nextContinuationData as { continuation?: unknown } | undefined;
+		if (typeof next?.continuation === 'string') token = next.continuation;
+		Object.values(obj).forEach(visit);
+	};
+	visit(root);
+	return token;
 }

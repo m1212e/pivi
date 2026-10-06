@@ -4,10 +4,11 @@
 	import { page } from '$app/state';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
+	import LoadingSpinner from '#lib/components/LoadingSpinner.svelte';
 	import UiNodeRenderer from '#lib/components/apps/UiNodeRenderer.svelte';
 	import type { UiNode } from '#lib/apps/ui';
-	import { appIconDataUrl } from '#lib/apps/manifest';
-	import { appAccentGradient, appAuroraStyle } from '#lib/appAccent';
+	import AppIcon from '#lib/components/AppIcon.svelte';
+	import { appAuroraStyle } from '#lib/appAccent';
 
 	const appId = page.params.appId!;
 	const APP_HREF = `/apps/${encodeURIComponent(appId)}`;
@@ -87,16 +88,15 @@
 	</div>
 	<div class="flex items-center gap-3">
 		{#if app}
-			<span
-				class="flex size-12 shrink-0 items-center justify-center rounded-2xl text-lg font-semibold text-white/90 uppercase"
-				style="background: {appAccentGradient(app.id, app.primaryColor, app.secondaryColor)}"
-			>
-				{#if app.icon}
-					<img src={appIconDataUrl(app.icon)} alt="" class="size-7 object-contain" />
-				{:else}
-					{app.name.slice(0, 1)}
-				{/if}
-			</span>
+			<AppIcon
+				id={app.id}
+				name={app.name}
+				icon={app.icon}
+				primaryColor={app.primaryColor}
+				secondaryColor={app.secondaryColor}
+				iconClass="size-7"
+				class="size-12"
+			/>
 		{/if}
 		<h1 class="text-2xl font-semibold">{app?.name ?? appId}</h1>
 	</div>
@@ -106,7 +106,7 @@
 	{:else if screen}
 		<UiNodeRenderer node={screen} {onEvent} {appId} appHref={APP_HREF} />
 	{:else if app.features.includes('screen')}
-		<p class="text-white/50">{m.loading()}</p>
+		<LoadingSpinner />
 	{:else}
 		<p class="text-white/50">{m.app_no_screen()}</p>
 	{/if}

@@ -45,6 +45,14 @@ const AppSubtitleTrackRef = schemaBuilder
 		})
 	});
 
+// An object rather than a bare string so the client query shape matches the
+// other playback queries.
+const AppNextSessionRef = schemaBuilder
+	.objectRef<{ sessionId: string | null }>('AppNextSession')
+	.implement({
+		fields: (t) => ({ sessionId: t.exposeString('sessionId', { nullable: true }) })
+	});
+
 type AppPlaybackInfo = {
 	title: string;
 	duration: number;
@@ -129,6 +137,18 @@ schemaBuilder.queryFields((t) => ({
 				audioContainer: audioContainer ?? null,
 				subtitleTracks: toGraphqlSubtitleTracks(subtitleTracks)
 			};
+		}
+	}),
+	appNextSession: t.field({
+		type: AppNextSessionRef,
+		args: {
+			appId: t.arg.string({ required: true }),
+			sessionId: t.arg.string({ required: true }),
+			context: t.arg.string({ required: true })
+		},
+		resolve: async (_root, args) => {
+			const app = await getApp(args.appId);
+			return { sessionId: (await app.resolveNext(args.sessionId, args.context)) ?? null };
 		}
 	}),
 	appSkipSegments: t.field({

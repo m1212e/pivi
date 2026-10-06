@@ -37,6 +37,7 @@ TV browser ──GraphQL──▶ manager ──▶ sandbox (microVM) ◀──s
 | Image reference parsing (compose-style)                      | `src/lib/apps/imageRef.ts`                     |
 | Protocol methods, framing                                    | `src/lib/apps/host.ts`, `ndjson.ts`            |
 | Protocol as JSON Schema                                      | `docs/app-protocol.schema.json`                |
+| The components an app can use, and how to add one            | `docs/app-ui-components.md`                    |
 | Registry client, signature verification                      | `src/api/apps/registry.ts`, `signature.ts`     |
 | Install / configure / uninstall, updates                     | `src/api/apps/installer.ts`, `updater.ts`      |
 | Running apps, per-profile binding                            | `src/api/apps/manager.ts`, `runtime.ts`        |
@@ -84,7 +85,9 @@ An app image has three requirements:
 | `secondaryColor` | A second hex color, paired with `primaryColor` for a gradient. Optional; ignored without `primaryColor`.                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 **Features** — `dashboard` (cards on the home page), `screen` (a declarative
-screen, rendered by the shell), `playback` (resolves session ids to streams),
+screen, rendered by the shell), `playback` (resolves session ids to streams,
+and optionally answers `plugin/resolveNext` so a `session` action with a `context`
+continues with the next entry once a video ends),
 `skipSegments` (reports skippable stretches). There's no dedicated sign-in
 feature: an app that needs one builds the prompt out of its own `screen`
 content and a button whose action is `openOnPhone` (see
@@ -139,7 +142,7 @@ the schemas the host itself validates with (`bun run apps:protocol`; a test
 fails if the committed file drifts). The sequence:
 
 1. App → host: `plugin/ready` `{ "protocol": 1 }` once it can receive requests.
-2. Host → app: `host/activate`. The app may start publishing.
+2. Host → app: `host/activate` with `{ locale }`, the host's language and region (BCP 47, `PIVI_LOCALE` overrides it). The app may start publishing.
 3. App publishes what its features say (`plugin/publishDashboard`,
    `plugin/publishScreen`); the host answers `host/uiEvent`,
    `plugin/resolveStream`, `plugin/resolveSkipSegments` as the user uses it.

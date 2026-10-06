@@ -8,6 +8,7 @@
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import NavigationSpinner from '#lib/components/NavigationSpinner.svelte';
+	import OnScreenKeyboard from '#lib/components/OnScreenKeyboard.svelte';
 	import PairingOverlay from '#lib/components/PairingOverlay.svelte';
 	import { playSound } from '#lib/sounds';
 	import { startAmbient, stopAmbient } from '#lib/ambient';
@@ -186,9 +187,14 @@
 	     the library has no props for those). -->
 	<Toaster theme="dark" position="top-right" richColors offset="1.5rem" mobileOffset="1rem" />
 	<NavigationSpinner />
+	<OnScreenKeyboard />
 	<PairingOverlay hidden={hidePairingOverlay} />
 {/if}
-{@render children()}
+<!-- The player reads its session from the URL once, so a change of session
+     (the next video of a playlist) has to mount it fresh. -->
+{#key page.url.pathname.startsWith('/play/') ? page.url.pathname : ''}
+	{@render children()}
+{/key}
 
 <div style="display:none">
 	{#each locales as locale (locale)}

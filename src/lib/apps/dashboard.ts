@@ -19,7 +19,9 @@ import { appThemeSchema } from './theme';
 // understanding "sign-in" as its own concept.
 export const appActionSchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('screen'), screenId: z.string() }),
-	z.object({ type: z.literal('session'), sessionId: z.string() }),
+	// `context` is opaque to the host. It is handed back to the app when the
+	// player asks what to play after this one (a playlist id, say).
+	z.object({ type: z.literal('session'), sessionId: z.string(), context: z.string().optional() }),
 	z.object({ type: z.literal('deepLink'), target: z.string() }),
 	z.object({ type: z.literal('openOnPhone'), url: z.string() })
 ]);
@@ -69,7 +71,8 @@ export type DashboardContribution = z.infer<typeof dashboardContributionSchema>;
 // convention is app-defined and has nothing to do with playback.
 export function appActionHref(appId: string, appHref: string, action: AppAction): string {
 	if (action.type === 'session') {
-		return `/play/${encodeURIComponent(appId)}/${encodeURIComponent(action.sessionId)}`;
+		const base = `/play/${encodeURIComponent(appId)}/${encodeURIComponent(action.sessionId)}`;
+		return action.context ? `${base}?context=${encodeURIComponent(action.context)}` : base;
 	}
 	if (action.type === 'deepLink') {
 		return `${appHref}?deepLink=${encodeURIComponent(action.target)}`;

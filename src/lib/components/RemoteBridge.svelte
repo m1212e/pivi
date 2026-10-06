@@ -18,6 +18,9 @@
 		backNotification,
 		goHomeNotification,
 		enterNotification,
+		suggestionNotification,
+		suggestionParamsSchema,
+		exitTextNotification,
 		keyNotification,
 		keyParamsSchema,
 		moveNotification,
@@ -45,12 +48,16 @@
 		selectProfileParamsSchema,
 		stateNotification,
 		stateParamsSchema,
+		textEntryModeNotification,
+		textEntryModeParamsSchema,
 		textNotification,
 		textParamsSchema
 	} from '#lib/pairing/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import * as m from '#lib/paraglide/messages';
 	import { playSound } from '#lib/sounds';
+	import { isTextualInput, setInputValue, submitInput } from '#lib/textEntry';
+	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
 
 	let socket: WebSocket | undefined;
 	let connection: MessageConnection | undefined;
@@ -61,8 +68,6 @@
 	// pipeline tracks (see dispatchRemotePointer below), so there's nothing
 	// for it to collide with.
 	const REMOTE_POINTER_ID = -1;
-
-	const TEXTUAL_INPUT_TYPES = new Set(['text', 'search', 'email', 'tel', 'url', 'password']);
 
 	// Keeps the explicit selection ring in sync with whatever actually holds
 	// focus, regardless of how it got there (remote swipe, direct tap, Tab
@@ -105,17 +110,12 @@
 		});
 	}
 
-	// A <textarea>, or an <input> of a type text is actually typed into --
-	// a checkbox or a range slider is focusable but has nothing to relay a
-	// phone keyboard to.
-	function isTextualInput(el: Element | null): el is HTMLInputElement | HTMLTextAreaElement {
-		if (el instanceof HTMLTextAreaElement) return true;
-		return el instanceof HTMLInputElement && TEXTUAL_INPUT_TYPES.has(el.type);
-	}
-
+	// While focus sits on the on-screen keyboard's keys, the field being typed
+	// into is still the one the phone should mirror.
 	function focusedTextInput() {
 		const active = document.activeElement;
-		return isTextualInput(active) ? active : null;
+		if (isTextualInput(active)) return active;
+		return active?.closest('[data-pivi-osk]') && osk.target?.isConnected ? osk.target : null;
 	}
 
 	// Tells the phone what's actually on screen right now, so it only shows
@@ -150,6 +150,8 @@
 		sendNotification(connection, stateNotification, stateParamsSchema, {
 			hasPinPad: !!document.querySelector('[data-pivi-pinpad]'),
 			hasTextInput: !!focusedTextInput(),
+			textValue: focusedTextInput()?.value ?? '',
+			suggestions: focusedSuggestions(),
 			...navigationFlags(),
 			profiles: pickerProfiles(),
 			// Sliced to the first three here (rather than trusting the phone
@@ -248,11 +250,14 @@
 	}
 
 	function focusableElements() {
-		return [
+		const all = [
 			...document.querySelectorAll<HTMLElement>(
 				'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 			)
-		].filter((el) => el.offsetParent !== null);
+		].filter((el) => el.offsetParent !== null || el.checkVisibility());
+		// Focus stays on the keys while the keyboard is open, so a stray swipe
+		// cannot land on the page behind it.
+		return keyboardVisible() ? all.filter((el) => el.closest('[data-pivi-osk]')) : all;
 	}
 
 	// A slider (#lib/components/Slider.svelte) opts out of normal spatial nav
@@ -407,6 +412,9 @@
 	// rather than "arrived": it's satisfied the instant a shelf's title (now
 	// much larger while active) is still scrolled just off the top.
 	function centerVertically(el: HTMLElement) {
+		// A sticky sidebar is always on screen, so scrolling the page to center
+		// it would only shove the content around.
+		if (el.closest('[data-pivi-sticky]')) return;
 		const target = el.closest<HTMLElement>('[data-pivi-row], [data-pivi-top-bar]') ?? el;
 		const rect = target.getBoundingClientRect();
 		const elementCenter = rect.top + rect.height / 2;
@@ -496,36 +504,46 @@
 			?.dispatchEvent(new CustomEvent('pivi-remote-press', { detail: { key } }));
 	}
 
-	function setFocusedText(value: string) {
+	function focusedSuggestions() {
 		const el = focusedTextInput();
-		if (!el) return;
-
-		const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement;
-		const setter = Object.getOwnPropertyDescriptor(proto.prototype, 'value')?.set;
-		setter?.call(el, value);
-		el.dispatchEvent(new Event('input', { bubbles: true }));
+		return el && osk.suggestions.owner === el ? $state.snapshot(osk.suggestions.items) : [];
 	}
 
-	// A generic "enter" for whatever text field currently has focus: dispatch
-	// a real keydown first, so any page-specific handler (e.g. a field that
-	// advances a multi-step form on Enter) can claim it via preventDefault;
-	// otherwise fall back to submitting the enclosing <form>, if any.
+	function pickFocusedSuggestion(value: string) {
+		focusedTextInput()?.dispatchEvent(new CustomEvent('pivi-suggestion', { detail: value }));
+	}
+
+	// New suggestions arrive after the field gained focus, with no DOM change
+	// the observer would notice.
+	$effect(() => {
+		void osk.suggestions.items;
+		queueMicrotask(sendState);
+	});
+
+	function setFocusedText(value: string) {
+		const el = focusedTextInput();
+		if (el) setInputValue(el, value);
+	}
+
 	function submitFocusedText() {
 		const el = focusedTextInput();
-		if (!el) return;
+		if (el) submitInput(el);
+	}
 
-		const event = new KeyboardEvent('keydown', {
-			key: 'Enter',
-			code: 'Enter',
-			bubbles: true,
-			cancelable: true
-		});
-		el.dispatchEvent(event);
-		if (!event.defaultPrevented) el.closest('form')?.requestSubmit();
+	function exitFocusedText() {
+		const el = focusedTextInput();
+		if (!el) return;
+		// Fields that manage their own editing state close on Escape.
+		el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+		if (el.isConnected && document.activeElement === el) el.blur();
+		osk.target = null;
+		scheduleFocusRecheck();
 	}
 
 	onMount(() => {
 		document.addEventListener('focusin', onFocusChange);
+		// Typing on the TV itself changes no DOM, but the phone must follow it.
+		document.addEventListener('input', scheduleFocusRecheck);
 		document.addEventListener('click', onClick);
 		// `play`/`pause` don't bubble, so a plain (bubbling) document listener
 		// would never see them fire on the player's own <video> -- capture does,
@@ -636,20 +654,32 @@
 		onNotification(connection, playerVolumeNotification, playerVolumeParamsSchema, ({ volume }) => {
 			document.dispatchEvent(new CustomEvent('pivi-player-volume', { detail: { volume } }));
 		});
-		connection.onNotification(backNotification, () => history.back());
+		// Back closes an open on-screen keyboard first, like on any TV.
+		connection.onNotification(backNotification, () => {
+			if (!dismissKeyboard()) history.back();
+		});
+		onNotification(connection, textEntryModeNotification, textEntryModeParamsSchema, (mode) => {
+			osk.phoneKeyboard = mode.phoneKeyboard;
+		});
 		connection.onNotification(goHomeNotification, () => goto('/home'));
 		onNotification(connection, keyNotification, keyParamsSchema, ({ value }) => pressPinKey(value));
 		onNotification(connection, textNotification, textParamsSchema, ({ value }) =>
 			setFocusedText(value)
 		);
+		onNotification(connection, suggestionNotification, suggestionParamsSchema, ({ value }) =>
+			pickFocusedSuggestion(value)
+		);
 		connection.onNotification(enterNotification, () => submitFocusedText());
+		connection.onNotification(exitTextNotification, () => exitFocusedText());
 		connection.onNotification(requestStateNotification, () => sendState());
 		onNotification(
 			connection,
 			remoteConnectedNotification,
 			remoteDeviceParamsSchema,
 			({ name }) => {
-				toast.success(m.remote_connected_toast({ name }), { icon: Smartphone });
+				showRemoteToast(() =>
+					toast.success(m.remote_connected_toast({ name }), toastOptions(Smartphone))
+				);
 			}
 		);
 		onNotification(
@@ -657,7 +687,8 @@
 			remoteDisconnectedNotification,
 			remoteDeviceParamsSchema,
 			({ name }) => {
-				toast(m.remote_disconnected_toast({ name }), { icon: Unplug });
+				osk.phoneKeyboard = false;
+				showRemoteToast(() => toast(m.remote_disconnected_toast({ name }), toastOptions(Unplug)));
 			}
 		);
 		connection.listen();
@@ -707,4 +738,22 @@
 		currentEl = null;
 		queueMicrotask(sendState);
 	});
+
+	// Toasts are for a glance. Sonner pauses its own timer while the pointer
+	// is over one, which on a TV can leave it covering the screen (the sign-in
+	// QR code, say), so this dismisses on a hard timer and lets a newer
+	// connect/disconnect toast replace the old one instead of stacking.
+	const REMOTE_TOAST_ID = 'remote-status';
+	const REMOTE_TOAST_MS = 3000;
+	let remoteToastTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function toastOptions(icon: typeof Smartphone) {
+		return { id: REMOTE_TOAST_ID, icon, duration: REMOTE_TOAST_MS };
+	}
+
+	function showRemoteToast(show: () => unknown) {
+		show();
+		clearTimeout(remoteToastTimer);
+		remoteToastTimer = setTimeout(() => toast.dismiss(REMOTE_TOAST_ID), REMOTE_TOAST_MS);
+	}
 </script>

@@ -93,7 +93,9 @@ describe('hasAvailableUpdate', () => {
 
 	it('caches a successful check instead of re-hitting the registry on every call', async () => {
 		publishAppImage(registry, 'acme/demo', 'latest', { ...manifest, version: '1.1.0' });
-		const r = row();
+		// Manual updates only, since an auto-updating row kicks off an apply that
+		// legitimately drops the cached answer.
+		const r = row({ autoUpdate: false });
 		await hasAvailableUpdate(deps(), r);
 		const requestsAfterFirst = registry.requests.length;
 		await hasAvailableUpdate(deps(), r);

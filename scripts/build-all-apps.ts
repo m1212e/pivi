@@ -52,6 +52,13 @@ for (const name of dirs) {
 	);
 	if (build.status !== 0) process.exit(build.status ?? 1);
 
-	const push = spawnSync('docker', ['push', tag], { stdio: 'inherit' });
-	if (push.status !== 0) process.exit(push.status ?? 1);
+	// Also moved to `latest`, which is what an untagged suggested app follows.
+	const latest = `${registry}/pivi-${parsed.data.id}:latest`;
+	const retag = spawnSync('docker', ['tag', tag, latest], { stdio: 'inherit' });
+	if (retag.status !== 0) process.exit(retag.status ?? 1);
+
+	for (const ref of [tag, latest]) {
+		const push = spawnSync('docker', ['push', ref], { stdio: 'inherit' });
+		if (push.status !== 0) process.exit(push.status ?? 1);
+	}
 }

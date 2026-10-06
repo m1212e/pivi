@@ -22,6 +22,7 @@
 	import { appIconDataUrl, type PermissionKey } from '#lib/apps/manifest';
 	import { appAccentGradient } from '#lib/appAccent';
 	import HoldToConfirmButton from './HoldToConfirmButton.svelte';
+	import TextField from './TextField.svelte';
 	import * as m from '#lib/paraglide/messages';
 
 	type InstalledApp = AppsState['apps'][number];
@@ -137,7 +138,7 @@
 		chosen = on ? [...chosen.filter((k) => k !== key), key] : chosen.filter((k) => k !== key);
 	}
 
-	let keyField = $state<HTMLTextAreaElement>();
+	let keyField = $state<TextField>();
 
 	function review(event: SubmitEvent) {
 		event.preventDefault();
@@ -151,7 +152,7 @@
 	// filled in -- with verification off there's nothing left to fill, so Enter
 	// is left to submit the form like it would anywhere else.
 	function nextAfterImage(event: KeyboardEvent) {
-		if (event.key !== 'Enter' || !verifySignature) return;
+		if (!verifySignature) return;
 		event.preventDefault();
 		keyField?.focus();
 	}
@@ -319,34 +320,32 @@
 {#snippet installForm()}
 	<form onsubmit={review} class="flex flex-col gap-3">
 		<h3 class="text-sm font-medium text-white/70">{m.apps_install_heading()}</h3>
-		<label class="flex flex-col gap-1 text-sm text-white/60">
+		<div class="flex flex-col gap-1 text-sm text-white/60">
 			{m.apps_image_label()}
-			<input
-				type="text"
+			<TextField
 				bind:value={image}
-				autocomplete="off"
-				autocapitalize="off"
-				spellcheck="false"
-				enterkeyhint="next"
-				onkeydown={nextAfterImage}
+				label={m.apps_image_label()}
 				placeholder={m.apps_image_placeholder()}
-				class="rounded-2xl bg-white/12 px-4 py-3 font-mono text-sm text-white placeholder-white/30 ring-1 ring-white/25 focus:outline-none"
+				enterkeyhint="next"
+				mono
+				class="rounded-2xl bg-white/12 px-4 py-3 text-sm ring-1 ring-white/25"
+				onEnter={nextAfterImage}
 			/>
-		</label>
+		</div>
 		{@render toggle(m.apps_verify_signature(), verifySignature, (on) => (verifySignature = on))}
 		{#if verifySignature}
-			<label class="flex flex-col gap-1 text-sm text-white/60">
+			<div class="flex flex-col gap-1 text-sm text-white/60">
 				{m.apps_key_label()}
-				<textarea
+				<TextField
 					bind:this={keyField}
 					bind:value={publicKey}
-					rows="4"
-					autocapitalize="off"
-					spellcheck="false"
+					label={m.apps_key_label()}
 					placeholder="-----BEGIN PUBLIC KEY-----"
-					class="rounded-2xl bg-white/12 px-4 py-3 font-mono text-xs text-white placeholder-white/30 ring-1 ring-white/25 focus:outline-none"
-				></textarea>
-			</label>
+					multiline
+					mono
+					class="rounded-2xl bg-white/12 px-4 py-3 text-xs ring-1 ring-white/25"
+				/>
+			</div>
 		{/if}
 		<button
 			type="submit"
