@@ -72,6 +72,7 @@
 		Sparkles,
 		Users,
 		Volume2,
+		X,
 		Zap
 	} from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
@@ -431,6 +432,30 @@
 		navigator.vibrate?.(8);
 	}
 
+	// Set only when the tab below was blocked, so the prompt is a fallback
+	// rather than an extra step on the normal path.
+	let pendingSignInUrl = $state<string | null>(null);
+
+	// A new tab, not this one: the remote is the TV's only input device, so
+	// navigating it away would strand the TV until the sign-in finished and
+	// the user found their way back -- and on a remote installed to the home
+	// screen it would also leave the app entirely.
+	function openSignInUrl(url: string) {
+		// Deliberately not the 'noopener' window feature: with it, window.open
+		// returns null whether it succeeded or was blocked, which would make
+		// the check below fire every time. Clearing `opener` on the new window
+		// is the equivalent, and is allowed cross-origin.
+		const opened = window.open(url, '_blank');
+		if (opened) {
+			opened.opener = null;
+			return;
+		}
+		// This arrives over the websocket, so there's no user gesture for the
+		// popup blocker to accept -- which is the normal outcome on mobile
+		// Safari. Fall back to a link whose tap *is* one.
+		pendingSignInUrl = url;
+	}
+
 	onMount(() => {
 		let cancelled = false;
 
@@ -479,13 +504,12 @@
 		});
 		// Sent directly by the host (not the TV) when an app hands off a
 		// login — see relay.ts's sendToPhones and SKETCH.md's "Login"
-		// decision. A full navigation, not a popup: Google's login page
-		// refuses to load in an iframe/embedded context anyway, and this is a
-		// real page belonging to a different origin, not something we render
-		// ourselves.
-		onNotification(connection, openUrlNotification, openUrlParamsSchema, ({ url }) => {
-			window.location.href = url;
-		});
+		// decision. A real browser tab, not something we render ourselves:
+		// Google's login page refuses to load in an iframe/embedded context
+		// anyway, and it belongs to a different origin.
+		onNotification(connection, openUrlNotification, openUrlParamsSchema, ({ url }) =>
+			openSignInUrl(url)
+		);
 		connection.listen();
 
 		connectRemoteSession(page.params.token ?? null, {
@@ -862,6 +886,37 @@
 	{/if}
 {/snippet}
 
+<!-- Only ever shown when the popup blocker rejected the tab openSignInUrl
+     tried to open on its own. Sits above the trackpad toggle (z-10) and
+     clear of it, since both are pinned to the bottom-right. -->
+{#snippet signInPrompt()}
+	{#if pendingSignInUrl}
+		<div
+			transition:fly={{ y: 24, duration: 200 }}
+			class="fixed inset-x-4 bottom-24 z-20 flex items-center gap-3 rounded-3xl bg-white/12 p-3 pl-5 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150"
+		>
+			<p class="min-w-0 flex-1 text-sm text-white/80">{m.app_sign_in_pending()}</p>
+			<a
+				href={pendingSignInUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				onclick={() => (pendingSignInUrl = null)}
+				class="shrink-0 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-white/90 focus:outline-none"
+			>
+				{m.app_sign_in_open()}
+			</a>
+			<button
+				type="button"
+				onclick={() => (pendingSignInUrl = null)}
+				aria-label={m.close()}
+				class="shrink-0 rounded-full p-2 text-white/60 transition hover:bg-white/10 focus:outline-none"
+			>
+				<X class="size-5" aria-hidden="true" />
+			</button>
+		</div>
+	{/if}
+{/snippet}
+
 {#snippet readyMain()}
 	<main
 		class="flex flex-1 flex-col items-center justify-center px-6 transition-transform duration-300 ease-out"
@@ -889,6 +944,7 @@
 		{@render readyHeader()}
 		{@render readyMain()}
 		{@render trackpadToggle()}
+		{@render signInPrompt()}
 	{:else if phase === 'connecting'}
 		<main class="flex flex-1 flex-col items-center justify-center px-8 text-center">
 			<p class="text-white/60">{m.connecting()}</p>
