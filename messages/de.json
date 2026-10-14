@@ -138,6 +138,8 @@
 	"app_open_on_phone_refused": "Verbinde zuerst ein Handy, um den Link dort zu öffnen.",
 	"app_not_found": "App nicht gefunden",
 	"app_no_screen": "Diese App hat keinen Bildschirm zum Anzeigen",
+	"app_sign_in_pending": "Der Fernseher hat dir einen Anmelde-Link geschickt.",
+	"app_sign_in_open": "Öffnen",
 	"loading": "Lädt…",
 	"playing": "Wiedergabe",
 	"playback_failed": "Wiedergabe fehlgeschlagen",

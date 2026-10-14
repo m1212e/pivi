@@ -138,6 +138,8 @@
 	"app_open_on_phone_refused": "Pair a phone first to open this link there.",
 	"app_not_found": "App not found",
 	"app_no_screen": "This app has no screen to show",
+	"app_sign_in_pending": "The TV sent you a sign-in link.",
+	"app_sign_in_open": "Open",
 	"loading": "Loading…",
 	"playing": "Playing",
 	"playback_failed": "Playback failed",
