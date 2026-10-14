@@ -1,12 +1,27 @@
 import { fileURLToPath } from 'node:url';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
+import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
-export default defineConfig({
+// The variable's own name doubles as the prefix, so this pulls in that one key
+// rather than the whole environment (`loadEnv`'s default prefix is `VITE_`).
+function allowedHostsFrom(mode: string): string[] {
+	const hostname = loadEnv(mode, process.cwd(), 'QR_BIND_HOSTNAME').QR_BIND_HOSTNAME;
+	return hostname ? [hostname] : [];
+}
+
+// `QR_BIND_HOSTNAME` (see src/env.ts) is the hostname the pairing QR code
+// points a phone at, so the dev server has to accept it as a Host header too
+// — Vite rejects any host that isn't localhost, a `.localhost` subdomain, or
+// a bare IP. Read via `loadEnv` rather than `process.env`: it lives in `.env`,
+// which Vite parses itself without ever exporting non-`VITE_` keys to the
+// process. That's also why this config is a function — `loadEnv` needs the
+// mode, and only the function form receives it.
+export default defineConfig(({ mode }) => ({
 	// Works around a bug in the current @sveltejs/kit "next" prerelease: its
 	// verbose build logger calls Node's `styleText('grey', ...)`, but Node
 	// only recognizes the American spelling 'gray', which crashes `vite build`
@@ -25,7 +40,10 @@ export default defineConfig({
 	// unignored watcher treats its own write as a source change mid-request
 	// and triggers a full SSR reload — which re-registers Pothos plugins onto
 	// a schema builder that already has them, crashing.
-	server: { watch: { ignored: ['**/src/lib/api/rumbleClient/**'] } },
+	server: {
+		allowedHosts: allowedHostsFrom(mode),
+		watch: { ignored: ['**/src/lib/api/rumbleClient/**'] }
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({
@@ -73,4 +91,4 @@ export default defineConfig({
 			}
 		]
 	}
-});
+}));

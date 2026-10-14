@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { getActiveProfileUser } from '#api/activeProfile';
 import { noteBrowserLocale } from '#api/apps/hostLocale';
-import { getLanAddress } from '#api/lan';
+import { getLanAddressOrHostname } from '#api/lan';
 import { createPairingToken, isPairingTokenValid, PAIRING_TOKEN_TTL_MS } from '#api/pairing';
 import { getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
@@ -76,7 +76,7 @@ const handlePairing: Handle = ({ event, resolve }) => {
 		});
 	}
 
-	const lanAddress = getLanAddress();
+	const lanAddress = getLanAddressOrHostname();
 	event.locals.pairingToken = pairingToken;
 	event.locals.remoteUrl = lanAddress
 		? `http://${lanAddress}:${event.url.port}/remote/${pairingToken}`

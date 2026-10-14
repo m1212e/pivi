@@ -63,5 +63,15 @@
 	},
 	"rules": {
 		"unused-dependencies": "warn"
-	}
+	},
+	"ignoreExports": [
+		{
+			"file": "src/api/appManagementService.ts",
+			"exports": ["*"]
+		},
+		{
+			"file": "src/lib/apps/management.ts",
+			"exports": ["*"]
+		}
+	]
 }
