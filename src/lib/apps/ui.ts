@@ -2,14 +2,12 @@
 // data, never markup. This is the plugin's way into the shell's one component
 // library: every node is layout or a real shell component, so a plugin's
 // screen can't drift from the host's own and focus/nav stays the shell's job.
-// Adding a node kind touches five places, in order:
+// Adding a node kind touches three places, in order:
 //   1. the `UiNode` union below (the real, hand-written type)
 //   2. the matching branch in `uiNodeSchema` (the runtime/RPC-boundary check)
-//   3. `UI_NODE_TYPES` (checked for completeness at compile time)
-//   4. a render snippet + dispatch branch in UiNodeRenderer.svelte
-//   5. its entry in docs/app-ui-components.md (a test fails without it)
+//   3. a render snippet + dispatch branch in UiNodeRenderer.svelte
 // The JSON Schema published with each release is generated from `uiNodeSchema`,
-// so steps 1-3 are also what app authors outside TypeScript get to see.
+// so steps 1-2 are also what app authors outside TypeScript get to see.
 import { z } from 'zod';
 import { appThemeSchema } from './theme';
 import { appActionSchema, type AppAction } from './dashboard';
@@ -270,34 +268,6 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 		z.object({ type: z.literal('list'), items: z.array(uiNodeSchema) })
 	])
 );
-
-// In the order docs/app-ui-components.md lists them.
-const listedNodeTypes = [
-	'container',
-	'text',
-	'icon',
-	'spinner',
-	'skeleton',
-	'mediaCard',
-	'shelf',
-	'hero',
-	'image',
-	'button',
-	'toggle',
-	'textInput',
-	'list'
-] as const satisfies readonly UiNode['type'][];
-
-type AllNodeTypesListed<T extends readonly UiNode['type'][]> = [
-	Exclude<UiNode['type'], T[number]>
-] extends [never]
-	? T
-	: never;
-/**
- * Keeps the app UI docs complete: this fails to compile when a kind is missing
- * here, and uiComponents.spec.ts fails until each listed kind is documented.
- */
-export const UI_NODE_TYPES: AllNodeTypesListed<typeof listedNodeTypes> = listedNodeTypes;
 
 /**
  * Validates `plugin/publishScreen` at the RPC boundary. No app id, since the

@@ -25,6 +25,23 @@ function toGraphqlSubtitleTracks(
 	}));
 }
 
+type ResolvedStream = Awaited<ReturnType<typeof resolveStreamCached>>;
+
+function toGraphqlPlaybackInfo(stream: ResolvedStream) {
+	const { title, duration, audioUrl, vcodec, acodec, videoContainer, audioContainer } = stream;
+	return {
+		title,
+		duration,
+		direct: !audioUrl,
+		vcodec,
+		acodec: acodec ?? null,
+		videoContainer,
+		audioContainer: audioContainer ?? null,
+		qualities: stream.qualities ?? [],
+		subtitleTracks: toGraphqlSubtitleTracks(stream.subtitleTracks)
+	};
+}
+
 const AppSubtitleTrackRef = schemaBuilder
 	.objectRef<AppSubtitleTrack>('AppSubtitleTrack')
 	.implement({
@@ -104,28 +121,13 @@ schemaBuilder.queryFields((t) => ({
 		},
 		resolve: async (_root, args) => {
 			const app = await getApp(args.appId);
-			const {
-				title,
-				duration,
-				audioUrl,
-				vcodec,
-				acodec,
-				videoContainer,
-				audioContainer,
-				qualities,
-				subtitleTracks
-			} = await resolveStreamCached(args.appId, args.sessionId, app, args.maxHeight ?? undefined);
-			return {
-				title,
-				duration,
-				direct: !audioUrl,
-				vcodec,
-				acodec: acodec ?? null,
-				videoContainer,
-				audioContainer: audioContainer ?? null,
-				qualities: qualities ?? [],
-				subtitleTracks: toGraphqlSubtitleTracks(subtitleTracks)
-			};
+			const stream = await resolveStreamCached(
+				args.appId,
+				args.sessionId,
+				app,
+				args.maxHeight ?? undefined
+			);
+			return toGraphqlPlaybackInfo(stream);
 		}
 	}),
 	appNextSession: t.field({

@@ -119,20 +119,21 @@ function noiseSource(
 	});
 }
 
+function toneSource(ctx: AudioContext, note: Note, t0: number, t1: number): OscillatorNode {
+	const oscillator = ctx.createOscillator();
+	oscillator.type = note.type ?? 'sine';
+	oscillator.frequency.setValueAtTime(note.freq, t0);
+	if (note.glideTo) oscillator.frequency.exponentialRampToValueAtTime(note.glideTo, t1);
+	return oscillator;
+}
+
 function playNote(ctx: AudioContext, out: AudioNode, start: number, note: Note) {
 	const env = ctx.createGain();
 	const t0 = start + note.at;
 	const t1 = t0 + note.duration;
-	let osc: AudioNode & { start(when: number): void; stop(when: number): void };
-	if (note.noise) {
-		osc = noiseSource(ctx, note.freq, note.q ?? 0.8);
-	} else {
-		const oscillator = ctx.createOscillator();
-		oscillator.type = note.type ?? 'sine';
-		oscillator.frequency.setValueAtTime(note.freq, t0);
-		if (note.glideTo) oscillator.frequency.exponentialRampToValueAtTime(note.glideTo, t1);
-		osc = oscillator;
-	}
+	const osc = note.noise
+		? noiseSource(ctx, note.freq, note.q ?? 0.8)
+		: toneSource(ctx, note, t0, t1);
 	// Fast attack, exponential decay: the "soft bloop" envelope.
 	env.gain.setValueAtTime(0.0001, t0);
 	env.gain.exponentialRampToValueAtTime(
@@ -154,23 +155,29 @@ export async function openBus(wet = 0): Promise<{ ctx: AudioContext; bus: GainNo
 	const ctx = ensureContext();
 	if (!ctx || !master) return undefined;
 	if (!(await whenRunning(ctx))) {
-		if (!warnedBlocked) {
-			warnedBlocked = true;
-			console.warn(
-				'[sounds] Audio is blocked by the browser autoplay policy until the page gets a user ' +
-					'gesture. Launch the browser with --autoplay-policy=no-user-gesture-required.'
-			);
-		}
+		warnBlockedOnce();
 		return undefined;
 	}
 	const bus = ctx.createGain();
 	bus.connect(master);
-	if (wet > 0) {
-		const send = ctx.createGain();
-		send.gain.value = wet;
-		bus.connect(send).connect(reverbInput(ctx));
-	}
+	connectReverbSend(ctx, bus, wet);
 	return { ctx, bus };
+}
+
+function warnBlockedOnce() {
+	if (warnedBlocked) return;
+	warnedBlocked = true;
+	console.warn(
+		'[sounds] Audio is blocked by the browser autoplay policy until the page gets a user ' +
+			'gesture. Launch the browser with --autoplay-policy=no-user-gesture-required.'
+	);
+}
+
+function connectReverbSend(ctx: AudioContext, bus: GainNode, wet: number) {
+	if (wet <= 0) return;
+	const send = ctx.createGain();
+	send.gain.value = wet;
+	bus.connect(send).connect(reverbInput(ctx));
 }
 
 async function play(notes: Note[], wet = 0) {

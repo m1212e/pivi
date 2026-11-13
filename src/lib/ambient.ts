@@ -160,6 +160,20 @@ function tick() {
 	state.timer = setTimeout(tick, SCHEDULE_AHEAD_SECONDS * 1000);
 }
 
+// Autoplay blocked: try again on the first real gesture, if still wanted.
+function retryOnGesture() {
+	const retry = () => {
+		removeGestureRetry?.();
+		if (wanted && !running) void begin();
+	};
+	const types = ['pointerdown', 'keydown', 'touchstart'];
+	for (const type of types) document.addEventListener(type, retry, { once: true, capture: true });
+	removeGestureRetry = () => {
+		for (const type of types) document.removeEventListener(type, retry, { capture: true });
+		removeGestureRetry = undefined;
+	};
+}
+
 async function begin() {
 	const output = await openBus(WET);
 	if (!wanted || running) {
@@ -167,17 +181,7 @@ async function begin() {
 		return;
 	}
 	if (!output) {
-		// Autoplay blocked: try again on the first real gesture, if still wanted.
-		const retry = () => {
-			removeGestureRetry?.();
-			if (wanted && !running) void begin();
-		};
-		const types = ['pointerdown', 'keydown', 'touchstart'];
-		for (const type of types) document.addEventListener(type, retry, { once: true, capture: true });
-		removeGestureRetry = () => {
-			for (const type of types) document.removeEventListener(type, retry, { capture: true });
-			removeGestureRetry = undefined;
-		};
+		retryOnGesture();
 		return;
 	}
 	const { ctx, bus } = output;

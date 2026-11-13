@@ -181,6 +181,86 @@
 	});
 </script>
 
+{#snippet fullScreenList()}
+	<!-- A dozens-long option list (a subtitle track picker, easily) turns
+	     the small dropdown below into an unusably tiny scrollable sliver --
+	     past FULL_SCREEN_THRESHOLD, take over the whole screen instead so
+	     there's actually room to browse/swipe through it. The close button
+	     leads (not trails) the wrapped list so it reads as "leave this
+	     mode" rather than one option among others, and is the one thing
+	     here that doesn't call `choose` -- it collapses without touching
+	     `value` at all, same as Escape/focus-loss already do. -->
+	<div
+		role="listbox"
+		aria-label={label}
+		transition:fade={{ duration: 200 }}
+		class="fixed inset-0 z-30 overflow-y-auto bg-slate-950/50 p-8 backdrop-blur-2xl"
+	>
+		<div class="mx-auto flex max-w-4xl flex-wrap content-start justify-center gap-3">
+			<button
+				type="button"
+				onclick={() => (expanded = false)}
+				aria-label={m.close()}
+				in:fly|global={{ y: 24, duration: 400 }}
+				class="flex size-12 items-center justify-center rounded-full bg-white/12 text-white shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
+			>
+				<X class="size-5" />
+			</button>
+			<!-- Reveal-on-scroll (see the effect above) owns each option's
+			     opacity/transform/transition-delay directly via plain style
+			     properties -- no `in:` transition here, which would fight
+			     over the same properties on mount instead of leaving them
+			     alone until this option actually scrolls into view. -->
+			{#each options as candidate (candidate)}
+				{@const selected = candidate === value}
+				<button
+					type="button"
+					role="option"
+					aria-selected={selected}
+					onclick={() => choose(candidate)}
+					onfocus={scrollOptionIntoView}
+					class="flex items-center gap-2 rounded-full px-5 py-3 text-sm font-medium transition focus:outline-none {selected
+						? 'bg-white text-slate-950 shadow-lg'
+						: 'bg-white/12 text-white/80 ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 hover:bg-white/20'}"
+				>
+					{@render option(candidate, selected)}
+				</button>
+			{/each}
+		</div>
+	</div>
+{/snippet}
+
+{#snippet compactList()}
+	<!-- Anchored to open upward from the trigger with a capped height,
+	     not just stacked below/above it uncapped -- these live in the
+	     bottom-right corner of the player, so an uncapped list (the very
+	     thing the full-screen mode above exists for) would just overflow
+	     off the top of the screen for a long enough option list. -->
+	<div
+		role="listbox"
+		aria-label={label}
+		class="absolute right-0 z-20 flex {placement === 'above'
+			? 'bottom-full mb-2'
+			: 'top-full mt-2'} max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
+	>
+		{#each options as candidate (candidate)}
+			{@const selected = candidate === value}
+			<button
+				type="button"
+				role="option"
+				aria-selected={selected}
+				onclick={() => choose(candidate)}
+				onfocus={scrollOptionIntoView}
+				class="flex items-center justify-between gap-2 rounded-full px-3 py-2 text-xs font-medium transition focus:outline-none {selected
+					? 'bg-white text-slate-950 shadow-lg'
+					: 'text-white/70 hover:bg-white/20'}"
+			>
+				{@render option(candidate, selected)}
+			</button>
+		{/each}
+	</div>
+{/snippet}
+
 <div bind:this={root} class="relative">
 	<button
 		bind:this={triggerEl}
@@ -201,80 +281,8 @@
 	</button>
 
 	{#if expanded && fullScreen}
-		<!-- A dozens-long option list (a subtitle track picker, easily) turns
-		     the small dropdown below into an unusably tiny scrollable sliver --
-		     past FULL_SCREEN_THRESHOLD, take over the whole screen instead so
-		     there's actually room to browse/swipe through it. The close button
-		     leads (not trails) the wrapped list so it reads as "leave this
-		     mode" rather than one option among others, and is the one thing
-		     here that doesn't call `choose` -- it collapses without touching
-		     `value` at all, same as Escape/focus-loss already do. -->
-		<div
-			role="listbox"
-			aria-label={label}
-			transition:fade={{ duration: 200 }}
-			class="fixed inset-0 z-30 overflow-y-auto bg-slate-950/50 p-8 backdrop-blur-2xl"
-		>
-			<div class="mx-auto flex max-w-4xl flex-wrap content-start justify-center gap-3">
-				<button
-					type="button"
-					onclick={() => (expanded = false)}
-					aria-label={m.close()}
-					in:fly|global={{ y: 24, duration: 400 }}
-					class="flex size-12 items-center justify-center rounded-full bg-white/12 text-white shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 transition hover:bg-white/20 focus:outline-none"
-				>
-					<X class="size-5" />
-				</button>
-				<!-- Reveal-on-scroll (see the effect above) owns each option's
-				     opacity/transform/transition-delay directly via plain style
-				     properties -- no `in:` transition here, which would fight
-				     over the same properties on mount instead of leaving them
-				     alone until this option actually scrolls into view. -->
-				{#each options as candidate (candidate)}
-					{@const selected = candidate === value}
-					<button
-						type="button"
-						role="option"
-						aria-selected={selected}
-						onclick={() => choose(candidate)}
-						onfocus={scrollOptionIntoView}
-						class="flex items-center gap-2 rounded-full px-5 py-3 text-sm font-medium transition focus:outline-none {selected
-							? 'bg-white text-slate-950 shadow-lg'
-							: 'bg-white/12 text-white/80 ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 hover:bg-white/20'}"
-					>
-						{@render option(candidate, selected)}
-					</button>
-				{/each}
-			</div>
-		</div>
+		{@render fullScreenList()}
 	{:else if expanded}
-		<!-- Anchored to open upward from the trigger with a capped height,
-		     not just stacked below/above it uncapped -- these live in the
-		     bottom-right corner of the player, so an uncapped list (the very
-		     thing the full-screen mode above exists for) would just overflow
-		     off the top of the screen for a long enough option list. -->
-		<div
-			role="listbox"
-			aria-label={label}
-			class="absolute right-0 z-20 flex {placement === 'above'
-				? 'bottom-full mb-2'
-				: 'top-full mt-2'} max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
-		>
-			{#each options as candidate (candidate)}
-				{@const selected = candidate === value}
-				<button
-					type="button"
-					role="option"
-					aria-selected={selected}
-					onclick={() => choose(candidate)}
-					onfocus={scrollOptionIntoView}
-					class="flex items-center justify-between gap-2 rounded-full px-3 py-2 text-xs font-medium transition focus:outline-none {selected
-						? 'bg-white text-slate-950 shadow-lg'
-						: 'text-white/70 hover:bg-white/20'}"
-				>
-					{@render option(candidate, selected)}
-				</button>
-			{/each}
-		</div>
+		{@render compactList()}
 	{/if}
 </div>

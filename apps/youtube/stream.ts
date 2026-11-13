@@ -162,9 +162,15 @@ function formatSelector(maxHeight: number | undefined): string {
 function extractQualities(info: YtDlpInfo): number[] {
 	const heights = new Set<number>();
 	for (const format of info.formats ?? []) {
-		if (format.height && format.vcodec && format.vcodec !== 'none') heights.add(format.height);
+		if (hasVideo(format)) heights.add(format.height);
 	}
 	return [...heights].sort((a, b) => b - a);
+}
+
+type YtDlpListedFormat = NonNullable<YtDlpInfo['formats']>[number];
+
+function hasVideo(format: YtDlpListedFormat): format is YtDlpListedFormat & { height: number } {
+	return !!format.height && !!format.vcodec && format.vcodec !== 'none';
 }
 
 function extractTracks(videoId: string, info: YtDlpInfo) {

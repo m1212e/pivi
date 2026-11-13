@@ -21,9 +21,12 @@ export async function verifyPin(pin: string, hash: string): Promise<boolean> {
 	const salt = fromBase64Url(saltPart);
 	const expected = fromBase64Url(derivedPart);
 	const actual = await scryptAsync(utf8ToBytes(pin), salt, SCRYPT_OPTS);
+	return constantTimeEqual(actual, expected);
+}
 
-	if (actual.length !== expected.length) return false;
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+	if (a.length !== b.length) return false;
 	let diff = 0;
-	for (let i = 0; i < actual.length; i++) diff |= actual[i] ^ expected[i];
+	for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
 	return diff === 0;
 }

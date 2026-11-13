@@ -28,7 +28,17 @@
 	// shared protocol code in src/lib that gets bundled into the image, never by
 	// the plugin's own files, so that manifest can't be seen using them. Both are
 	// real dependencies of the app itself too.
-	"ignoreDependencies": ["pg", "@tailwindcss/typography", "vscode-jsonrpc", "zod"],
+	//
+	// And the two @inlang plugins, which project.inlang/settings.json loads by
+	// path (`modules`), never by import.
+	"ignoreDependencies": [
+		"pg",
+		"@tailwindcss/typography",
+		"vscode-jsonrpc",
+		"zod",
+		"@inlang/plugin-message-format",
+		"@inlang/plugin-m-function-matcher"
+	],
 	"duplicates": {
 		// Hide pair-only clones; focus on widespread copy-paste
 		// worth refactoring. Lower to 2 to report every duplicate pair.
@@ -50,7 +60,15 @@
 		{ "extends": "AbstractMessageWriter", "members": ["write", "end"] }
 	],
 	"rules": {
-		"unused-dependencies": "warn"
+		"unused-dependencies": "warn",
+		// `dependencies` is exactly what the nix runtime tree installs (see
+		// nix/package.nix's mkNodeModules), so it must hold what the built server
+		// loads unbundled -- drizzle-kit included, which pivi-db-push runs even
+		// though only drizzle.config.ts and specs import it. Client-only packages
+		// (lucide, qr-code-styling, ...) are bundled by vite and belong in
+		// devDependencies, so both of these checks point the wrong way here.
+		"test-only-dependencies": "off",
+		"dev-dependencies-in-production": "off"
 	},
 	"ignoreExports": [
 		{

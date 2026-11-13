@@ -17,11 +17,20 @@ export function getLanAddressOrHostname() {
 		return QR_BIND_HOSTNAME;
 	}
 	if (QR_BIND_IP) {
-		const version = isIP(QR_BIND_IP);
-		if (version === 6) return `[${QR_BIND_IP}]`;
-		if (version === 4) return QR_BIND_IP;
-		return null;
+		return urlHost(QR_BIND_IP);
 	}
+	return detectLanAddress();
+}
+
+/** Brackets an IPv6 address for use in a URL. Null when it isn't an IP at all. */
+function urlHost(ip: string): string | null {
+	const version = isIP(ip);
+	if (version === 6) return `[${ip}]`;
+	if (version === 4) return ip;
+	return null;
+}
+
+function detectLanAddress(): string | null {
 	const interfaces = Object.values(networkInterfaces()).flat();
 	return interfaces.find((iface) => iface && isLanInterface(iface))?.address ?? null;
 }

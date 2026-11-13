@@ -99,25 +99,16 @@
 		const summary = apps.lastCheckSummary;
 		if (!summary || apps.busy) return null;
 		const nameOf = (id: string) => apps.apps.find((a) => a.id === id)?.name ?? id;
-		if (
-			summary.applied.length === 0 &&
-			summary.pending.length === 0 &&
-			summary.failed.length === 0
-		) {
-			return m.apps_check_summary_none();
-		}
-		const parts = [
-			summary.applied.length > 0
-				? m.apps_check_summary_applied({ apps: summary.applied.map(nameOf).join(', ') })
-				: null,
-			summary.pending.length > 0
-				? m.apps_check_summary_pending({ apps: summary.pending.map(nameOf).join(', ') })
-				: null,
-			summary.failed.length > 0
-				? m.apps_check_summary_failed({ apps: summary.failed.map(nameOf).join(', ') })
-				: null
+		const parts: [string[], (inputs: { apps: string }) => string][] = [
+			[summary.applied, m.apps_check_summary_applied],
+			[summary.pending, m.apps_check_summary_pending],
+			[summary.failed, m.apps_check_summary_failed]
 		];
-		return parts.filter((part) => part !== null).join(' ');
+		const text = parts
+			.filter(([ids]) => ids.length > 0)
+			.map(([ids, message]) => message({ apps: ids.map(nameOf).join(', ') }))
+			.join(' ');
+		return text || m.apps_check_summary_none();
 	});
 
 	function toggleChosen(key: PermissionKey, on: boolean) {
@@ -126,11 +117,15 @@
 
 	let keyField = $state<TextField>();
 
+	const canReview = $derived(
+		image.trim() !== '' && (!verifySignature || publicKey.trim() !== '') && apps.busy === null
+	);
+
 	function review(event: SubmitEvent) {
 		event.preventDefault();
 		// A submit doesn't respect the button being disabled (the remote's Enter
 		// submits the form directly), so an incomplete form is ignored here.
-		if (!image.trim() || (verifySignature && !publicKey.trim()) || apps.busy !== null) return;
+		if (!canReview) return;
 		actions.preview(image.trim(), verifySignature ? publicKey.trim() : undefined);
 	}
 
@@ -335,7 +330,7 @@
 		{/if}
 		<button
 			type="submit"
-			disabled={!image.trim() || (verifySignature && !publicKey.trim()) || apps.busy !== null}
+			disabled={!canReview}
 			class="bg-white/12 text-white/85 ring-1 ring-white/25 hover:bg-white/20 {buttonBase}"
 		>
 			{m.apps_review()}
@@ -377,6 +372,85 @@
 	</div>
 {/snippet}
 
+{#snippet installedSummary(app: InstalledApp, expanded: boolean)}
+	<button
+		type="button"
+		aria-expanded={expanded}
+		onclick={() => (expandedAppId = expanded ? null : app.id)}
+		class="flex w-full items-center gap-3 p-4 text-left focus:outline-none {expanded
+			? 'rounded-t-3xl'
+			: 'rounded-3xl'}"
+	>
+		{@render appBadge(app.id, app.name, app.icon, app.primaryColor, app.secondaryColor)}
+		<span class="min-w-0 flex-1">
+			<span class="flex items-baseline gap-2">
+				<span class="truncate text-lg font-semibold text-white/90">{app.name}</span>
+				<span class="shrink-0 text-xs text-white/40">{app.version}</span>
+			</span>
+			{#if !expanded && (app.update || app.error)}
+				<span class="block truncate text-xs {app.error ? 'text-red-300' : 'text-indigo-200'}">
+					{app.error ?? m.apps_update_available({ version: app.update?.version ?? '' })}
+				</span>
+			{/if}
+		</span>
+		<ChevronDown
+			class="size-5 shrink-0 text-white/50 transition-transform duration-200 {expanded
+				? 'rotate-180'
+				: ''}"
+		/>
+	</button>
+{/snippet}
+
+{#snippet installedDetails(app: InstalledApp)}
+	<p class="font-mono text-xs break-all text-white/40">{app.image}</p>
+
+	{@render toggle(m.apps_enabled(), app.enabled, (on) => actions.setEnabled(app.id, on))}
+	{@render toggle(m.apps_auto_update(), app.autoUpdate, (on) => actions.setAutoUpdate(app.id, on))}
+
+	{#if app.permissions.length > 0}
+		<h4 class="mt-1 text-sm font-medium text-white/70">{m.apps_permissions()}</h4>
+		{#each app.permissions as permission (permission.key)}
+			{@render toggle(
+				permissionLabel(permission.key),
+				permission.granted,
+				(on) => actions.setPermission(app.id, permission.key, on),
+				permissionHint(permission.key)
+			)}
+			{#if permission.key === 'network'}{@render domainList(app.domains)}{/if}
+		{/each}
+	{/if}
+
+	{#if app.update}{@render pendingUpdate(app, app.update)}{/if}
+	{#if app.error}
+		<p class="rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{app.error}</p>
+	{/if}
+
+	<div class="mt-2 flex flex-wrap items-center gap-3">
+		{#if appHasClearCache(app)}
+			<HoldToConfirmButton
+				label={m.apps_clear_cache()}
+				icon={Recycle}
+				variant="neutral"
+				onConfirm={() => actions.clearCache(app.id)}
+			/>
+		{/if}
+		{#if appHasClearStorage(app)}
+			<HoldToConfirmButton
+				label={m.apps_clear_storage()}
+				icon={Eraser}
+				variant="warning"
+				onConfirm={() => actions.clearStorage(app.id)}
+			/>
+		{/if}
+		<HoldToConfirmButton
+			label={m.apps_uninstall()}
+			icon={Trash2}
+			variant="danger"
+			onConfirm={() => actions.uninstall(app.id)}
+		/>
+	</div>
+{/snippet}
+
 {#snippet installed(app: InstalledApp)}
 	{@const expanded = expandedAppId === app.id}
 	<li
@@ -384,84 +458,11 @@
 		in:fly|global={{ y: 16, duration: 300, easing: quintOut }}
 		out:fade|global={{ duration: 150 }}
 	>
-		<button
-			type="button"
-			aria-expanded={expanded}
-			onclick={() => (expandedAppId = expanded ? null : app.id)}
-			class="flex w-full items-center gap-3 p-4 text-left focus:outline-none {expanded
-				? 'rounded-t-3xl'
-				: 'rounded-3xl'}"
-		>
-			{@render appBadge(app.id, app.name, app.icon, app.primaryColor, app.secondaryColor)}
-			<span class="min-w-0 flex-1">
-				<span class="flex items-baseline gap-2">
-					<span class="truncate text-lg font-semibold text-white/90">{app.name}</span>
-					<span class="shrink-0 text-xs text-white/40">{app.version}</span>
-				</span>
-				{#if !expanded && (app.update || app.error)}
-					<span class="block truncate text-xs {app.error ? 'text-red-300' : 'text-indigo-200'}">
-						{app.error ?? m.apps_update_available({ version: app.update?.version ?? '' })}
-					</span>
-				{/if}
-			</span>
-			<ChevronDown
-				class="size-5 shrink-0 text-white/50 transition-transform duration-200 {expanded
-					? 'rotate-180'
-					: ''}"
-			/>
-		</button>
+		{@render installedSummary(app, expanded)}
 
 		{#if expanded}
 			<div class="flex flex-col gap-1 px-4 pb-4" transition:slide={{ duration: 200 }}>
-				<p class="font-mono text-xs break-all text-white/40">{app.image}</p>
-
-				{@render toggle(m.apps_enabled(), app.enabled, (on) => actions.setEnabled(app.id, on))}
-				{@render toggle(m.apps_auto_update(), app.autoUpdate, (on) =>
-					actions.setAutoUpdate(app.id, on)
-				)}
-
-				{#if app.permissions.length > 0}
-					<h4 class="mt-1 text-sm font-medium text-white/70">{m.apps_permissions()}</h4>
-					{#each app.permissions as permission (permission.key)}
-						{@render toggle(
-							permissionLabel(permission.key),
-							permission.granted,
-							(on) => actions.setPermission(app.id, permission.key, on),
-							permissionHint(permission.key)
-						)}
-						{#if permission.key === 'network'}{@render domainList(app.domains)}{/if}
-					{/each}
-				{/if}
-
-				{#if app.update}{@render pendingUpdate(app, app.update)}{/if}
-				{#if app.error}
-					<p class="rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{app.error}</p>
-				{/if}
-
-				<div class="mt-2 flex flex-wrap items-center gap-3">
-					{#if appHasClearCache(app)}
-						<HoldToConfirmButton
-							label={m.apps_clear_cache()}
-							icon={Recycle}
-							variant="neutral"
-							onConfirm={() => actions.clearCache(app.id)}
-						/>
-					{/if}
-					{#if appHasClearStorage(app)}
-						<HoldToConfirmButton
-							label={m.apps_clear_storage()}
-							icon={Eraser}
-							variant="warning"
-							onConfirm={() => actions.clearStorage(app.id)}
-						/>
-					{/if}
-					<HoldToConfirmButton
-						label={m.apps_uninstall()}
-						icon={Trash2}
-						variant="danger"
-						onConfirm={() => actions.uninstall(app.id)}
-					/>
-				</div>
+				{@render installedDetails(app)}
 			</div>
 		{/if}
 	</li>

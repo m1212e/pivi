@@ -131,6 +131,31 @@
 	</ul>
 {/snippet}
 
+{#snippet browse()}
+	{#if wifi.networks === null || wifi.networks.length === 0}
+		<div
+			class="flex flex-col items-center gap-2 rounded-3xl bg-white/5 py-12 text-center ring-1 ring-white/10"
+		>
+			<Wifi class="size-7 text-white/25" />
+			<p class="text-sm text-white/40">
+				{wifi.scanning ? m.wifi_scanning() : m.wifi_no_networks()}
+			</p>
+		</div>
+	{:else}
+		{@render networkList(wifi.networks)}
+	{/if}
+
+	<button
+		type="button"
+		onclick={onScan}
+		disabled={wifi.scanning}
+		class="flex items-center justify-center gap-2 bg-white/12 text-white/85 ring-1 ring-white/25 hover:bg-white/20 {buttonBase}"
+	>
+		<RefreshCw class="size-4 {wifi.scanning ? 'animate-spin' : ''}" />
+		{wifi.scanning ? m.wifi_scanning() : m.wifi_scan()}
+	</button>
+{/snippet}
+
 <div class="flex flex-col gap-4">
 	{#if wifi.error}
 		<div class="flex items-center gap-3 rounded-2xl bg-red-500/15 px-4 py-3 ring-1 ring-red-400/30">
@@ -156,27 +181,6 @@
 	{:else if selected}
 		{@render passwordForm(selected)}
 	{:else}
-		{#if wifi.networks === null || wifi.networks.length === 0}
-			<div
-				class="flex flex-col items-center gap-2 rounded-3xl bg-white/5 py-12 text-center ring-1 ring-white/10"
-			>
-				<Wifi class="size-7 text-white/25" />
-				<p class="text-sm text-white/40">
-					{wifi.scanning ? m.wifi_scanning() : m.wifi_no_networks()}
-				</p>
-			</div>
-		{:else}
-			{@render networkList(wifi.networks)}
-		{/if}
-
-		<button
-			type="button"
-			onclick={onScan}
-			disabled={wifi.scanning}
-			class="flex items-center justify-center gap-2 bg-white/12 text-white/85 ring-1 ring-white/25 hover:bg-white/20 {buttonBase}"
-		>
-			<RefreshCw class="size-4 {wifi.scanning ? 'animate-spin' : ''}" />
-			{wifi.scanning ? m.wifi_scanning() : m.wifi_scan()}
-		</button>
+		{@render browse()}
 	{/if}
 </div>
