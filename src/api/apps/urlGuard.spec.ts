@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { assertPublicHost, isPublicAddress, UnsafeUrlError } from './urlGuard';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { assertPublicHost, fetchPublic, isPublicAddress, UnsafeUrlError } from './urlGuard';
 
 describe('isPublicAddress', () => {
 	it('accepts ordinary public addresses', () => {
@@ -53,5 +55,31 @@ describe('assertPublicHost', () => {
 
 	it('rejects localhost by resolving it', async () => {
 		await expect(assertPublicHost('localhost')).rejects.toBeInstanceOf(UnsafeUrlError);
+	});
+});
+
+describe('fetchPublic', () => {
+	let server: Server;
+	let port: number;
+
+	beforeAll(async () => {
+		server = createServer((_req, res) => res.end('reached'));
+		await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+		port = (server.address() as AddressInfo).port;
+	});
+	afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+	// The check happens in the connection's own lookup, so a name can't pass a
+	// check and then resolve somewhere else for the actual request.
+	it('refuses to connect when a name resolves to a private address', async () => {
+		await expect(fetchPublic(`http://localhost:${port}/`)).rejects.toBeInstanceOf(UnsafeUrlError);
+	});
+
+	it('refuses a private IP literal', async () => {
+		await expect(fetchPublic(`http://127.0.0.1:${port}/`)).rejects.toBeInstanceOf(UnsafeUrlError);
+	});
+
+	it('refuses anything but http and https', async () => {
+		await expect(fetchPublic('ftp://example.com/')).rejects.toBeInstanceOf(UnsafeUrlError);
 	});
 });

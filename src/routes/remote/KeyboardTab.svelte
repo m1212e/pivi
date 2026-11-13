@@ -7,6 +7,7 @@
 
 	let {
 		text = $bindable(),
+		masked,
 		suggestions,
 		onInput,
 		onSubmit,
@@ -14,6 +15,8 @@
 		onPickSuggestion
 	}: {
 		text: string;
+		// A password field on the TV, typed blind like it would be there.
+		masked: boolean;
 		suggestions: string[];
 		onInput: () => void;
 		onSubmit: () => void;
@@ -48,6 +51,7 @@
 	<input
 		bind:this={input}
 		bind:value={text}
+		type={masked ? 'password' : 'text'}
 		oninput={onInput}
 		enterkeyhint="go"
 		placeholder={m.type_here_placeholder()}

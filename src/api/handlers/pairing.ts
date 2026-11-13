@@ -1,3 +1,4 @@
+import { GraphQLError } from 'graphql';
 import { schemaBuilder } from '../rumble';
 
 type Pairing = { pairingToken: string; remoteUrl: string | null };
@@ -16,6 +17,9 @@ const PairingRef = schemaBuilder.objectRef<Pairing>('Pairing').implement({
 schemaBuilder.queryFields((t) => ({
 	pairing: t.field({
 		type: PairingRef,
-		resolve: (_root, _args, ctx) => ({ pairingToken: ctx.pairingToken, remoteUrl: ctx.remoteUrl })
+		resolve: (_root, _args, ctx) => {
+			if (!ctx.pairingToken) throw new GraphQLError('No pairing token for this request');
+			return { pairingToken: ctx.pairingToken, remoteUrl: ctx.remoteUrl ?? null };
+		}
 	})
 }));

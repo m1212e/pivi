@@ -15,6 +15,11 @@ export const LOGIN_PREFIX = '/login';
 export const API_PREFIX = '/api/';
 export const REMOTE_PREFIX = '/remote';
 
+/** The phone remote page and its PWA assets, which are all the LAN may reach (deploy/pivi-server.mjs). */
+export function isRemotePath(pathname: string): boolean {
+	return pathname === REMOTE_PREFIX || pathname.startsWith(`${REMOTE_PREFIX}/`);
+}
+
 export function appHref(appId: string): string {
 	return `${APPS_PREFIX}${encodeURIComponent(appId)}`;
 }

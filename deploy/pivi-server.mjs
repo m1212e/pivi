@@ -5,7 +5,7 @@
 //
 //   - the TV shell (`/`, `/home`, `/apps/*`, `/play/*`, `/api/graphql`, …),
 //     which is for the kiosk browser on this machine and nobody else
-//   - the phone remote (`/remote/<pairing token>`), which has to be reachable
+//   - the phone remote (`/remote`, pairing token in the fragment), which has to be reachable
 //     from any phone on the LAN
 //
 // Exposing one listener to the network would put the whole TV shell and the
@@ -42,7 +42,7 @@ const SHUTDOWN_GRACE_MS = 5_000;
  * Deliberately NOT included:
  *   - `/_app/remote/...`, SvelteKit's remote-function endpoint. The remote
  *     page is entirely client-side (it talks to the TV over the pairing
- *     WebSocket, see src/lib/pairing/session.ts), so it never calls one, and
+ *     WebSocket, see src/lib/remote/session.ts), so it never calls one, and
  *     leaving the endpoint open would hand the LAN every query in
  *     src/api/handlers/.
  *   - `/api/graphql` and the `/api/stream*` routes, for the same reason.

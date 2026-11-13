@@ -34,7 +34,8 @@ export async function fetchSkipSegments(videoId: string): Promise<SkipSegment[]>
 	url.searchParams.set('videoID', videoId);
 	url.searchParams.set('categories', JSON.stringify(SKIP_CATEGORIES));
 
-	const response = await fetch(url);
+	// Well inside the host's request timeout, which kills an app that doesn't answer.
+	const response = await fetch(url, { signal: AbortSignal.timeout(8_000) });
 	// SponsorBlock 404s (rather than an empty array) when nobody's submitted
 	// any segments for this video at all -- the common case, not a failure.
 	if (response.status === 404) return [];

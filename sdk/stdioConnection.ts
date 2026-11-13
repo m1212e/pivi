@@ -2,6 +2,7 @@ import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc'
 import { ensureRal } from './rpcRal';
 import { PushMessageReader, SinkMessageWriter } from './rpcTransport';
 import { encodeMessage, LineSplitter } from './ndjson';
+import { pingRequest } from './protocol';
 
 /**
  * The app side of the host protocol for TypeScript apps, so they don't each
@@ -32,6 +33,7 @@ export function createStdioConnection(): MessageConnection {
 
 	ensureRal();
 	const connection = createMessageConnection(reader, writer);
+	connection.onRequest(pingRequest, () => null);
 	connection.listen();
 	return connection;
 }

@@ -2,8 +2,8 @@
 // resolved again. A different digest is a new version, which is only trusted if
 // it carries a signature from the same key the app was installed with.
 //
-// A new version that asks for nothing more than the approved one is swapped in
-// (when auto-update is on) and rolled back if it won't start. One that asks for
+// A signed new version that asks for nothing more than the approved one is
+// swapped in (when auto-update is on) and rolled back if it won't start. One that asks for
 // more (a permission, a domain) is pulled and parked for the user to approve,
 // and the old version keeps running meanwhile.
 import { parseImageRef } from '#lib/apps/imageRef';
@@ -147,7 +147,9 @@ async function tryApply(
 	}
 }
 
-// Anything that widens what the user approved has to wait for them.
+// Anything that widens what the user approved has to wait for them. So does
+// any new build of an unsigned app, since nothing proves it came from the same
+// publisher and whoever controls the tag could otherwise swap the code freely.
 async function applyOrPark(
 	deps: AppDeps,
 	row: InstalledApp,
@@ -158,7 +160,11 @@ async function applyOrPark(
 		command: resolved.command,
 		workingDir: resolved.workingDir
 	};
-	if (diffManifests(row.approvedManifest, resolved.manifest).needsApproval || !row.autoUpdate) {
+	if (
+		!row.signer ||
+		!row.autoUpdate ||
+		diffManifests(row.approvedManifest, resolved.manifest).needsApproval
+	) {
 		await deps.store.update(row.appId, {
 			pendingUpdate: { manifest: resolved.manifest, image },
 			lastError: null

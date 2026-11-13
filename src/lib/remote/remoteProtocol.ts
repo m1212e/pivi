@@ -137,8 +137,13 @@ export const stateParamsSchema = z.object({
 	hasPinPad: z.boolean(),
 	hasTextInput: z.boolean(),
 	// What the focused text field holds right now, so the phone's keyboard
-	// starts from it and follows edits made on the TV.
+	// starts from it and follows edits made on the TV. Always empty for a
+	// password field, since every paired phone gets this broadcast.
 	textValue: z.string().default(''),
+	textMasked: z.boolean().default(false),
+	// Changes whenever a different field gets focus, so the phone can tell a
+	// new password field from the one it is typing into.
+	textFieldId: z.number().default(0),
 	// Suggestions the focused text field offers, for the phone to show above
 	// its keyboard.
 	suggestions: z.array(z.string()).default([]),
@@ -188,9 +193,44 @@ export const remoteDisconnectedNotification = new NotificationType<
 	z.infer<typeof remoteDeviceParamsSchema>
 >('remote/remoteDisconnected');
 
+// A new phone asking to pair while another is connected. The relay waits for
+// the TV's answer, see relay.ts's requestApproval.
+export const pairingRequestParamsSchema = z.object({ requestId: z.string(), name: z.string() });
+export const pairingRequestNotification = new NotificationType<
+	z.infer<typeof pairingRequestParamsSchema>
+>('remote/pairingRequest');
+// The request was answered, timed out or the phone gave up, so the TV closes its prompt.
+export const pairingRequestClosedParamsSchema = z.object({ requestId: z.string() });
+export const pairingRequestClosedNotification = new NotificationType<
+	z.infer<typeof pairingRequestClosedParamsSchema>
+>('remote/pairingRequestClosed');
+// TV -> relay only. The relay consumes it instead of forwarding it, so a
+// phone never sees or sends one.
+export const pairingDecisionParamsSchema = z.object({
+	requestId: z.string(),
+	approved: z.boolean()
+});
+export const pairingDecisionNotification = new NotificationType<
+	z.infer<typeof pairingDecisionParamsSchema>
+>('remote/pairingDecision');
+
+/**
+ * The only links the phone opens. Checked by the openUrlOnPhone mutation, by
+ * the app screen sanitizer and again on the phone itself, so neither a buggy
+ * host path nor something else on the TV's loopback can hand it a
+ * javascript:, intent: or file: URL.
+ */
+export function isPhoneSafeUrl(raw: string): boolean {
+	try {
+		return new URL(raw).protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
+
 // Host -> phone, sent by the openUrlOnPhone mutation (handlers/remote.ts) so
 // an app can finish a login, or anything needing a real browser, on the phone.
-export const openUrlParamsSchema = z.object({ url: z.string() });
+export const openUrlParamsSchema = z.object({ url: z.string().refine(isPhoneSafeUrl) });
 export const openUrlNotification = new NotificationType<z.infer<typeof openUrlParamsSchema>>(
 	'remote/openUrl'
 );

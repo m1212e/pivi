@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { browser } from '$app/env';
-	import { page } from '$app/state';
 	import PinPad from '#lib/components/PinPad.svelte';
 	import * as m from '#lib/paraglide/messages';
-	import { createKeyboardInset } from '#lib/pairing/keyboardInset.svelte';
-	import { createRemoteController } from '#lib/pairing/remoteController.svelte';
-	import { createRemoteTabState } from '#lib/pairing/remoteTabState.svelte';
+	import { createKeyboardInset } from '#lib/remote/keyboardInset.svelte';
+	import { createRemoteController } from '#lib/remote/remoteController.svelte';
+	import { createRemoteTabState } from '#lib/remote/remoteTabState.svelte';
 	import { browserStorage } from '#lib/storage';
 	import AppShortcuts from './AppShortcuts.svelte';
 	import KeyboardTab from './KeyboardTab.svelte';
@@ -17,7 +16,7 @@
 	import TrackpadTab from './TrackpadTab.svelte';
 	import TrackpadToggle from './TrackpadToggle.svelte';
 
-	const remote = createRemoteController(page.params.token ?? null);
+	const remote = createRemoteController();
 	const tabs = createRemoteTabState({
 		storage: browserStorage(browser),
 		getTv: () => remote.tv
@@ -69,6 +68,7 @@
 			{:else}
 				<KeyboardTab
 					bind:text={remote.text}
+					masked={remote.tv.textMasked}
 					suggestions={remote.tv.suggestions}
 					onInput={remote.sendText}
 					onSubmit={remote.submitText}

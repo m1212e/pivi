@@ -2,7 +2,7 @@
 	import { scale } from 'svelte/transition';
 	import { Grid3x3, Hand, Keyboard, Play, Users } from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
-	import type { RemoteTab } from '#lib/pairing/remoteTabs';
+	import type { RemoteTab } from '#lib/remote/remoteTabs';
 
 	const TARGET_ICON = {
 		trackpad: Hand,

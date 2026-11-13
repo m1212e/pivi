@@ -5,9 +5,10 @@
 // Everything in sdk/ is the contract between pivi and its apps, and nothing
 // else: it imports only zod, vscode-jsonrpc and itself, never host code, so an
 // app can be built from this directory alone (see apps/youtube/Dockerfile).
-import { NotificationType, NotificationType0, RequestType } from 'vscode-jsonrpc';
+import { NotificationType, NotificationType0, RequestType, RequestType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
+import { idSchema, MAX_LIST_ITEMS, textSchema, tokenSchema, urlSchema } from './limits';
 import { appScreenSchema, uiEventSchema } from './ui';
 
 // App -> host
@@ -46,13 +47,13 @@ const containerSchema = z.enum(['mp4', 'webm']);
 // with the stream. `url` stays server side and is only fetched through the
 // host's subtitle proxy. Only vtt, so the host never converts formats.
 const subtitleTrackSchema = z.object({
-	language: z.string(),
+	language: tokenSchema,
 	// Falls back to `language` on the client when absent.
-	label: z.string().optional(),
+	label: textSchema.optional(),
 	// Shown in the picker so auto-generated tracks don't read as equally
 	// reliable as authored ones.
 	kind: z.enum(['caption', 'transcription']),
-	url: z.string(),
+	url: urlSchema,
 	format: z.literal('vtt')
 });
 /** Used across the player's subtitle picker, the subtitle proxy and the phone remote. */
@@ -70,22 +71,22 @@ export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
  * `audioUrl` is played as is and has no such requirement.
  */
 export const resolvedStreamSchema = z.object({
-	videoUrl: z.string(),
-	audioUrl: z.string().optional(),
-	vcodec: z.string(),
-	acodec: z.string().optional(),
+	videoUrl: urlSchema,
+	audioUrl: urlSchema.optional(),
+	vcodec: tokenSchema,
+	acodec: tokenSchema.optional(),
 	videoContainer: containerSchema,
 	audioContainer: containerSchema.optional(),
-	title: z.string(),
+	title: textSchema,
 	duration: z.number(),
 	// Video heights the app can serve through `maxHeight`, so the player offers
 	// exactly these. Absent or empty for an app without a quality choice, then
 	// the player shows no picker and never sends a cap.
-	qualities: z.array(z.number().int().positive()).optional(),
+	qualities: z.array(z.number().int().positive()).max(MAX_LIST_ITEMS).optional(),
 	// Absent (not just empty) for an app that has no subtitle source at
 	// all. Same "optional, treated as none" convention resolveSkipSegments
 	// uses for an app with no handler registered.
-	subtitleTracks: z.array(subtitleTrackSchema).optional()
+	subtitleTracks: z.array(subtitleTrackSchema).max(MAX_LIST_ITEMS).optional()
 });
 export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
 
@@ -105,7 +106,7 @@ export const resolveStreamRequest = new RequestType<
 const skipSegmentSchema = z.object({
 	startSeconds: z.number(),
 	endSeconds: z.number(),
-	label: z.string()
+	label: textSchema
 });
 /**
  * A stretch the player skips automatically (a sponsor segment, an intro).
@@ -114,7 +115,9 @@ const skipSegmentSchema = z.object({
 export type SkipSegment = z.infer<typeof skipSegmentSchema>;
 
 export const resolveSkipSegmentsParamsSchema = z.object({ sessionId: z.string() });
-export const resolveSkipSegmentsResultSchema = z.object({ segments: z.array(skipSegmentSchema) });
+export const resolveSkipSegmentsResultSchema = z.object({
+	segments: z.array(skipSegmentSchema).max(MAX_LIST_ITEMS)
+});
 /** Feeds the player's auto skip. Only sent to apps declaring the `skipSegments` feature. */
 export const resolveSkipSegmentsRequest = new RequestType<
 	z.infer<typeof resolveSkipSegmentsParamsSchema>,
@@ -128,7 +131,7 @@ export const resolveNextParamsSchema = z.object({
 	sessionId: z.string(),
 	context: z.string().optional()
 });
-export const resolveNextResultSchema = z.object({ sessionId: z.string().optional() });
+export const resolveNextResultSchema = z.object({ sessionId: idSchema.optional() });
 /** Lets the player continue a playlist once a session ends, without knowing the app's sequencing. */
 export const resolveNextRequest = new RequestType<
 	z.infer<typeof resolveNextParamsSchema>,
@@ -163,3 +166,10 @@ export const localeNotification = new NotificationType<z.infer<typeof activatePa
 
 /** Gives the app a chance to exit cleanly before the host kills it. */
 export const shutdownNotification = new NotificationType0('host/shutdown');
+
+/**
+ * Sent when a request to the app timed out, to tell a slow app from a hung
+ * one. Any answer counts, even an error for an unknown method, so an app only
+ * has to keep its message loop running. One that doesn't answer is killed.
+ */
+export const pingRequest = new RequestType0<null, void>('host/ping');

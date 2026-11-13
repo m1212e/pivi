@@ -7,6 +7,9 @@
 //     header can't be inspected, and a request fronted through an allowed IP
 //     reaches other sites. So interception is always enabled when there's any
 //     network, and the guest's own DNS is filtered too.
+//   - An allowed domain resolving to a private, loopback or host address is
+//     blocked by the group denies in buildNetworkPolicy, even with DNS rebind
+//     protection off (tested with nip.io names against host listeners).
 //   - A write to a process's stdin is capped at 4 MiB per frame, so messages are
 //     chunked (ndjson.ts's chunkBytes) and chunks are serialised.
 //   - A VM killed from outside ends the output stream without an "exited"
@@ -46,10 +49,26 @@ const WEB_PORTS = [80, 443];
 // The default TLS configuration is the one that intercepts (see the header).
 const interceptTls = <T>(tls: T): T => tls;
 
+// Rebind protection is the runtime's default too, set explicitly so a changed
+// default can't quietly drop one of the two layers against private addresses.
+const protectFromRebinding = <T extends { rebindProtection(enabled: boolean): T }>(dns: T): T =>
+	dns.rebindProtection(true);
+
 // `*.example.com` covers the suffix and the bare domain itself. The sandbox's
 // own suffix rule only promises subdomains, so the apex gets its own rule.
+//
+// Rules are first match wins. The group denies come before the domain allows,
+// because an app controls its own domain's DNS and could point it at the LAN,
+// the host or loopback. Without them only the runtime's default DNS rebind
+// protection stood in the way. DNS to the gateway is allowed ahead of them,
+// since the resolver lives on the host group and would be denied otherwise.
 function buildNetworkPolicy(msb: Msb, domains: readonly string[]) {
-	const policy = msb.NetworkPolicy.builder().defaultDeny();
+	const policy = msb.NetworkPolicy.builder()
+		.defaultDeny()
+		.egress((rule) => rule.udp().tcp().port(53).allowHost())
+		.egress((rule) =>
+			rule.denyLoopback().denyPrivate().denyLinkLocal().denyMeta().denyMulticast().denyHost()
+		);
 	for (const domain of domains) {
 		if (domain.startsWith('*.')) {
 			const apex = domain.slice(2);
@@ -93,7 +112,10 @@ async function createSandbox(msb: Msb, spec: SandboxSpec) {
 
 	builder = spec.network
 		? builder.network((network) =>
-				network.policy(buildNetworkPolicy(msb, spec.network!.domains)).tls(interceptTls)
+				network
+					.policy(buildNetworkPolicy(msb, spec.network!.domains))
+					.dns(protectFromRebinding)
+					.tls(interceptTls)
 			)
 		: builder.disableNetwork();
 
@@ -172,6 +194,16 @@ async function startMicrosandbox(
 			stopped = true;
 			await stdin.close().catch(() => {});
 			await sandbox.stop().catch(() => sandbox.kill());
+		},
+		async kill() {
+			stopped = true;
+			await sandbox.kill().catch(() => {});
+			// Unlike a clean stop, a kill leaves the sandbox's record behind.
+			await msb.Sandbox.remove(spec.name).catch(() => {});
+		},
+		async cpuTimeNs() {
+			if (stopped) return undefined;
+			return (await sandbox.metrics().catch(() => undefined))?.vcpuTimeNs;
 		}
 	};
 }
@@ -210,9 +242,14 @@ export const microsandboxBackend: SandboxBackend = {
 		// The static `Volume.remove(name)`, since `.remove()` on a handle from
 		// `Volume.list()` throws (it's read-only), and the catch below would
 		// silently leave the volumes on disk.
+		// A volume that can't be removed is reported rather than skipped, since
+		// installApp relies on this to keep a new app from inheriting old data.
+		const failed: string[] = [];
 		for (const volume of await msb.Volume.list()) {
-			if (predicate(volume.name)) await msb.Volume.remove(volume.name).catch(() => {});
+			if (!predicate(volume.name)) continue;
+			await msb.Volume.remove(volume.name).catch(() => failed.push(volume.name));
 		}
+		if (failed.length > 0) throw new Error(`Could not remove volumes: ${failed.join(', ')}`);
 	},
 
 	async removeStale(prefix) {

@@ -5,6 +5,7 @@
 // byte range for `<SegmentBase indexRange>` instead of
 // building an index from the media itself (see #lib/mse/dualTrackPlayer).
 import { error } from '@sveltejs/kit';
+import type { AppFetchInit } from './appFetch';
 
 /** Inclusive, as DASH `indexRange` and HTTP Range headers expect. */
 export type ByteRange = [start: number, end: number];
@@ -20,7 +21,7 @@ const SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
 type RangeResult = { data: Uint8Array } | { status: number };
 
 /** How the index is fetched, so the caller decides which URLs may be reached (appFetch.ts). */
-export type RangeFetcher = (init: RequestInit) => Promise<Response>;
+export type RangeFetcher = (init: AppFetchInit) => Promise<Response>;
 
 // Never throws, so fetchRange can decide whether another attempt is worth it.
 async function tryFetchRange(

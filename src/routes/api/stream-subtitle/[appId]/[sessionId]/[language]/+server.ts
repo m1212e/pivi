@@ -6,8 +6,12 @@
 // ResolvedStream shape (see #sdk/protocol's SubtitleTrack).
 import { error } from '@sveltejs/kit';
 import { resolveStreamOrError } from '#api/apps/trackResolution';
-import { fetchAppUrl } from '#api/apps/appFetch';
+import { fetchAppUrl, readTextCapped } from '#api/apps/appFetch';
 import type { RequestHandler } from './$types';
+
+// A long film's captions are well under a megabyte, anything far past that is
+// the app's server trying to fill host memory.
+const MAX_SUBTITLE_BYTES = 8 << 20;
 
 // Two things in caption files that render badly through a plain <track> on
 // the TV, whatever app supplied them, both normalized here before the file
@@ -97,7 +101,9 @@ export const GET: RequestHandler = async ({ params }) => {
 	const upstream = await fetchAppUrl(app, track.url);
 	if (!upstream.ok) error(502, `Subtitle source returned ${upstream.status}`);
 
-	const vtt = await upstream.text();
+	const vtt = await readTextCapped(upstream, MAX_SUBTITLE_BYTES).catch(() =>
+		error(502, 'Subtitle source sent too much')
+	);
 	return new Response(normalizeVtt(vtt), {
 		// `no-store`, not just omitted -- this route's own normalization logic
 		// is still actively changing, and a stale cached copy from before some

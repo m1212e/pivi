@@ -3,18 +3,25 @@ import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { z } from 'zod';
 import { PAIRING_WS_PORT } from '#lib/wsConfig';
 import {
-	decrypt,
-	deriveSharedSecret,
+	bytesToUtf8,
+	constantTimeEqual,
+	createOpener,
+	createSealer,
+	decodeFixedLength,
 	deriveSessionKeys,
-	encrypt,
+	deriveSharedSecret,
 	fromBase64Url,
 	generateEphemeralKeypair,
-	sign,
+	handshakeTranscript,
+	HANDSHAKE_VERSION,
+	pairRequestProof,
+	pairResponseProof,
+	PUBLIC_KEY_BYTES,
+	signHandshake,
+	SIGNATURE_BYTES,
 	toBase64Url,
-	verify,
-	concatBytes,
 	utf8ToBytes,
-	bytesToUtf8
+	verifyHandshake
 } from '#lib/crypto/pairing';
 import {
 	challengeResponseSchema,
@@ -28,19 +35,29 @@ import {
 	type Encrypted,
 	type HelloRequest,
 	type PairError,
+	type PairPending,
 	type PairRequest,
 	type PairSuccess,
 	type PhoneToRelay,
 	type Ready
-} from '#lib/pairing/protocol';
+} from '#lib/remote/protocol';
 import {
+	pairingDecisionNotification,
+	pairingDecisionParamsSchema,
+	pairingRequestClosedNotification,
+	pairingRequestNotification,
 	remoteConnectedNotification,
 	remoteDisconnectedNotification
-} from '#lib/pairing/remoteProtocol';
+} from '#lib/remote/remoteProtocol';
 import { PHONE_CONNECTION_EVENT, remotePubSub } from './remotePubsub';
 import { db } from '../db';
 import { pairedDevice } from '../db/schema';
-import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from '../pairing';
+import {
+	consumePairingToken,
+	getOrCreateTvIdentity,
+	pairingTokenFor,
+	restorePairingToken
+} from '../pairing';
 
 // The pairing relay: the TV's browser and paired phones all connect here. It
 // authenticates phones (pair once, then a signed challenge on each reconnect),
@@ -49,6 +66,13 @@ import { consumePairingToken, getOrCreateTvIdentity, isPairingTokenValid } from 
 
 // Stops half finished handshakes from holding a socket open forever.
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+// How long a pairing phone waits for the TV to allow it.
+const APPROVAL_TIMEOUT_MS = 60_000;
+
+// ws accepts 100 MiB frames by default, far beyond any state push, and an
+// unauthenticated socket shouldn't get to make the server buffer that much.
+const MAX_FRAME_BYTES = 4 << 20;
 
 // What a socket is allowed to do depends on how far its handshake got, so the
 // state is a union keyed by role. Only `phone` holds session keys.
@@ -60,16 +84,19 @@ type ConnState =
 			deviceId: string;
 			deviceName: string;
 			devicePublicKey: Uint8Array;
+			phoneEphemeralPublicKey: Uint8Array;
 			transcript: Uint8Array;
 			relayEphemeralSecretKey: Uint8Array;
 	  }
+	// Waiting on the TV's approval, nothing the phone sends is expected.
+	| { role: 'pairing' }
 	| { role: 'tv' }
 	| {
 			role: 'phone';
 			deviceId: string;
 			deviceName: string;
-			c2sKey: Uint8Array;
-			s2cKey: Uint8Array;
+			seal: (plaintext: Uint8Array) => Uint8Array;
+			open: (ciphertext: Uint8Array) => Uint8Array;
 	  };
 
 // Names a phone for the TV's "connected" toast from its User-Agent, without
@@ -128,15 +155,87 @@ export function hasConnectedPhone(): boolean {
 	return phoneSocketsWithKeys().length > 0;
 }
 
-// First contact from a new phone: trades the QR code's token for a device id
-// and the TV's public key, so the phone can verify the relay from then on.
+type PendingApproval = { name: string; decide: (approved: boolean) => void };
+
+// Pairing requests the TV hasn't answered yet, by request id.
+const pendingApprovals = new Map<string, PendingApproval>();
+
+function sendToTvs(method: string, params: unknown) {
+	for (const tv of tvSockets()) send(tv, { jsonrpc: '2.0', method, params });
+}
+
+// The QR code alone is enough while nobody is using the TV, since the new
+// phone is then the only input there is. Once a paired phone is connected,
+// whoever holds it decides, so a code photographed off the screen isn't
+// enough to take over a TV someone is watching.
+function requestApproval(socket: WebSocket, name: string): Promise<boolean> {
+	const requestId = crypto.randomUUID();
+	send(socket, { type: 'pairPending' } satisfies PairPending);
+
+	return new Promise((resolve) => {
+		const decide = (approved: boolean) => {
+			if (!pendingApprovals.delete(requestId)) return;
+			clearTimeout(timer);
+			socket.off('close', onClose);
+			sendToTvs(pairingRequestClosedNotification.method, { requestId });
+			resolve(approved);
+		};
+		const onClose = () => decide(false);
+		const timer = setTimeout(() => decide(false), APPROVAL_TIMEOUT_MS);
+		socket.once('close', onClose);
+		pendingApprovals.set(requestId, { name, decide });
+		sendToTvs(pairingRequestNotification.method, { requestId, name });
+	});
+}
+
+// A TV tab that (re)connects mid request still gets to show the prompt.
+function announcePendingApprovals(tv: WebSocket) {
+	for (const [requestId, { name }] of pendingApprovals) {
+		send(tv, {
+			jsonrpc: '2.0',
+			method: pairingRequestNotification.method,
+			params: { requestId, name }
+		});
+	}
+}
+
+// True when `raw` was the TV answering a pairing request. It's consumed here,
+// so it never reaches a phone.
+function handlePairingDecision(raw: string): boolean {
+	if (!raw.includes(pairingDecisionNotification.method)) return false;
+	let message: unknown;
+	try {
+		message = JSON.parse(raw);
+	} catch {
+		return false;
+	}
+	const { method, params } = (message ?? {}) as { method?: unknown; params?: unknown };
+	if (method !== pairingDecisionNotification.method) return false;
+	const parsed = pairingDecisionParamsSchema.safeParse(params);
+	if (parsed.success) pendingApprovals.get(parsed.data.requestId)?.decide(parsed.data.approved);
+	return true;
+}
+
+// First contact from a new phone: trades proof of the QR code's token for a
+// device id and the TV's public key, so the phone can verify the relay from
+// then on.
 async function handlePairRequest(
 	socket: WebSocket,
 	message: PairRequest,
 	userAgent: string | undefined
 ) {
-	const { token, devicePublicKey } = message;
-	if (!isPairingTokenValid(token)) {
+	const token = pairingTokenFor(message.tokenId);
+	const devicePublicKey = decodeFixedLength(message.devicePublicKey, PUBLIC_KEY_BYTES);
+	const proof = decodeFixedLength(message.proof, 32);
+	const proven =
+		token !== undefined &&
+		devicePublicKey !== undefined &&
+		proof !== undefined &&
+		constantTimeEqual(proof, pairRequestProof(token, devicePublicKey));
+	// Claimed before the first await, so two phones racing with the same
+	// token can't both get through.
+	const expiresAt = proven ? consumePairingToken(token) : undefined;
+	if (!token || !devicePublicKey || expiresAt === undefined) {
 		fail(socket, {
 			type: 'pairError',
 			message: 'Pairing code expired or already used'
@@ -144,16 +243,34 @@ async function handlePairRequest(
 		return;
 	}
 
-	const tvIdentity = await getOrCreateTvIdentity();
-	const [row] = await db
-		.insert(pairedDevice)
-		.values({ publicKey: devicePublicKey, name: deriveDeviceName(userAgent) })
-		.returning();
+	const name = deriveDeviceName(userAgent);
+	if (hasConnectedPhone()) {
+		// The prompt can take longer than the handshake timeout allows.
+		clearHandshakeTimeout(socket);
+		connections.set(socket, { role: 'pairing' });
+		const approved = await requestApproval(socket, name);
+		if (!approved) {
+			fail(socket, {
+				type: 'pairError',
+				message: 'Pairing was declined on the TV'
+			} satisfies PairError);
+			return;
+		}
+	}
 
-	// Only burn the token once pairing has actually succeeded, so a
-	// transient failure above doesn't permanently invalidate the still
-	// displayed QR code.
-	consumePairingToken(token);
+	let row;
+	let tvIdentity;
+	try {
+		tvIdentity = await getOrCreateTvIdentity();
+		[row] = await db
+			.insert(pairedDevice)
+			.values({ publicKey: toBase64Url(devicePublicKey), name })
+			.returning();
+	} catch (error) {
+		// A transient failure shouldn't burn the still displayed QR code.
+		restorePairingToken(token, expiresAt);
+		throw error;
+	}
 
 	clearHandshakeTimeout(socket);
 	connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket), userAgent });
@@ -161,30 +278,37 @@ async function handlePairRequest(
 	send(socket, {
 		type: 'paired',
 		deviceId: row.id,
-		tvPublicKey: toBase64Url(tvIdentity.publicKey)
+		tvPublicKey: toBase64Url(tvIdentity.publicKey),
+		proof: toBase64Url(pairResponseProof(token, devicePublicKey, tvIdentity.publicKey, row.id))
 	} satisfies PairSuccess);
 }
 
 // A paired phone reconnecting. The relay proves it is the TV by signing a
 // transcript, mutual proof of identity before any keys are derived.
 async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
-	const { deviceId, ephemeralPublicKey } = message;
+	const { deviceId } = message;
+	const phoneEphemeralPublicKey = decodeFixedLength(message.ephemeralPublicKey, PUBLIC_KEY_BYTES);
+	if (!phoneEphemeralPublicKey) {
+		fail(socket, { type: 'authError', message: 'Malformed message' } satisfies AuthError);
+		return;
+	}
+
 	const device = await db.query.pairedDevice.findFirst({ where: { id: deviceId } });
 	if (!device) {
 		fail(socket, { type: 'authError', message: 'Unknown device' } satisfies AuthError);
 		return;
 	}
 
-	const phoneEphemeralPublicKey = fromBase64Url(ephemeralPublicKey);
-	const relayEphemeral = generateEphemeralKeypair();
-	const transcript = concatBytes(
-		phoneEphemeralPublicKey,
-		relayEphemeral.publicKey,
-		utf8ToBytes(deviceId)
-	);
-
 	const tvIdentity = await getOrCreateTvIdentity();
-	const signature = sign(tvIdentity.secretKey, transcript);
+	const devicePublicKey = fromBase64Url(device.publicKey);
+	const relayEphemeral = generateEphemeralKeypair();
+	const transcript = handshakeTranscript({
+		phoneEphemeralPublicKey,
+		relayEphemeralPublicKey: relayEphemeral.publicKey,
+		devicePublicKey,
+		tvPublicKey: tvIdentity.publicKey,
+		deviceId
+	});
 
 	clearHandshakeTimeout(socket);
 	connections.set(socket, {
@@ -192,7 +316,8 @@ async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
 		timeout: startHandshakeTimeout(socket),
 		deviceId,
 		deviceName: device.name ?? deriveDeviceName(undefined),
-		devicePublicKey: fromBase64Url(device.publicKey),
+		devicePublicKey,
+		phoneEphemeralPublicKey,
 		transcript,
 		relayEphemeralSecretKey: relayEphemeral.secretKey
 	});
@@ -200,7 +325,7 @@ async function handleHelloRequest(socket: WebSocket, message: HelloRequest) {
 	send(socket, {
 		type: 'challenge',
 		ephemeralPublicKey: toBase64Url(relayEphemeral.publicKey),
-		signature: toBase64Url(signature)
+		signature: toBase64Url(signHandshake(tvIdentity.secretKey, 'tv', transcript))
 	} satisfies Challenge);
 }
 
@@ -211,8 +336,8 @@ async function handleChallengeResponse(
 	state: Extract<ConnState, { role: 'awaiting-response' }>,
 	message: ChallengeResponse
 ) {
-	const { signature } = message;
-	if (!verify(state.devicePublicKey, state.transcript, fromBase64Url(signature))) {
+	const signature = decodeFixedLength(message.signature, SIGNATURE_BYTES);
+	if (!signature || !verifyHandshake(state.devicePublicKey, 'phone', state.transcript, signature)) {
 		fail(socket, {
 			type: 'authError',
 			message: 'Signature verification failed'
@@ -220,10 +345,10 @@ async function handleChallengeResponse(
 		return;
 	}
 
-	// The phone's ephemeral public key is the first component baked into the
-	// transcript we signed in handleHelloRequest.
-	const phoneEphemeralPublicKey = state.transcript.slice(0, 32);
-	const sharedSecret = deriveSharedSecret(state.relayEphemeralSecretKey, phoneEphemeralPublicKey);
+	const sharedSecret = deriveSharedSecret(
+		state.relayEphemeralSecretKey,
+		state.phoneEphemeralPublicKey
+	);
 	// Directions are named from the phone's perspective: c2s is what the
 	// relay decrypts, s2c is what it encrypts, mirrored in session.ts.
 	const { c2sKey, s2cKey } = deriveSessionKeys(sharedSecret, state.transcript);
@@ -233,14 +358,12 @@ async function handleChallengeResponse(
 		role: 'phone',
 		deviceId: state.deviceId,
 		deviceName: state.deviceName,
-		c2sKey,
-		s2cKey
+		seal: createSealer(s2cKey),
+		open: createOpener(c2sKey)
 	});
-	await db
-		.update(pairedDevice)
-		.set({ lastSeenAt: new Date() })
-		.where(eq(pairedDevice.id, state.deviceId));
-
+	// Right after the role switch, with no await in between: TV traffic is
+	// relayed to this socket from now on, and the phone must see 'ready'
+	// before its first encrypted frame.
 	send(socket, { type: 'ready' } satisfies Ready);
 
 	// Lets RemoteBridge show a toast. Sent directly since relayFromPhone only
@@ -254,6 +377,11 @@ async function handleChallengeResponse(
 		});
 	}
 	remotePubSub.publish(PHONE_CONNECTION_EVENT);
+
+	await db
+		.update(pairedDevice)
+		.set({ lastSeenAt: new Date() })
+		.where(eq(pairedDevice.id, state.deviceId));
 }
 
 function startHandshakeTimeout(socket: WebSocket) {
@@ -281,14 +409,21 @@ export function startPairingRelay() {
 	if (globalThis.__piviPairingRelayStarted) return;
 	globalThis.__piviPairingRelayStarted = true;
 
-	const wss = new WebSocketServer({ port: PAIRING_WS_PORT });
+	const wss = new WebSocketServer({ port: PAIRING_WS_PORT, maxPayload: MAX_FRAME_BYTES });
 
 	wss.on('connection', (socket, request) => {
 		const remoteAddress = request.socket.remoteAddress;
 		const userAgent = request.headers['user-agent'];
 		connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket), userAgent });
 
-		socket.on('message', (data: RawData) => onMessage(socket, remoteAddress, userAgent, data));
+		socket.on('message', (data: RawData) => {
+			// An unexpected throw would otherwise be an unhandled rejection,
+			// which takes the whole server down with it.
+			onMessage(socket, remoteAddress, userAgent, data).catch((error: unknown) => {
+				console.error('pairing relay: dropping a socket after an error', error);
+				fail(socket, { type: 'authError', message: 'Internal error' } satisfies AuthError);
+			});
+		});
 		socket.on('close', () => {
 			clearHandshakeTimeout(socket);
 			const state = connections.get(socket);
@@ -351,6 +486,10 @@ function routeFrame(
 	userAgent: string | undefined
 ): void | Promise<void> {
 	if (state.role === 'phone') return onPhoneFrame(socket, state, raw);
+	if (state.role === 'pairing') {
+		fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
+		return;
+	}
 	if (state.role === 'unauth') return onHandshakeFrame(socket, raw, remoteAddress, userAgent);
 	return onChallengeFrame(socket, state, raw);
 }
@@ -376,6 +515,13 @@ function onHandshakeFrame(
 	remoteAddress: string | undefined,
 	userAgent: string | undefined
 ): void | Promise<void> {
+	if (isOutdatedHandshake(raw)) {
+		fail(socket, {
+			type: 'authError',
+			message: 'The TV was updated, reload this page'
+		} satisfies AuthError);
+		return;
+	}
 	const parsed = z.union([tvHelloSchema, pairRequestSchema, helloRequestSchema]).safeParse(raw);
 	if (!parsed.success) {
 		fail(socket, { type: 'authError', message: 'Unexpected message' } satisfies AuthError);
@@ -387,6 +533,15 @@ function onHandshakeFrame(
 	acceptTvHello(socket, remoteAddress);
 }
 
+// A remote page cached from an older release speaks a handshake this relay no
+// longer accepts. Telling it apart from a malformed frame lets the phone show
+// something actionable, and keeps it from discarding its credentials.
+function isOutdatedHandshake(raw: unknown): boolean {
+	if (typeof raw !== 'object' || raw === null) return false;
+	const { type, version } = raw as { type?: unknown; version?: unknown };
+	return (type === 'pair' || type === 'hello') && version !== HANDSHAKE_VERSION;
+}
+
 // The TV role is what gets to see every phone's decrypted traffic, so it's
 // only ever granted to something already running on this machine.
 function acceptTvHello(socket: WebSocket, remoteAddress: string | undefined) {
@@ -396,6 +551,7 @@ function acceptTvHello(socket: WebSocket, remoteAddress: string | undefined) {
 	}
 	clearHandshakeTimeout(socket);
 	connections.set(socket, { role: 'tv' });
+	announcePendingApprovals(socket);
 }
 
 async function onChallengeFrame(
@@ -422,15 +578,9 @@ function broadcastToTvs(raw: string, except?: WebSocket) {
 // TV traffic is plaintext on the loopback socket, so it is encrypted per phone
 // here, and also copied to any other TV.
 function relayFromTv(sender: WebSocket, raw: string) {
+	if (handlePairingDecision(raw)) return;
 	broadcastToTvs(raw, sender);
-	for (const [socket, state] of phoneSocketsWithKeys()) {
-		const { nonce, ciphertext } = encrypt(state.s2cKey, utf8ToBytes(raw));
-		send(socket, {
-			type: 'enc',
-			nonce: toBase64Url(nonce),
-			ciphertext: toBase64Url(ciphertext)
-		} satisfies Encrypted);
-	}
+	sendEncrypted(raw);
 }
 
 // `undefined` on failure, same contract as parseFrame above.
@@ -440,9 +590,7 @@ function decryptFromPhone(
 	message: Extract<PhoneToRelay, { type: 'enc' }>
 ): string | undefined {
 	try {
-		return bytesToUtf8(
-			decrypt(state.c2sKey, fromBase64Url(message.nonce), fromBase64Url(message.ciphertext))
-		);
+		return bytesToUtf8(state.open(fromBase64Url(message.ciphertext)));
 	} catch {
 		fail(socket, { type: 'authError', message: 'Decryption failed' } satisfies AuthError);
 		return undefined;
@@ -470,13 +618,17 @@ function relayFromPhone(
  * `message` from a remoteProtocol.ts NotificationType's `.method`.
  */
 export function sendToPhones(message: { jsonrpc: string; method: string; params?: unknown }) {
-	const raw = JSON.stringify(message);
+	sendEncrypted(JSON.stringify(message));
+}
+
+function sendEncrypted(raw: string) {
 	for (const [socket, state] of phoneSocketsWithKeys()) {
-		const { nonce, ciphertext } = encrypt(state.s2cKey, utf8ToBytes(raw));
+		// A closed socket would never get this frame, and sealing it anyway
+		// would only skip a counter for a session that is already over.
+		if (socket.readyState !== WebSocket.OPEN) continue;
 		send(socket, {
 			type: 'enc',
-			nonce: toBase64Url(nonce),
-			ciphertext: toBase64Url(ciphertext)
+			ciphertext: toBase64Url(state.seal(utf8ToBytes(raw)))
 		} satisfies Encrypted);
 	}
 }

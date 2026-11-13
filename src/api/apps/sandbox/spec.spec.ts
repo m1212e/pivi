@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parseImageRef } from '#lib/apps/imageRef';
 import type { AppManifest } from '#sdk/manifest';
-import { buildSandboxSpec, volumeBelongsToApp, volumeName } from './spec';
+import {
+	buildSandboxSpec,
+	volumeBelongsToApp,
+	volumeBelongsToProfile,
+	volumeName,
+	volumeOfUnknownProfile
+} from './spec';
 
 const manifest: AppManifest = {
 	id: 'demo',
@@ -74,5 +80,28 @@ describe('volume ownership', () => {
 	it("matches an app's volumes across profiles, and only that app's", () => {
 		const owns = volumeBelongsToApp('demo');
 		expect([mine, otherProfile, otherApp].filter(owns)).toEqual([mine, otherProfile]);
+	});
+});
+
+describe('profile volume matching', () => {
+	const mine = volumeName('demo', 'user-1', 'storage');
+	const theirs = volumeName('other-app', 'user-2', 'cache');
+
+	it('matches one profile’s volumes across apps', () => {
+		expect(volumeBelongsToProfile('user-1')(mine)).toBe(true);
+		expect(volumeBelongsToProfile('user-1')(volumeName('other-app', 'user-1', 'cache'))).toBe(true);
+		expect(volumeBelongsToProfile('user-1')(theirs)).toBe(false);
+	});
+
+	it('finds volumes of profiles that no longer exist', () => {
+		const orphaned = volumeOfUnknownProfile(['user-1']);
+		expect(orphaned(mine)).toBe(false);
+		expect(orphaned(theirs)).toBe(true);
+	});
+
+	it('never matches a volume it didn’t name', () => {
+		for (const name of ['pivi-demo', 'someone-elses-volume', 'pivi-demo_notakey_storage']) {
+			expect(volumeOfUnknownProfile([])(name)).toBe(false);
+		}
 	});
 });

@@ -2,13 +2,10 @@ import { redirect } from '@sveltejs/kit';
 import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { getActiveProfileUser } from '#api/activeProfile';
 import { noteBrowserLocale } from '#api/apps/hostLocale';
-import { getLanAddressOrHostname } from '#api/lan';
-import { createPairingToken, isPairingTokenValid, PAIRING_TOKEN_TTL_MS } from '#api/pairing';
+import { handlePairing } from '#api/pairingHook';
 import { getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
 import { API_PREFIX, APPS_PREFIX, REMOTE_PREFIX, ROUTES, isPlayPath } from '#lib/routes';
-
-const PAIRING_COOKIE = 'pairing_token';
 
 // Only the TV's own pages say what language apps should use, not the paired
 // phone's remote page or API calls.
@@ -54,34 +51,6 @@ const handleActiveProfile: Handle = async ({ event, resolve }) => {
 	if (!user && requiresActiveProfile(event.url.pathname)) {
 		redirect(302, '/');
 	}
-
-	return resolve(event);
-};
-
-// GraphQL query resolvers (see #api/handlers/pairing) can't set cookies —
-// SvelteKit only allows that from a `command`/form action or, as here, a
-// hook — so the pairing token is minted once per request up front and just
-// read back by the `pairing` query.
-const handlePairing: Handle = ({ event, resolve }) => {
-	let pairingToken = event.cookies.get(PAIRING_COOKIE);
-	// The cookie can outlive the token's server-side TTL (idle screen, dev
-	// server restart wiping the in-memory token map, etc.) — re-mint rather
-	// than keep handing out a token the server no longer recognizes.
-	if (!pairingToken || !isPairingTokenValid(pairingToken)) {
-		pairingToken = createPairingToken();
-		event.cookies.set(PAIRING_COOKIE, pairingToken, {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'lax',
-			maxAge: PAIRING_TOKEN_TTL_MS / 1000
-		});
-	}
-
-	const lanAddress = getLanAddressOrHostname();
-	event.locals.pairingToken = pairingToken;
-	event.locals.remoteUrl = lanAddress
-		? `http://${lanAddress}:${event.url.port}/remote/${pairingToken}`
-		: null;
 
 	return resolve(event);
 };

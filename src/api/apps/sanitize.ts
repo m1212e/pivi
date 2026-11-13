@@ -6,6 +6,7 @@
 // so an app can't hand the phone a javascript:, intent: or file: URL.
 import type { AppAction, DashboardContribution } from '#sdk/dashboard';
 import type { AppScreen, UiNode } from '#sdk/ui';
+import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';
 
 // Same check the host applies to the app's own requests, passed in so this
 // module stays free of network concerns.
@@ -16,15 +17,6 @@ type UrlPolicy = (url: string) => boolean;
  * still let an app make every subscriber re-render a huge tree on each publish.
  */
 export const MAX_SCREEN_NODES = 5_000;
-
-/** Also checked by the openUrlOnPhone mutation, the other way a URL reaches the phone. */
-export function isPhoneSafeUrl(raw: string): boolean {
-	try {
-		return new URL(raw).protocol === 'https:';
-	} catch {
-		return false;
-	}
-}
 
 // An action the host can't safely follow is dropped rather than rewritten,
 // so a node never points somewhere the app didn't ask for.

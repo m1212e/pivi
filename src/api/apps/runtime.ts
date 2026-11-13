@@ -13,6 +13,7 @@
 // (its conditional-only export doesn't resolve consistently under this
 // project's Vite setup), and ensureRal() installs the RAL createMessageConnection
 // needs.
+import { dev } from '$app/env';
 import { getHostLocale } from './hostLocale';
 import {
 	CancellationTokenSource,
@@ -39,6 +40,7 @@ import {
 	resolveNextResultSchema,
 	resolveSkipSegmentsRequest,
 	resolveSkipSegmentsResultSchema,
+	pingRequest,
 	resolveStreamRequest,
 	shutdownNotification,
 	SUPPORTED_PROTOCOLS,
@@ -76,6 +78,27 @@ export type AppInstance = {
 /** What changed, so subscribers only refetch the part that did. */
 export type AppUpdateKind = 'dashboard' | 'screen';
 
+/** Why the watchdog killed an app, shown to the user as a toast. */
+export type ForcedStopReason = 'unresponsive' | 'cpu';
+
+/** The watchdog's thresholds, see DEFAULT_WATCHDOG. */
+export type WatchdogSettings = {
+	// How long an app gets to say it's ready. Includes booting the VM and the
+	// app's own startup.
+	readyMs: number;
+	// Resolving a stream runs the app's own extractor, which is the slow one.
+	resolveStreamMs: number;
+	requestMs: number;
+	// How long a host/ping after a timed out request may take before the app
+	// counts as hung rather than busy.
+	pingMs: number;
+	cpuSampleMs: number;
+	cpuWindowMs: number;
+	// Share of its vCPUs an app may use, averaged over cpuWindowMs, while the
+	// host isn't asking it for anything.
+	cpuLimit: number;
+};
+
 /**
  * Keeps this module to the protocol alone. Booting the sandbox and publishing
  * updates are wired in by manager.ts (and by the sandbox e2e test).
@@ -90,46 +113,71 @@ export type LoadAppOptions = {
 	onUpdate?: (kind: AppUpdateKind, screenId?: string) => void;
 	// The process ended without being asked to (a crash, an OOM kill).
 	onCrash?: (code: number | null) => void;
+	// The watchdog killed it. Not followed by onCrash.
+	onForcedStop?: (reason: ForcedStopReason) => void;
+	// What the CPU watchdog measures against.
+	cpus?: number;
+	// Overridable so tests don't have to wait out real minutes.
+	watchdog?: Partial<WatchdogSettings>;
 };
 
-// How long an app gets to say it's ready. Generous: it includes booting the
-// VM and the app's own startup.
-const READY_TIMEOUT_MS = 60_000;
+// A hung request or a sustained CPU burn with nothing asked of the app gets it
+// killed, so an app can't sit in the background mining or spinning. A minute
+// at 80% is far past any legitimate background work like refreshing a feed.
+const DEFAULT_WATCHDOG: WatchdogSettings = {
+	readyMs: 60_000,
+	resolveStreamMs: 45_000,
+	requestMs: 15_000,
+	pingMs: 5_000,
+	cpuSampleMs: 5_000,
+	cpuWindowMs: 60_000,
+	cpuLimit: 0.8
+};
 // How long a shutdown notification gets before the sandbox is killed anyway.
 const SHUTDOWN_GRACE_MS = 2_000;
 // Per log line, see createStderrLogger.
 const MAX_LOG_LINE = 2_000;
-// How long a request to the app may take before the host gives up on it, so a
-// hung app can't hang the player or the stream routes waiting on it. Resolving
-// a stream runs the app's own extractor, which is the slow one.
-const RESOLVE_STREAM_TIMEOUT_MS = 45_000;
-const REQUEST_TIMEOUT_MS = 15_000;
 // Distinct screens an app may keep published, so it can't grow host memory by
 // publishing under ever new ids.
 const MAX_SCREENS = 32;
+// What all of an app's published screens may add up to, serialized. The
+// per-screen node and string caps alone would still allow MAX_SCREENS times
+// the largest message.
+const MAX_SCREEN_BYTES = 8 << 20;
+// One protocol message from the app. Far below the SDK's own default, since
+// the host reads every running app's output and a screen never gets near it.
+const MAX_MESSAGE_BYTES = 4 << 20;
 
 function hasFeature(manifest: AppManifest, feature: Feature): boolean {
 	return manifest.features.includes(feature);
 }
 
-// Same rule for the app's own requests and the host's, so an app can't use the
-// host to reach a domain it was never allowed to.
-function urlAllowed(
+/**
+ * Same rule for the app's own requests and the host's, so an app can't use the
+ * host to reach a domain it was never allowed to. Plain http is only accepted
+ * in development, where a local test server rarely has a certificate. In
+ * production it would let anyone on the path tamper with what the host fetches.
+ */
+export function urlAllowed(
 	manifest: AppManifest,
 	granted: readonly PermissionKey[],
-	rawUrl: string
+	rawUrl: string,
+	allowHttp = dev
 ): boolean {
 	if (!granted.includes('network') || !manifest.network) return false;
 	try {
 		const url = new URL(rawUrl);
 		return (
-			(url.protocol === 'https:' || url.protocol === 'http:') &&
+			(url.protocol === 'https:' || (allowHttp && url.protocol === 'http:')) &&
 			domainsAllow(manifest.network.domains, url.hostname)
 		);
 	} catch {
 		return false;
 	}
 }
+
+/** A request or the ready handshake ran out of time, which gets the app killed. */
+class AppTimeoutError extends Error {}
 
 // Cancels the request on the app's side too, so it can stop the work.
 async function requestWithTimeout<P, R>(
@@ -143,7 +191,7 @@ async function requestWithTimeout<P, R>(
 	const timeout = new Promise<never>((_, reject) => {
 		timer = setTimeout(() => {
 			cancellation.cancel();
-			reject(new Error(`${type.method} timed out after ${timeoutMs}ms`));
+			reject(new AppTimeoutError(`${type.method} timed out after ${timeoutMs}ms`));
 		}, timeoutMs);
 	});
 	try {
@@ -175,7 +223,15 @@ function createStderrLogger(appId: string) {
 type PublishedState = {
 	dashboard?: DashboardContribution;
 	screens: Map<string, AppScreen>;
+	// Serialized size per screen id, for MAX_SCREEN_BYTES.
+	screenBytes: Map<string, number>;
 };
+
+function totalBytes(sizes: Map<string, number>): number {
+	let total = 0;
+	for (const size of sizes.values()) total += size;
+	return total;
+}
 
 // The app's inbound side. Each handler validates first and ignores what fails,
 // since the app is untrusted and a bad message must not take the host down.
@@ -215,7 +271,16 @@ function wireNotifications(
 				`[app:${manifest.id}] ignored a screen past the ${MAX_SCREENS} limit`
 			);
 		}
+		const bytes = JSON.stringify(screen).length;
+		const others =
+			totalBytes(published.screenBytes) - (published.screenBytes.get(screen.screenId) ?? 0);
+		if (others + bytes > MAX_SCREEN_BYTES) {
+			return void console.warn(
+				`[app:${manifest.id}] ignored a screen past the ${MAX_SCREEN_BYTES} byte budget`
+			);
+		}
 		published.screens.set(screen.screenId, screen);
+		published.screenBytes.set(screen.screenId, bytes);
 		onUpdate?.('screen', screen.screenId);
 	});
 }
@@ -227,13 +292,14 @@ function wireNotifications(
  */
 export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	const { manifest, granted } = options;
+	const watchdog = { ...DEFAULT_WATCHDOG, ...options.watchdog };
 	// Checked again here, not just at install: an app installed under an older
 	// host can't even say `ready` in a protocol this one speaks, so it would
 	// otherwise boot a VM only to time out.
 	if (!SUPPORTED_PROTOCOLS.includes(manifest.protocol)) {
 		throw new Error(`${manifest.id} speaks app protocol ${manifest.protocol}; update it`);
 	}
-	const published: PublishedState = { screens: new Map() };
+	const published: PublishedState = { screens: new Map(), screenBytes: new Map() };
 
 	const reader = new PushMessageReader();
 
@@ -253,7 +319,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	const exited = new Promise<void>((resolve) => (markExited = resolve));
 
 	const logStderr = createStderrLogger(manifest.id);
-	const splitter = new LineSplitter();
+	const splitter = new LineSplitter(MAX_MESSAGE_BYTES);
 
 	const sandbox: RunningSandbox = await options.start({
 		onStdout(chunk) {
@@ -293,9 +359,92 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	});
 	connection.listen();
 
+	let inFlight = 0;
+	let cpuWatch: ReturnType<typeof setInterval> | undefined;
+
+	// No shutdown notification or grace period, the app has had its chance.
+	async function forceStop(reason: ForcedStopReason) {
+		if (disposing) return;
+		disposing = true;
+		clearInterval(cpuWatch);
+		const why = reason === 'cpu' ? 'kept using too much CPU' : 'stopped responding';
+		console.error(`[app:${manifest.id}] ${why}, killing it`);
+		connection.dispose();
+		await sandbox.kill().catch(() => {});
+		options.onForcedStop?.(reason);
+	}
+
+	// Any answer counts, even an error for a method the app doesn't know, since
+	// all it has to show is a message loop that still runs.
+	async function answersPing(): Promise<boolean> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timedOut = new Promise<false>((resolve) => {
+			timer = setTimeout(() => resolve(false), watchdog.pingMs);
+		});
+		try {
+			const answered = connection.sendRequest(pingRequest).then(
+				() => true,
+				() => true
+			);
+			return await Promise.race([answered, timedOut]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
+	// A timed out request alone only fails that request, an app working through
+	// a queue is slow, not hung. Only one that can't even answer a ping is killed.
+	async function stopIfHung() {
+		if (!(await answersPing())) await forceStop('unresponsive');
+	}
+
+	// Every host request goes through here, so a hang gets the app killed and the
+	// CPU watchdog knows when the app is busy because the host asked.
+	async function request<P, R>(
+		type: RequestType<P, R, void>,
+		params: P,
+		timeoutMs: number
+	): Promise<unknown> {
+		inFlight++;
+		try {
+			return await requestWithTimeout(connection, type, params, timeoutMs);
+		} catch (error) {
+			if (error instanceof AppTimeoutError && !disposing) void stopIfHung();
+			throw error;
+		} finally {
+			inFlight--;
+		}
+	}
+
+	// Averages over a sliding window of vCPU time samples. Any request in flight
+	// restarts the window, since that work is the host's doing.
+	function watchCpu() {
+		const share = (options.cpus ?? 1) * 1e6;
+		let samples: { at: number; cpuNs: number }[] = [];
+		cpuWatch = setInterval(async () => {
+			const cpuNs = await sandbox.cpuTimeNs();
+			if (cpuNs === undefined || disposing) return;
+			const at = Date.now();
+			if (inFlight > 0) {
+				samples = [{ at, cpuNs }];
+				return;
+			}
+			samples = [
+				...samples.filter((sample) => at - sample.at <= watchdog.cpuWindowMs),
+				{ at, cpuNs }
+			];
+			const oldest = samples[0];
+			if (at - oldest.at < watchdog.cpuWindowMs - watchdog.cpuSampleMs) return;
+			if ((cpuNs - oldest.cpuNs) / ((at - oldest.at) * share) > watchdog.cpuLimit) {
+				void forceStop('cpu');
+			}
+		}, watchdog.cpuSampleMs);
+		cpuWatch.unref?.();
+	}
+
 	const timeout = setTimeout(
-		() => rejectReady(new Error('App never became ready')),
-		READY_TIMEOUT_MS
+		() => rejectReady(new AppTimeoutError('App never became ready')),
+		watchdog.readyMs
 	);
 	try {
 		const protocol = await ready;
@@ -303,6 +452,10 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 			throw new Error(`App speaks protocol ${protocol}, its manifest says ${manifest.protocol}`);
 		}
 	} catch (error) {
+		if (error instanceof AppTimeoutError) {
+			await forceStop('unresponsive');
+			throw error;
+		}
 		disposing = true;
 		connection.dispose();
 		await sandbox.stop().catch(() => {});
@@ -313,6 +466,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 
 	// Only now, so the app doesn't act on a locale before it has been vetted.
 	connection.sendNotification(activateNotification, { locale: getHostLocale() });
+	watchCpu();
 
 	return {
 		manifest,
@@ -331,24 +485,14 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		async resolveStream(sessionId, maxHeight) {
 			if (!hasFeature(manifest, 'playback')) throw new Error('This app cannot play media');
 			return resolvedStreamSchema.parse(
-				await requestWithTimeout(
-					connection,
-					resolveStreamRequest,
-					{ sessionId, maxHeight },
-					RESOLVE_STREAM_TIMEOUT_MS
-				)
+				await request(resolveStreamRequest, { sessionId, maxHeight }, watchdog.resolveStreamMs)
 			);
 		},
 
 		async resolveSkipSegments(sessionId) {
 			if (!hasFeature(manifest, 'skipSegments')) return [];
 			try {
-				const result = await requestWithTimeout(
-					connection,
-					resolveSkipSegmentsRequest,
-					{ sessionId },
-					REQUEST_TIMEOUT_MS
-				);
+				const result = await request(resolveSkipSegmentsRequest, { sessionId }, watchdog.requestMs);
 				return resolveSkipSegmentsResultSchema.parse(result).segments;
 			} catch {
 				// A failing or malformed answer is treated as nothing to report.
@@ -359,15 +503,15 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		async resolveNext(sessionId, context) {
 			if (!hasFeature(manifest, 'playback')) return undefined;
 			try {
-				const result = await requestWithTimeout(
-					connection,
+				const result = await request(
 					resolveNextRequest,
 					{ sessionId, context },
-					REQUEST_TIMEOUT_MS
+					watchdog.requestMs
 				);
 				return resolveNextResultSchema.parse(result).sessionId;
 			} catch {
-				// Apps that don't sequence playback just don't answer.
+				// Apps that don't sequence playback answer with an error. One that
+				// never answers at all was killed by request() by now.
 				return undefined;
 			}
 		},
@@ -375,6 +519,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		async dispose() {
 			if (disposing) return;
 			disposing = true;
+			clearInterval(cpuWatch);
 			connection.sendNotification(shutdownNotification);
 			// Give it a moment to leave on its own before the sandbox is torn down.
 			await Promise.race([

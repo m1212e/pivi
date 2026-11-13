@@ -811,7 +811,14 @@ function main() {
 	connection.onRequest(resolveNextRequest, async ({ sessionId, context }) => {
 		if (!context) return {};
 		try {
-			return { sessionId: await fetchNextVideoId(innertube, sessionId, context) };
+			// Well inside the host's request timeout, which kills an app that doesn't answer.
+			const next = await Promise.race([
+				fetchNextVideoId(innertube, sessionId, context),
+				new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('timed out')), 10_000).unref()
+				)
+			]);
+			return { sessionId: next };
 		} catch (err) {
 			log('error', `next video failed: ${err instanceof Error ? err.message : String(err)}`);
 			return {};

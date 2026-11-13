@@ -55,13 +55,15 @@ import { connectRemoteSession, type RemoteSession } from './session';
 /** The TV's last pushed screen state, also typed into the remote page's tab components. */
 export type TvState = z.infer<typeof stateParamsSchema>;
 type PlayerAction = z.infer<typeof playerActionParamsSchema>['action'];
-type RemotePhase = 'connecting' | 'not-paired' | 'error' | 'ready';
+type RemotePhase = 'connecting' | 'awaiting-approval' | 'not-paired' | 'error' | 'ready';
 
 // Shown until the TV's first push arrives, so the UI renders without null checks.
 const INITIAL_TV_STATE: TvState = {
 	hasPinPad: false,
 	hasTextInput: false,
 	textValue: '',
+	textMasked: false,
+	textFieldId: 0,
 	suggestions: [],
 	canGoBack: false,
 	canGoHome: false,
@@ -87,12 +89,23 @@ function buzz(ms: number) {
 	navigator.vibrate?.(ms);
 }
 
+// The QR code carries the pairing token in the fragment, which the browser
+// never sends to the server, so it doesn't show up on the wire or in any
+// log. Removed from the address bar right away so it isn't kept in history or
+// bookmarked into a home screen shortcut.
+function takePairingTokenFromUrl(): string | null {
+	const token = location.hash.slice(1);
+	if (!token) return null;
+	history.replaceState(history.state, '', location.pathname + location.search);
+	return token;
+}
+
 /**
  * Everything the phone remote page (/remote) needs from the TV, kept out of
  * the page so its tab components only render. Connects on mount and must be
  * created during component init.
  */
-export function createRemoteController(token: string | null) {
+export function createRemoteController() {
 	let phase = $state<RemotePhase>('connecting');
 	let errorMessage = $state('');
 	let connected = $state(false);
@@ -130,11 +143,15 @@ export function createRemoteController(token: string | null) {
 	});
 
 	function applyTvState(state: TvState) {
+		const sameField = state.textFieldId === tv.textFieldId;
 		tv = { ...state, suggestions: state.hasTextInput ? state.suggestions : [] };
 		// Cheap and idempotent, and covers a TV that reloaded and forgot.
 		if (state.hasTextInput) reportTextEntryMode();
 		else recentlySent = [];
-		text = mirroredText(state, text, recentlySent, Date.now());
+		// The TV never sends a password field's value, so there is nothing to
+		// mirror. The phone keeps what it typed and starts empty on a new field.
+		if (state.textMasked) text = sameField ? text : '';
+		else text = mirroredText(state, text, recentlySent, Date.now());
 	}
 
 	// A new tab, not this one: the remote is the TV's only input device, so
@@ -162,7 +179,8 @@ export function createRemoteController(token: string | null) {
 
 		// Registered only from this route (not the root layout) so installing
 		// "Pivi Remote" to the home screen doesn't put a service worker in
-		// front of the rest of the app.
+		// front of the rest of the app. Browsers only allow it in a secure
+		// context, so on the plain HTTP LAN address this does nothing.
 		navigator.serviceWorker?.register('/remote/sw.js', { scope: '/remote/' }).catch(() => {});
 
 		ensureRal();
@@ -183,10 +201,13 @@ export function createRemoteController(token: string | null) {
 		onNotification(conn, openUrlNotification, openUrlParamsSchema, ({ url }) => openSignInUrl(url));
 		conn.listen();
 
-		connectRemoteSession(token, {
+		connectRemoteSession(takePairingTokenFromUrl(), {
 			// Every message on this channel is a real JSON-RPC frame the TV's connection produced.
 			onMessage: (message) => reader.push(message as unknown as Message),
-			onClose: () => (connected = false)
+			onClose: () => (connected = false),
+			onAwaitingApproval: () => {
+				if (!cancelled) phase = 'awaiting-approval';
+			}
 		})
 			.then((result) => {
 				if (cancelled) return;

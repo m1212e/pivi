@@ -4,9 +4,8 @@
 // sign in link.
 import { GraphQLError } from 'graphql';
 import { schemaBuilder } from '../rumble';
-import { openUrlNotification } from '#lib/pairing/remoteProtocol';
+import { isPhoneSafeUrl, openUrlNotification } from '#lib/remote/remoteProtocol';
 import { hasConnectedPhone, sendToPhones } from '../ws/relay';
-import { isPhoneSafeUrl } from '../apps/sanitize';
 import { PHONE_CONNECTION_EVENT, remotePubSub } from '../ws/remotePubsub';
 
 type PhoneConnection = { connected: boolean };

@@ -1,4 +1,6 @@
 // Keys on the app pubsub (pubsub.ts) that aren't tied to one app.
+import { createPubSub } from 'graphql-yoga';
+import type { ForcedStopReason } from './runtime';
 import { appPubSub } from './pubsub';
 
 /**
@@ -24,3 +26,12 @@ export function announceAppListChanged(): void {
 	appPubSub.publish(APP_LIST_EVENT);
 	appPubSub.publish(ANY_DASHBOARD_EVENT);
 }
+
+/** One app the watchdog killed, for the TV's error toast. */
+export type AppForcedStop = { appId: string; appName: string; reason: ForcedStopReason };
+
+/**
+ * Separate from appPubSub because these carry a payload: the toast is about
+ * one moment, so there is no state for a resolver to read back afterwards.
+ */
+export const forcedStopPubSub = createPubSub<{ 'apps:forcedStop': [AppForcedStop] }>();

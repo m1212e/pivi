@@ -42,6 +42,12 @@ export type AppDashboard = {
 	cards: () => AppCard[];
 };
 
+export type AppForcedStop = {
+	appId: String;
+	appName: String;
+	reason: String;
+};
+
 export type AppInfo = {
 	entryScreenId: String;
 	features: String[];
@@ -431,6 +437,7 @@ export type StringWhereInputArgument = {
 
 export type Subscription = {
 	appDashboards: () => AppDashboard[];
+	appForcedStop: () => AppForcedStop;
 	appManagement: () => AppManagement;
 	appScreen: (p: { appId: String; screenId: String }) => AppScreenData;
 	apps: () => AppInfo[];
@@ -525,6 +532,7 @@ export const client = {
 		urqlClient,
 		availableSubscriptions: new Set([
 			'appDashboards',
+			'appForcedStop',
 			'appManagement',
 			'appScreen',
 			'apps',

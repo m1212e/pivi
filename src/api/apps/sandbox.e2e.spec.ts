@@ -136,3 +136,64 @@ IqozONbbdbqz11hlRJy9c7SG+hdcFl9jE9uE/dwtuwU2MqU9T/cN0YkWww==
 		await microsandboxBackend.removeVolumes(volumeBelongsToApp('youtube'));
 	}, 300_000);
 });
+
+// An app controls its declared domains' DNS, so a name it declared can point at
+// the LAN or the host. Needs KVM, internet and an HTTP listener on port 80 at
+// a private address, for example the host's LAN IP with
+//
+//   docker run --rm -p 80:80 busybox sh -c 'echo reached > i && httpd -f -p 80'
+//   PIVI_E2E_PRIVATE_HTTP=192.168.1.20 PIVI_SANDBOX_HOME=/tmp/msbh \
+//   npx vitest run --project server sandbox.e2e
+const PRIVATE_HTTP = process.env.PIVI_E2E_PRIVATE_HTTP;
+
+// Runs `script` in a throwaway alpine VM allowed onto `domains`, returning its stdout.
+async function runInSandbox(domains: string[], script: string): Promise<string> {
+	let output = '';
+	let done!: () => void;
+	const exited = new Promise<void>((resolve) => (done = resolve));
+	const sandbox = await microsandboxBackend.start(
+		{
+			name: 'pivi-e2e-network',
+			image: 'alpine:3.20',
+			command: ['sh', '-c', script],
+			memoryMiB: 256,
+			cpus: 1,
+			network: { domains },
+			volumes: []
+		},
+		{
+			onStdout: (chunk) => (output += new TextDecoder().decode(chunk)),
+			onStderr: () => {},
+			onExit: () => done()
+		}
+	);
+	try {
+		await exited;
+	} finally {
+		await sandbox.stop();
+	}
+	return output;
+}
+
+describe.skipIf(!PRIVATE_HTTP)('the sandbox network policy', () => {
+	it('keeps a declared domain from reaching private and loopback addresses', async () => {
+		const dashed = PRIVATE_HTTP!.replaceAll('.', '-');
+		const probe = (url: string) =>
+			`if wget -q -T 6 -O /dev/null '${url}'; then echo "open ${url}"; else echo "closed ${url}"; fi`;
+		const output = await runInSandbox(
+			['*.nip.io', 'example.com'],
+			[
+				probe(`http://${dashed}.nip.io/`),
+				probe('http://127-0-0-1.nip.io/'),
+				probe(`http://${PRIVATE_HTTP}/`),
+				probe('https://example.com/')
+			].join('; ')
+		);
+
+		expect(output).toContain(`closed http://${dashed}.nip.io/`);
+		expect(output).toContain('closed http://127-0-0-1.nip.io/');
+		expect(output).toContain(`closed http://${PRIVATE_HTTP}/`);
+		// The control: the same policy still lets declared public traffic out.
+		expect(output).toContain('open https://example.com/');
+	}, 300_000);
+});

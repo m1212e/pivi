@@ -5,11 +5,17 @@
 // apps/pubsub.ts event so the frontend never has to poll.
 import { schemaBuilder } from '../rumble';
 import { defaultAppDeps } from '../apps/deps';
-import { ANY_DASHBOARD_EVENT, APP_LIST_EVENT } from '../apps/events';
-import { getApp, getStartedApps } from '../apps/manager';
+import {
+	ANY_DASHBOARD_EVENT,
+	APP_LIST_EVENT,
+	forcedStopPubSub,
+	type AppForcedStop
+} from '../apps/events';
+import { getApp, getStartedApps, holdApp } from '../apps/manager';
 import { dbAppStore } from '../apps/store';
 import { appPubSub } from '../apps/pubsub';
 import { hasAvailableUpdate } from '../apps/updateAvailability';
+import { releaseWhenDone } from '../apps/usage';
 
 type AppInfo = {
 	id: string;
@@ -86,6 +92,15 @@ const AppScreenDataRef = schemaBuilder.objectRef<AppScreenData>('AppScreenData')
 	})
 });
 
+const AppForcedStopRef = schemaBuilder.objectRef<AppForcedStop>('AppForcedStop').implement({
+	fields: (t) => ({
+		appId: t.exposeString('appId'),
+		appName: t.exposeString('appName'),
+		// `unresponsive` or `cpu`, which picks the toast's wording.
+		reason: t.exposeString('reason')
+	})
+});
+
 // Read from the database rather than the running apps, so listing apps
 // never has to boot one.
 async function resolveApps(): Promise<AppInfo[]> {
@@ -116,7 +131,7 @@ async function resolveDashboards(): Promise<AppDashboard[]> {
 		.filter((row) => row.enabled && row.approvedManifest.features.includes('dashboard'))
 		.filter((row) => apps.some((entry) => entry.appId === row.appId))
 		.map((row) => {
-			const dashboard = apps.find((entry) => entry.appId === row.appId)?.app?.getDashboard();
+			const dashboard = apps.find((entry) => entry.appId === row.appId)?.dashboard;
 			return {
 				appId: row.approvedManifest.id,
 				appName: row.approvedManifest.name,
@@ -159,6 +174,12 @@ schemaBuilder.queryFields((t) => ({
 }));
 
 schemaBuilder.subscriptionFields((t) => ({
+	// One event per app the watchdog killed, so the TV can say why it vanished.
+	appForcedStop: t.field({
+		type: AppForcedStopRef,
+		subscribe: () => forcedStopPubSub.subscribe('apps:forcedStop'),
+		resolve: (payload) => payload
+	}),
 	apps: t.field({
 		type: [AppInfoRef],
 		subscribe: () => appPubSub.subscribe(APP_LIST_EVENT),
@@ -175,7 +196,12 @@ schemaBuilder.subscriptionFields((t) => ({
 			appId: t.arg.string({ required: true }),
 			screenId: t.arg.string({ required: true })
 		},
-		subscribe: (_root, args) => appPubSub.subscribe(`${args.appId}:screen:${args.screenId}`),
+		subscribe: (_root, args) =>
+			// An open screen is the app in use, see usage.ts.
+			releaseWhenDone(
+				appPubSub.subscribe(`${args.appId}:screen:${args.screenId}`),
+				holdApp(args.appId)
+			),
 		resolve: (_root, args) => resolveScreen(args.appId, args.screenId)
 	})
 }));

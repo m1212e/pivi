@@ -42,6 +42,25 @@ export function volumeName(appId: string, userId: string, kind: 'storage' | 'cac
 export const volumeBelongsToApp = (appId: string) => (name: string) =>
 	name.startsWith(`${SANDBOX_PREFIX}${appId}_`);
 
+// Reads back the profile part of a name volumeName built, undefined for any
+// other volume, so profile cleanup never touches one that isn't ours.
+function profileKeyOfVolume(name: string): string | undefined {
+	return name.match(/^pivi-[a-z0-9-]+_([0-9a-f]{12})_(storage|cache)$/)?.[1];
+}
+
+/** Every app's volumes for one profile, for removeProfileAppData. */
+export const volumeBelongsToProfile = (userId: string) => (name: string) =>
+	profileKeyOfVolume(name) === profileKey(userId);
+
+/** Volumes of profiles that no longer exist, for the cleanup at boot. */
+export const volumeOfUnknownProfile = (userIds: readonly string[]) => {
+	const known = new Set(userIds.map(profileKey));
+	return (name: string) => {
+		const key = profileKeyOfVolume(name);
+		return key !== undefined && !known.has(key);
+	};
+};
+
 /**
  * Called by manager.ts each time an app starts, which is why a permission
  * change takes effect on restart.

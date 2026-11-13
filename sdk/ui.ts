@@ -11,6 +11,7 @@
 // so steps 1-2 are also what app authors outside TypeScript get to see.
 import { z } from 'zod';
 import { appActionSchema, type AppAction } from './dashboard';
+import { idSchema, MAX_LIST_ITEMS, textSchema, urlSchema } from './limits';
 
 /**
  * One node of an app screen, rendered by the host. Written by hand
@@ -184,9 +185,9 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 		z.object({
 			type: z.literal('container'),
 			direction: z.enum(['row', 'column']),
-			children: z.array(uiNodeSchema),
+			children: z.array(uiNodeSchema).max(MAX_LIST_ITEMS),
 			wrap: z.boolean().optional(),
-			title: z.string().optional(),
+			title: textSchema.optional(),
 			width: cssLengthSchema.optional(),
 			action: appActionSchema.optional(),
 			grow: z.boolean().optional(),
@@ -194,88 +195,88 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 			justify: z.enum(['between', 'around']).optional(),
 			center: z.boolean().optional(),
 			panel: z.boolean().optional(),
-			onSelect: z.string().optional(),
+			onSelect: idSchema.optional(),
 			sticky: z.boolean().optional(),
-			onReachEnd: z.string().optional()
+			onReachEnd: idSchema.optional()
 		}),
 		z.object({
 			type: z.literal('text'),
-			value: z.string(),
+			value: textSchema,
 			variant: z.enum(['title', 'subtitle', 'body', 'headline', 'display']).optional(),
 			lines: z.number().int().min(1).max(20).optional()
 		}),
 		z.object({
 			type: z.literal('icon'),
-			path: z.string(),
+			path: textSchema,
 			size: z.enum(['normal', 'large']).optional()
 		}),
-		z.object({ type: z.literal('spinner'), label: z.string().optional() }),
+		z.object({ type: z.literal('spinner'), label: textSchema.optional() }),
 		z.object({
 			type: z.literal('skeleton'),
 			shape: z.enum(['video', 'poster', 'avatar']).optional()
 		}),
 		z.object({
 			type: z.literal('mediaCard'),
-			title: z.string(),
-			meta: z.string(),
-			image: z.string(),
-			fallbackImage: z.string().optional(),
+			title: textSchema,
+			meta: textSchema,
+			image: urlSchema,
+			fallbackImage: urlSchema.optional(),
 			shape: z.enum(['video', 'poster', 'avatar']).optional(),
 			stacked: z.boolean().optional(),
-			badge: z.string().optional(),
+			badge: textSchema.optional(),
 			progress: z.number().optional(),
 			action: appActionSchema.optional(),
-			onSelect: z.string().optional()
+			onSelect: idSchema.optional()
 		}),
 		z.object({
 			type: z.literal('shelf'),
-			title: z.string(),
+			title: textSchema,
 			children: z.array(uiNodeSchema)
 		}),
 		z.object({
 			type: z.literal('hero'),
-			title: z.string(),
-			description: z.string(),
-			image: z.string().optional(),
-			fallbackImage: z.string().optional(),
-			badge: z.string().optional(),
-			source: z.string().optional(),
+			title: textSchema,
+			description: textSchema,
+			image: urlSchema.optional(),
+			fallbackImage: urlSchema.optional(),
+			badge: textSchema.optional(),
+			source: textSchema.optional(),
 			action: appActionSchema
 		}),
 		z.object({
 			type: z.literal('image'),
-			src: z.string(),
+			src: urlSchema,
 			aspect: z.enum(['video', 'poster', 'square']).optional(),
 			width: cssLengthSchema.optional(),
-			badge: z.string().optional()
+			badge: textSchema.optional()
 		}),
 		z.object({
 			type: z.literal('button'),
-			label: z.string(),
-			onSelect: z.string().optional(),
+			label: textSchema,
+			onSelect: idSchema.optional(),
 			action: appActionSchema.optional(),
 			variant: z.enum(['solid', 'soft', 'nav']).optional(),
 			selected: z.boolean().optional(),
-			icon: z.string().optional(),
+			icon: textSchema.optional(),
 			size: z.enum(['sm', 'md', 'lg']).optional()
 		}),
 		z.object({
 			type: z.literal('toggle'),
-			label: z.string(),
+			label: textSchema,
 			value: z.boolean(),
-			onChange: z.string()
+			onChange: idSchema
 		}),
 		z.object({
 			type: z.literal('textInput'),
-			label: z.string(),
-			placeholder: z.string().optional(),
+			label: textSchema,
+			placeholder: textSchema.optional(),
 			secret: z.boolean().optional(),
 			search: z.boolean().optional(),
-			onInput: z.string().optional(),
-			suggestions: z.array(z.string()).optional(),
-			onSubmit: z.string()
+			onInput: idSchema.optional(),
+			suggestions: z.array(textSchema).max(100).optional(),
+			onSubmit: idSchema
 		}),
-		z.object({ type: z.literal('list'), items: z.array(uiNodeSchema) })
+		z.object({ type: z.literal('list'), items: z.array(uiNodeSchema).max(MAX_LIST_ITEMS) })
 	])
 );
 
@@ -284,7 +285,7 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
  * host knows who is talking and a self-declared one could impersonate another.
  */
 export const appScreenSchema = z.object({
-	screenId: z.string(),
+	screenId: idSchema,
 	root: uiNodeSchema
 });
 
@@ -296,9 +297,9 @@ export type AppScreen = z.infer<typeof appScreenSchema>;
  * nothing for a press.
  */
 export const uiEventSchema = z.object({
-	screenId: z.string(),
-	eventId: z.string(),
-	value: z.union([z.string(), z.boolean()]).optional()
+	screenId: idSchema,
+	eventId: idSchema,
+	value: z.union([textSchema, z.boolean()]).optional()
 });
 
 export type UiEvent = z.infer<typeof uiEventSchema>;

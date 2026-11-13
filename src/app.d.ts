@@ -8,9 +8,10 @@ declare global {
 			// Sourced from the global `active_profile` row (#api/handlers/activeProfile),
 			// not a per-browser session — see hooks.server.ts.
 			user?: typeof user.$inferSelect;
-			// Set in hooks.server.ts — see the comment on handlePairing there.
-			pairingToken: string;
-			remoteUrl: string | null;
+			// Set in hooks.server.ts for the TV's own pages, never for the remote
+			// page. See the comment on handlePairing there.
+			pairingToken?: string;
+			remoteUrl?: string | null;
 		}
 
 		// interface Error {}

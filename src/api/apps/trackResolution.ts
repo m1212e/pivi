@@ -4,7 +4,7 @@ import { error } from '@sveltejs/kit';
 import { getApp } from '#api/apps/manager';
 import { resolveStreamCached } from '#api/apps/streamCache';
 import type { ResolvedStream } from '#sdk/protocol';
-import { fetchAppUrl } from './appFetch';
+import { fetchAppUrl, type AppFetchInit } from './appFetch';
 import type { AppInstance } from './runtime';
 
 /** Rejects a `[track]` route param that isn't video or audio before it picks a URL. */
@@ -42,7 +42,7 @@ export async function resolveTrack(
 	sessionId: string,
 	track: 'video' | 'audio',
 	maxHeight: number | undefined
-): Promise<{ url: string; fetch: (init?: RequestInit) => Promise<Response> }> {
+): Promise<{ url: string; fetch: (init?: AppFetchInit) => Promise<Response> }> {
 	const { app, stream } = await resolveStreamOrError(appId, sessionId, maxHeight);
 	const url = track === 'video' ? stream.videoUrl : stream.audioUrl;
 	if (!url) error(404, `No ${track} track for this session`);

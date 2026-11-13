@@ -54,6 +54,12 @@ export type RunningSandbox = {
 	write(data: Uint8Array): Promise<void>;
 	// Stops the process and tears the sandbox down. Safe to call twice.
 	stop(): Promise<void>;
+	// Tears the sandbox down without giving the app any say, for one that
+	// stopped answering or is burning CPU.
+	kill(): Promise<void>;
+	// Total vCPU time the guest has used so far, for the CPU watchdog. Undefined
+	// when the backend can't tell right now.
+	cpuTimeNs(): Promise<number | undefined>;
 };
 
 /**

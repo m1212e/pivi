@@ -17,7 +17,7 @@
 	import * as m from '#lib/paraglide/messages';
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
-	import type { RemoteController } from '#lib/pairing/remoteController.svelte';
+	import type { RemoteController } from '#lib/remote/remoteController.svelte';
 	import { formatTime } from '#lib/playback/time';
 
 	const QUALITY_MODE_ICON = { direct: Zap, mse: Layers, ffmpeg: Server } as const;

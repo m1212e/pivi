@@ -10,9 +10,9 @@
 	import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { pairingSocketUrl } from '#lib/wsConfig';
-	import type { TvHello } from '#lib/pairing/protocol';
+	import type { TvHello } from '#lib/remote/protocol';
 	import { ensureRal } from '#sdk/rpcRal';
-	import { createReconnector } from '#lib/pairing/reconnect';
+	import { createReconnector } from '#lib/remote/reconnect';
 	import { PushMessageReader, SinkMessageWriter } from '#sdk/rpcTransport';
 	import {
 		backNotification,
@@ -25,6 +25,12 @@
 		keyParamsSchema,
 		moveNotification,
 		moveParamsSchema,
+		pairingDecisionNotification,
+		pairingDecisionParamsSchema,
+		pairingRequestClosedNotification,
+		pairingRequestClosedParamsSchema,
+		pairingRequestNotification,
+		pairingRequestParamsSchema,
 		playerActionNotification,
 		playerActionParamsSchema,
 		playerQualityNotification,
@@ -52,7 +58,7 @@
 		textEntryModeParamsSchema,
 		textNotification,
 		textParamsSchema
-	} from '#lib/pairing/remoteProtocol';
+	} from '#lib/remote/remoteProtocol';
 	import { onNotification, sendNotification } from '#lib/rpc';
 	import * as m from '#lib/paraglide/messages';
 	import { playSound } from '#lib/sounds';
@@ -60,6 +66,7 @@
 	import { planMove } from '#lib/spatialNav';
 	import { isTextualInput, requestTextExit, setInputValue, submitInput } from '#lib/textEntry';
 	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/onscreenkeyboard.svelte';
+	import PairingApprovalDialog from './PairingApprovalDialog.svelte';
 
 	// Lives in the root layout and connects the TV page to the paired phone
 	// through the local relay. It turns the phone's gestures into focus moves,
@@ -67,6 +74,8 @@
 	// controls that apply.
 	let socket: WebSocket | undefined;
 	let connection: MessageConnection | undefined;
+	// New phones waiting for this TV to let them pair, oldest first.
+	let approvalRequests = $state<{ requestId: string; name: string }[]>([]);
 	let currentEl: HTMLElement | null = null;
 
 	// Fixed, as the remote has one finger and the id is never one the browser tracks.
@@ -118,11 +127,27 @@
 		return osk.target?.isConnected ? osk.target : null;
 	}
 
+	// Stable per element, so the phone can tell when focus moved to another field.
+	const fieldIds = new WeakMap<Element, number>();
+	let nextFieldId = 1;
+	function fieldId(el: Element): number {
+		let id = fieldIds.get(el);
+		if (id === undefined) fieldIds.set(el, (id = nextFieldId++));
+		return id;
+	}
+
 	// Follows plain DOM focus instead of a marker attribute, so any <input>
-	// gets phone keyboard support without extra wiring.
+	// gets phone keyboard support without extra wiring. A password (the wifi
+	// one, say) is never put into the state, which every paired phone receives.
 	function textState() {
 		const el = focusedTextInput();
-		return { hasTextInput: !!el, textValue: el?.value ?? '' };
+		const masked = el instanceof HTMLInputElement && el.type === 'password';
+		return {
+			hasTextInput: !!el,
+			textValue: el && !masked ? el.value : '',
+			textMasked: masked,
+			textFieldId: el ? fieldId(el) : 0
+		};
 	}
 
 	function playerState() {
@@ -230,6 +255,10 @@
 				'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 			)
 		].filter((el) => el.offsetParent !== null || el.checkVisibility());
+		// A modal (the pairing prompt) keeps focus to itself, so its buttons are
+		// the only thing a swipe can reach.
+		const modal = document.querySelector('[data-pivi-modal]');
+		if (modal) return all.filter((el) => modal.contains(el));
 		// Focus stays on the keys while the keyboard is open, so a stray swipe
 		// cannot land on the page behind it.
 		return keyboardVisible() ? all.filter((el) => el.closest('[data-pivi-osk]')) : all;
@@ -523,6 +552,23 @@
 				showRemoteToast(() => toast(m.remote_disconnected_toast({ name }), toastOptions(Unplug)));
 			}
 		);
+		onNotification(
+			connection,
+			pairingRequestNotification,
+			pairingRequestParamsSchema,
+			(request) => {
+				if (approvalRequests.some((r) => r.requestId === request.requestId)) return;
+				approvalRequests = [...approvalRequests, request];
+			}
+		);
+		onNotification(
+			connection,
+			pairingRequestClosedNotification,
+			pairingRequestClosedParamsSchema,
+			({ requestId }) => {
+				approvalRequests = approvalRequests.filter((r) => r.requestId !== requestId);
+			}
+		);
 		connection.listen();
 
 		// The relay lives in the server process, so a server restart drops this
@@ -600,4 +646,22 @@
 		clearTimeout(remoteToastTimer);
 		remoteToastTimer = setTimeout(() => toast.dismiss(REMOTE_TOAST_ID), REMOTE_TOAST_MS);
 	}
+
+	function decidePairing(requestId: string, approved: boolean) {
+		approvalRequests = approvalRequests.filter((r) => r.requestId !== requestId);
+		if (connection) {
+			sendNotification(connection, pairingDecisionNotification, pairingDecisionParamsSchema, {
+				requestId,
+				approved
+			});
+		}
+	}
 </script>
+
+{#if approvalRequests[0]}
+	{@const request = approvalRequests[0]}
+	<PairingApprovalDialog
+		name={request.name}
+		onDecide={(approved) => decidePairing(request.requestId, approved)}
+	/>
+{/if}

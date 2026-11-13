@@ -346,6 +346,9 @@
 		in:scale={{ start: 0.96, duration: 250, easing: quintOut }}
 	>
 		<p class="text-sm text-indigo-100">{m.apps_update_available({ version: update.version })}</p>
+		{#if !app.signerFingerprint}
+			<p class="mt-2 text-sm text-amber-200/90">{m.apps_update_unsigned()}</p>
+		{/if}
 		{#if update.addedPermissions.length > 0 || update.addedDomains.length > 0}
 			<p class="mt-2 text-sm text-white/60">{m.apps_update_adds()}</p>
 			<ul class="mt-1 list-disc pl-5 text-sm text-white/80">

@@ -9,6 +9,7 @@ import {
 	activateParamsSchema,
 	localeNotification,
 	publishDashboardNotification,
+	pingRequest,
 	publishScreenNotification,
 	PROTOCOL_VERSION,
 	readyNotification,
@@ -93,6 +94,13 @@ const METHODS: MethodSpec[] = [
 		feature: 'screen',
 		description: 'The user interacted with a node of a published screen that carried an event id.',
 		params: uiEventSchema
+	},
+	{
+		method: pingRequest.method,
+		from: 'host',
+		kind: 'request',
+		description:
+			'Sent after another request timed out. Answer right away, any response will do. An app that does not answer is stopped.'
 	},
 	{
 		method: resolveStreamRequest.method,

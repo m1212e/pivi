@@ -1,21 +1,40 @@
 // Phone side of the pairing handshake that src/api/ws/relay.ts serves. Lets
 // remoteController.svelte.ts talk to the TV without knowing about pairing,
 // key exchange or encryption.
+//
+// Known limitation: this page and its scripts reach the phone over plain HTTP
+// on the TV's LAN address, since no public CA issues certificates for one.
+// The encryption below protects everything after the page has loaded, but
+// someone actively tampering with LAN traffic during a page load could serve
+// different code, which would then hold the device key. For the same reason
+// the page is not a secure context, so there is no service worker and no
+// non-extractable WebCrypto key to fall back on. Closing this needs HTTPS for
+// the remote (an own domain or a local CA), which is a deliberate non-goal
+// for now.
 import { pairingSocketUrl } from '#lib/wsConfig';
 import {
 	bytesToUtf8,
-	concatBytes,
-	decrypt,
+	constantTimeEqual,
+	createOpener,
+	createSealer,
+	decodeFixedLength,
 	deriveSessionKeys,
 	deriveSharedSecret,
-	encrypt,
 	fromBase64Url,
 	generateEphemeralKeypair,
 	generateIdentityKeypair,
-	sign,
+	handshakeTranscript,
+	HANDSHAKE_VERSION,
+	identityPublicKey,
+	pairingTokenId,
+	pairRequestProof,
+	pairResponseProof,
+	PUBLIC_KEY_BYTES,
+	signHandshake,
+	SIGNATURE_BYTES,
 	toBase64Url,
 	utf8ToBytes,
-	verify
+	verifyHandshake
 } from '#lib/crypto/pairing';
 import {
 	clearDeviceCredentials,
@@ -41,6 +60,8 @@ export type RemoteSession = {
 export type RemoteSessionCallbacks = {
 	onMessage: (message: Record<string, unknown>) => void;
 	onClose: () => void;
+	// Pairing is on hold until someone allows this phone on the TV.
+	onAwaitingApproval: () => void;
 };
 
 // The stored credentials no longer match the TV, in practice because its
@@ -69,7 +90,8 @@ async function reconnectOrClearStale(
 async function establishKeys(
 	initialSocket: WebSocket,
 	credentials: DeviceCredentials | null,
-	token: string | null
+	token: string | null,
+	onAwaitingApproval: () => void
 ): Promise<{ socket: WebSocket; keys: SessionKeys } | null> {
 	let socket = initialSocket;
 
@@ -88,29 +110,31 @@ async function establishKeys(
 		socket = await openSocket();
 	}
 
-	const paired = await pair(socket, token!);
+	const paired = await pair(socket, token!, onAwaitingApproval);
 	await setDeviceCredentials(paired);
 	return { socket, keys: await reconnect(socket, paired) };
 }
 
-// Decrypts incoming frames and hands them to the caller.
+// Decrypts incoming frames and hands them to the caller. A frame that fails
+// to decrypt was tampered with, replayed or dropped, and the frame counter
+// can't recover from that, so the session ends and the caller reconnects.
 function attachMessageListener(
 	socket: WebSocket,
 	s2cKey: Uint8Array,
 	onMessage: RemoteSessionCallbacks['onMessage']
 ) {
+	const open = createOpener(s2cKey);
 	socket.addEventListener('message', (event) => {
 		const parsed = encryptedSchema.safeParse(safeParse(event.data));
 		if (!parsed.success) return;
-		const message = parsed.data;
+		let message;
 		try {
-			const plaintext = bytesToUtf8(
-				decrypt(s2cKey, fromBase64Url(message.nonce), fromBase64Url(message.ciphertext))
-			);
-			onMessage(JSON.parse(plaintext));
+			message = JSON.parse(bytesToUtf8(open(fromBase64Url(parsed.data.ciphertext))));
 		} catch {
-			// Malformed/undecryptable frame, drop it rather than crash the session.
+			socket.close();
+			return;
 		}
+		onMessage(message);
 	});
 }
 
@@ -126,43 +150,72 @@ export async function connectRemoteSession(
 	const credentials = await getDeviceCredentials();
 	if (!credentials && !token) return null;
 
-	const established = await establishKeys(await openSocket(), credentials, token);
+	const established = await establishKeys(
+		await openSocket(),
+		credentials,
+		token,
+		callbacks.onAwaitingApproval
+	);
 	if (!established) return null;
 	const { socket, keys } = established;
 	const { c2sKey, s2cKey } = keys;
 
 	attachMessageListener(socket, s2cKey, callbacks.onMessage);
 	socket.addEventListener('close', callbacks.onClose);
+	const seal = createSealer(c2sKey);
 
 	return {
 		send: (message) => {
 			if (socket.readyState !== WebSocket.OPEN) return;
-			const { nonce, ciphertext } = encrypt(c2sKey, utf8ToBytes(JSON.stringify(message)));
 			sendJson(socket, {
 				type: 'enc',
-				nonce: toBase64Url(nonce),
-				ciphertext: toBase64Url(ciphertext)
+				ciphertext: toBase64Url(seal(utf8ToBytes(JSON.stringify(message))))
 			});
 		},
 		close: () => socket.close()
 	};
 }
 
-// Trades the QR token for a permanent device identity, first visit only.
-// Stores nothing itself, the caller persists the credentials.
-async function pair(socket: WebSocket, token: string): Promise<DeviceCredentials> {
+// Trades proof of the QR token for a permanent device identity, first visit
+// only. Stores nothing itself, the caller persists the credentials.
+async function pair(
+	socket: WebSocket,
+	token: string,
+	onAwaitingApproval: () => void
+): Promise<DeviceCredentials> {
 	const identity = generateIdentityKeypair();
-	sendJson(socket, { type: 'pair', token, devicePublicKey: toBase64Url(identity.publicKey) });
+	sendJson(socket, {
+		type: 'pair',
+		version: HANDSHAKE_VERSION,
+		tokenId: pairingTokenId(token),
+		devicePublicKey: toBase64Url(identity.publicKey),
+		proof: toBase64Url(pairRequestProof(token, identity.publicKey))
+	});
 
-	const response = await nextMessage(socket);
+	let response = await nextMessage(socket);
+	if (response.type === 'pairPending') {
+		onAwaitingApproval();
+		response = await nextMessage(socket);
+	}
 	if (response.type === 'pairError') throw new Error(response.message);
 	if (response.type !== 'paired') throw new Error('Unexpected response to pairing request');
 
-	return {
-		deviceId: response.deviceId,
-		deviceSecretKey: identity.secretKey,
-		tvPublicKey: fromBase64Url(response.tvPublicKey)
-	};
+	// Only something that knows the token can produce this, so the TV key
+	// below is the real one even though the connection itself is plain ws.
+	const tvPublicKey = decodeFixedLength(response.tvPublicKey, PUBLIC_KEY_BYTES);
+	const proof = decodeFixedLength(response.proof, 32);
+	if (
+		!tvPublicKey ||
+		!proof ||
+		!constantTimeEqual(
+			proof,
+			pairResponseProof(token, identity.publicKey, tvPublicKey, response.deviceId)
+		)
+	) {
+		throw new Error('This does not appear to be the TV that showed the pairing code');
+	}
+
+	return { deviceId: response.deviceId, deviceSecretKey: identity.secretKey, tvPublicKey };
 }
 
 // Mutual auth with fresh ephemeral keys, so a recorded session can't be
@@ -174,19 +227,25 @@ async function reconnect(
 	const ephemeral = generateEphemeralKeypair();
 	sendJson(socket, {
 		type: 'hello',
+		version: HANDSHAKE_VERSION,
 		deviceId: credentials.deviceId,
 		ephemeralPublicKey: toBase64Url(ephemeral.publicKey)
 	});
 
 	const challenge = expectChallenge(await nextMessage(socket));
 
-	const relayEphemeralPublicKey = fromBase64Url(challenge.ephemeralPublicKey);
-	const transcript = concatBytes(
-		ephemeral.publicKey,
+	const relayEphemeralPublicKey = decodeFixedLength(challenge.ephemeralPublicKey, PUBLIC_KEY_BYTES);
+	const signature = decodeFixedLength(challenge.signature, SIGNATURE_BYTES);
+	if (!relayEphemeralPublicKey || !signature) throw new Error('Malformed message from the TV');
+
+	const transcript = handshakeTranscript({
+		phoneEphemeralPublicKey: ephemeral.publicKey,
 		relayEphemeralPublicKey,
-		utf8ToBytes(credentials.deviceId)
-	);
-	if (!verify(credentials.tvPublicKey, transcript, fromBase64Url(challenge.signature))) {
+		devicePublicKey: identityPublicKey(credentials.deviceSecretKey),
+		tvPublicKey: credentials.tvPublicKey,
+		deviceId: credentials.deviceId
+	});
+	if (!verifyHandshake(credentials.tvPublicKey, 'tv', transcript, signature)) {
 		// Same reset scenario, just caught client-side instead: the paired
 		// device row survived but the TV's own identity keypair didn't, so
 		// the signature no longer matches the TV public key we have stored.
@@ -200,7 +259,7 @@ async function reconnect(
 
 	sendJson(socket, {
 		type: 'response',
-		signature: toBase64Url(sign(credentials.deviceSecretKey, transcript))
+		signature: toBase64Url(signHandshake(credentials.deviceSecretKey, 'phone', transcript))
 	});
 
 	expectReady(await nextMessage(socket));

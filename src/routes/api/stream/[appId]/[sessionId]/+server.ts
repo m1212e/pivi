@@ -13,19 +13,11 @@
 // scratch instead of seeking within one continuous connection.
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
-import { error, redirect } from '@sveltejs/kit';
-import { getApp } from '#api/apps/manager';
-import { resolveStreamCached } from '#api/apps/streamCache';
+import { redirect } from '@sveltejs/kit';
+import { relayForFfmpeg } from '#api/apps/ffmpegRelay';
+import { holdApp } from '#api/apps/manager';
+import { resolveStreamOrError } from '#api/apps/trackResolution';
 import type { RequestHandler } from './$types';
-
-async function resolvePlaybackSource(appId: string, sessionId: string, maxHeight?: number) {
-	try {
-		const app = await getApp(appId);
-		return await resolveStreamCached(appId, sessionId, app, maxHeight);
-	} catch (err) {
-		error(404, err instanceof Error ? err.message : 'Could not resolve stream');
-	}
-}
 
 // VP9/AV1 (common for anything above 1080p) can't go in an MP4 container
 // without re-encoding -- WebM (Matroska) natively supports them instead.
@@ -35,11 +27,11 @@ function containerFor(vcodec: string): 'webm' | 'mp4' {
 	return /^(vp0?9|av0?1)/.test(vcodec) ? 'webm' : 'mp4';
 }
 
-// The inputs are app-supplied URLs, so ffmpeg may only fetch them over plain
-// web protocols. Without this a response that turns out to be a playlist (or
-// a concat list) could make ffmpeg open file:, data: or any other protocol it
-// knows. Applied per input, since it's an input option.
-const INPUT_RESTRICTIONS = ['-protocol_whitelist', 'http,https,tls,tcp'];
+// The inputs are loopback relay URLs (ffmpegRelay.ts), so plain http is all
+// ffmpeg ever needs. Without this a response that turns out to be a playlist
+// (or a concat list) could make ffmpeg open file:, data: or any other protocol
+// it knows. Applied per input, since it's an input option.
+const INPUT_RESTRICTIONS = ['-protocol_whitelist', 'http,tcp'];
 
 function inputArgs(url: string, seekSeconds: number): string[] {
 	return [...INPUT_RESTRICTIONS, '-ss', String(seekSeconds), '-i', url];
@@ -168,7 +160,8 @@ function contentTypeFor(container: 'webm' | 'mp4'): string {
 export const GET: RequestHandler = async ({ params, url, request }) => {
 	const { appId, sessionId } = params;
 	const maxHeight = parseMaxHeight(url);
-	const { videoUrl, audioUrl, vcodec } = await resolvePlaybackSource(appId, sessionId, maxHeight);
+	const { app, stream: resolved } = await resolveStreamOrError(appId, sessionId, maxHeight);
+	const { videoUrl, audioUrl, vcodec } = resolved;
 
 	const seekSeconds = parseSeekSeconds(url);
 
@@ -186,8 +179,17 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 	if (!audioUrl && seekSeconds === 0) redirect(302, videoUrl);
 
 	const container = containerFor(vcodec);
-	const args = buildFfmpegArgs(videoUrl, audioUrl, seekSeconds, container);
+	const video = await relayForFfmpeg(app, videoUrl);
+	const audio = audioUrl ? await relayForFfmpeg(app, audioUrl) : undefined;
+	const args = buildFfmpegArgs(video.url, audio?.url, seekSeconds, container);
 	const ffmpeg = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'inherit'] });
+	// A long remux makes no further calls to the app, so it's held for its whole run.
+	const releaseApp = holdApp(appId);
+	ffmpeg.on('close', () => {
+		video.release();
+		audio?.release();
+		releaseApp();
+	});
 
 	// Both belt and suspenders: `request.signal` fires when the incoming
 	// request itself is aborted, but a <video> element abandoning a response

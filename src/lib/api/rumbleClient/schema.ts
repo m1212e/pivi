@@ -169,6 +169,37 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'AppForcedStop',
+				fields: [
+					{
+						name: 'appId',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'appName',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'reason',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'AppInfo',
 				fields: [
 					{
@@ -2874,6 +2905,14 @@ export const schema = {
 									ofType: { name: 'AppDashboard', kind: 'OBJECT', ofType: null, __proto__: null }
 								}
 							}
+						},
+						args: []
+					},
+					{
+						name: 'appForcedStop',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'AppForcedStop', kind: 'OBJECT', ofType: null, __proto__: null }
 						},
 						args: []
 					},

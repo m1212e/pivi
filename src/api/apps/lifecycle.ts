@@ -2,7 +2,9 @@
 // src/api/handlers/register.ts): clearing what a previous run left behind, and
 // checking for app updates in the background.
 import cron from 'node-cron';
+import { db } from '../db';
 import { defaultAppDeps } from './deps';
+import { removeOrphanedProfileVolumes } from './installer';
 import { stopAllApps } from './manager';
 import { announceAppListChanged } from './events';
 import { SANDBOX_PREFIX } from './sandbox/spec';
@@ -23,6 +25,16 @@ async function removeStaleSandboxes() {
 	// and no reason to load the sandbox runtime at all.
 	if ((await defaultAppDeps.store.list()).length === 0) return;
 	await defaultAppDeps.backend.removeStale(SANDBOX_PREFIX);
+}
+
+// Whatever way a profile was deleted, its apps' data goes with it here.
+async function removeOrphanedVolumes() {
+	if ((await defaultAppDeps.store.list()).length === 0) return;
+	const users = await db.query.user.findMany({ columns: { id: true } });
+	await removeOrphanedProfileVolumes(
+		defaultAppDeps,
+		users.map((user) => user.id)
+	);
 }
 
 // Outcomes worth a line in the log, "nothing changed" isn't.
@@ -50,6 +62,7 @@ export function startAppHost() {
 	globalThis.__piviAppHostStarted = true;
 
 	void removeStaleSandboxes().catch(logFailure('could not clean up stale sandboxes'));
+	void removeOrphanedVolumes().catch(logFailure('could not remove deleted profiles’ app data'));
 
 	// Emitted by deploy/pivi-server.mjs on SIGTERM/SIGINT. A server that dies
 	// without it (a crash) leaves its sandboxes behind, which the cleanup above

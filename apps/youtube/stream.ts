@@ -28,9 +28,22 @@ const MAX_OUTPUT_BYTES = 64 << 20;
 // sandbox's memory, so two at once get the app killed.
 let queue: Promise<unknown> = Promise.resolve();
 
+// Every resolution answers within this, counted from when it was asked for,
+// so the host gets an error rather than a timeout (45 s) while the queue is
+// long. Work whose time ran out while waiting is skipped, not started.
+const DEADLINE_MS = 40_000;
+// Less than this left isn't enough for yt-dlp to finish.
+const MIN_RUN_MS = 5_000;
+
 function runYtDlp(args: string[]): Promise<string> {
+	const deadline = Date.now() + DEADLINE_MS;
 	const run = queue.then(async () => {
-		const { stdout } = await execFileAsync(BINARY, args, { maxBuffer: MAX_OUTPUT_BYTES });
+		const remaining = deadline - Date.now();
+		if (remaining < MIN_RUN_MS) throw new Error('Too many videos are being loaded at once');
+		const { stdout } = await execFileAsync(BINARY, args, {
+			maxBuffer: MAX_OUTPUT_BYTES,
+			timeout: remaining
+		});
 		return stdout;
 	});
 	queue = run.catch(() => {});

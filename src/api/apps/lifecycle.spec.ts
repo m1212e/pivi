@@ -18,6 +18,8 @@ import {
 	setAppAutoUpdate,
 	setAppEnabled,
 	setAppPermission,
+	removeOrphanedProfileVolumes,
+	removeProfileAppData,
 	uninstallApp
 } from './installer';
 import { RegistryClient } from './registry';
@@ -208,13 +210,41 @@ describe('configuring', () => {
 	it('clears only the cache volume of the given profile', async () => {
 		publish(base);
 		await install();
+		calls.removedVolumes = [];
 		await clearAppCache(deps, 'demo', 'user-1');
 		expect(calls.removedVolumes).toEqual([volumeName('demo', 'user-1', 'cache')]);
+	});
+
+	it('installing clears volumes a previous app with the same id left behind', async () => {
+		publish(base);
+		await install();
+		expect(calls.removedVolumes.sort()).toEqual(
+			[volumeName('demo', 'user-1', 'storage'), volumeName('demo', 'user-1', 'cache')].sort()
+		);
+	});
+
+	it('removes every app’s volumes of a deleted profile', async () => {
+		await removeProfileAppData(deps, 'user-1');
+		expect(calls.removedVolumes.sort()).toEqual(
+			[
+				volumeName('demo', 'user-1', 'storage'),
+				volumeName('demo', 'user-1', 'cache'),
+				volumeName('other', 'user-1', 'storage')
+			].sort()
+		);
+	});
+
+	it('sweeps volumes of profiles that no longer exist, and only those', async () => {
+		await removeOrphanedProfileVolumes(deps, ['user-1']);
+		expect(calls.removedVolumes).toEqual([]);
+		await removeOrphanedProfileVolumes(deps, ['user-2']);
+		expect(calls.removedVolumes).toHaveLength(3);
 	});
 
 	it('uninstalling removes the row, the app volumes and the image', async () => {
 		const digest = publish(base);
 		await install();
+		calls.removedVolumes = [];
 		await uninstallApp(deps, 'demo');
 		expect(await deps.store.find('demo')).toBeUndefined();
 		expect(calls.removedVolumes.sort()).toEqual(
@@ -268,12 +298,18 @@ describe('updating', () => {
 		expect(await checkForUpdate(deps, 'demo')).toBe('ignored');
 	});
 
-	it('applies an unsigned update for an app installed without a signer', async () => {
-		publish(base, false);
+	it('parks an unsigned update for approval, even with auto-update on', async () => {
+		const first = publish(base, false);
 		await installApp(deps, { image: image(), granted: ['network', 'storage'] });
 		const second = publish(next(), false);
 
-		expect(await checkForUpdate(deps, 'demo')).toBe('applied');
+		expect(await checkForUpdate(deps, 'demo')).toBe('pending');
+		const row = (await deps.store.find('demo'))!;
+		expect(row.autoUpdate).toBe(true);
+		expect(row.imageDigest).toBe(first);
+		expect(row.pendingUpdate?.image.digest).toBe(second);
+
+		await approvePendingUpdate(deps, 'demo');
 		expect((await deps.store.find('demo'))!.imageDigest).toBe(second);
 	});
 

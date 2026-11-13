@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { REMOTE_PREFIX, ROUTES, isPlayPath, loginHref } from '#lib/routes';
+	import { ROUTES, isPlayPath, isRemotePath, loginHref } from '#lib/routes';
 	import type { Snippet } from 'svelte';
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
@@ -8,6 +8,7 @@
 	import { Toaster } from 'svelte-sonner';
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
+	import AppWatchdogToasts from '#lib/components/AppWatchdogToasts.svelte';
 	import NavigationSpinner from '#lib/components/NavigationSpinner.svelte';
 	import OnScreenKeyboard from '#lib/components/OnScreenKeyboard.svelte';
 	import PairingOverlay from '#lib/components/PairingOverlay.svelte';
@@ -32,7 +33,7 @@
 	// which is what actually needs to scale with resolution. Only re-runs
 	// when this boolean itself flips (not on every navigation) since $effect
 	// tracks the derived value, not page.url.pathname directly.
-	const isRemotePage = $derived(page.url.pathname.startsWith(`${REMOTE_PREFIX}/`));
+	const isRemotePage = $derived(isRemotePath(page.url.pathname));
 	$effect(() => {
 		if (isRemotePage) {
 			clearTvScale();
@@ -134,6 +135,7 @@
 	<!-- The phone itself renders /remote and drives the TV through it; it
 	     shouldn't also join the WS room as if it were the TV. -->
 	<RemoteBridge />
+	<AppWatchdogToasts />
 	<!-- offset/mobileOffset are passed as rem, not svelte-sonner's own px
 	     defaults, so the toaster's edge padding scales with tvScale.ts too
 	     (see layout.css for the rest of its sizing, overridden there since

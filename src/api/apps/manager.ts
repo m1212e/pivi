@@ -4,18 +4,22 @@
 // to whichever profile is active, its storage and cache are that profile's.
 //
 // An app starts on first use rather than at boot: starting is a VM boot, and
-// most of the time there's no profile active to start one for.
+// most of the time there's no profile active to start one for. It stops again
+// once nothing uses it (usage.ts), and its last dashboard stays on the home
+// screen until it runs again.
 import { parseImageRef } from '#lib/apps/imageRef';
+import type { DashboardContribution } from '#sdk/dashboard';
 import { getActiveProfileUser, onActiveProfileChanged } from '../activeProfile';
 import { loadApp, type AppInstance } from './runtime';
 import { buildSandboxSpec } from './sandbox/spec';
 import { microsandboxBackend } from './sandbox/microsandbox';
 import { dbAppStore, type InstalledApp } from './store';
 import { dropStreamCache } from './streamCache';
-import { ANY_DASHBOARD_EVENT } from './events';
+import { ANY_DASHBOARD_EVENT, forcedStopPubSub } from './events';
 import { appPubSub } from './pubsub';
 import { onHostLocaleChanged } from './hostLocale';
 import type { AppProcessControl } from './deps';
+import { createUsageTracker } from './usage';
 
 const instances = new Map<string, Promise<AppInstance>>();
 // A VM still shutting down. Its sandbox name is the app's, so booting the next
@@ -23,6 +27,15 @@ const instances = new Map<string, Promise<AppInstance>>();
 const stopping = new Map<string, Promise<void>>();
 // Instances whose VM has finished booting, for callers that must not wait on it.
 const started = new Map<string, AppInstance>();
+// Apps that stopped on their own (idle, crashed, killed by the watchdog) with
+// the dashboard they last published. The home screen shows that instead of
+// booting them again, which would undo the idle stop on its next refresh, or
+// restart a crashing app in a loop.
+const parked = new Map<string, DashboardContribution | undefined>();
+const usage = createUsageTracker();
+
+// How often idle apps are looked for. Coarse, the idle window is minutes long.
+const IDLE_CHECK_MS = 60_000;
 
 onHostLocaleChanged((locale) => {
 	for (const app of started.values()) app.setLocale(locale);
@@ -54,27 +67,58 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 			appPubSub.publish(kind === 'screen' ? `${appId}:screen:${screenId}` : `${appId}:${kind}`);
 			if (kind === 'dashboard') appPubSub.publish(ANY_DASHBOARD_EVENT);
 		},
-		// Forgets everything the dead process produced, so its last dashboard and
-		// resolved streams aren't served as if it were still running, and tells
-		// the home screen so its cards go back to loading until the restart.
+		cpus: spec.cpus,
 		onCrash: (code) => {
 			console.error(`[app:${appId}] exited unexpectedly (${code}); it restarts on next use`);
-			instances.delete(appId);
-			started.delete(appId);
-			dropStreamCache(appId);
-			appPubSub.publish(ANY_DASHBOARD_EVENT);
+			forgetApp(appId);
+		},
+		onForcedStop: (reason) => {
+			forgetApp(appId);
+			forcedStopPubSub.publish('apps:forcedStop', {
+				appId,
+				appName: row.approvedManifest.name,
+				reason
+			});
 		}
 	});
 }
 
+// Forgets the dead process and its resolved streams, keeping its last
+// dashboard parked, and tells the home screen. It restarts on next real use.
+function forgetApp(appId: string): void {
+	parked.set(appId, started.get(appId)?.getDashboard());
+	instances.delete(appId);
+	started.delete(appId);
+	dropStreamCache(appId);
+	appPubSub.publish(ANY_DASHBOARD_EVENT);
+}
+
 /**
  * The one way the screen, playback and stream handlers reach an app. Starts it
- * on demand, and concurrent callers share one pending start so a VM never boots twice.
+ * on demand, and concurrent callers share one pending start so a VM never boots
+ * twice. Counts as using the app, see usage.ts.
  */
 export function getApp(appId: string): Promise<AppInstance> {
+	usage.touch(appId);
+	return ensureApp(appId);
+}
+
+/**
+ * Keeps an app from being stopped as idle while something uses it without
+ * calling getApp all the time, an open screen or a running stream. Call the
+ * returned function when that ends.
+ */
+export function holdApp(appId: string): () => void {
+	return usage.hold(appId);
+}
+
+// getApp without counting as use, for warming apps up.
+function ensureApp(appId: string): Promise<AppInstance> {
 	const existing = instances.get(appId);
 	if (existing) return existing;
 
+	parked.delete(appId);
+	usage.touch(appId);
 	const instance = (async () => {
 		await stopping.get(appId);
 		const row = await dbAppStore.find(appId);
@@ -98,19 +142,35 @@ export function getApp(appId: string): Promise<AppInstance> {
 /**
  * Lets the home screen render right away with whichever apps are up, while the
  * rest boot in the background and arrive via dashboard events. Also called at
- * login (auth.ts) to warm the apps up before /home asks.
+ * login (auth.ts) to warm the apps up before /home asks. A parked app answers
+ * with its last dashboard and stays stopped. `dashboard` is undefined while an
+ * app is still booting.
  */
-export async function getStartedApps(): Promise<{ appId: string; app?: AppInstance }[]> {
+export async function getStartedApps(): Promise<
+	{ appId: string; dashboard?: DashboardContribution }[]
+> {
 	if (!(await getActiveProfileUser())) return [];
 
 	const rows = (await dbAppStore.list()).filter((row) => row.enabled);
 	return rows.map((row) => {
-		void getApp(row.appId).catch((error) =>
-			console.error(`[apps] ${row.appId} failed to start:`, error)
+		const appId = row.appId;
+		if (parked.has(appId)) return { appId, dashboard: parked.get(appId) ?? { cards: [] } };
+		void ensureApp(appId).catch((error) =>
+			console.error(`[apps] ${appId} failed to start:`, error)
 		);
-		return { appId: row.appId, app: started.get(row.appId) };
+		return { appId, dashboard: started.get(appId)?.getDashboard() };
 	});
 }
+
+// Parks every running app nobody used for the idle window.
+function stopIdleApps(): void {
+	for (const appId of usage.idle(started.keys())) {
+		console.log(`[app:${appId}] idle, stopping it until it is used again`);
+		parked.set(appId, started.get(appId)?.getDashboard());
+		void stopApp(appId);
+	}
+}
+setInterval(stopIdleApps, IDLE_CHECK_MS).unref();
 
 /**
  * Behind every stop path (profile switch, shutdown, processControl). Drops the
@@ -143,10 +203,14 @@ export async function stopAllApps(): Promise<void> {
  */
 export const processControl: AppProcessControl = {
 	isRunning: (appId) => instances.has(appId),
-	stop: stopApp,
+	// A disabled, uninstalled or updated app's old dashboard must not linger.
+	async stop(appId) {
+		parked.delete(appId);
+		await stopApp(appId);
+	},
 	async restart(appId) {
 		await stopApp(appId);
-		await getApp(appId);
+		await ensureApp(appId);
 	}
 };
 
@@ -157,5 +221,7 @@ export const processControl: AppProcessControl = {
 // app's storage and cache to the new profile. Persisted state lives in the
 // profile's own volumes, which this leaves alone.
 onActiveProfileChanged(() => {
+	// Parked dashboards belong to the previous profile too.
+	parked.clear();
 	for (const appId of [...instances.keys()]) void stopApp(appId);
 });

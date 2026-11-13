@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as m from '#lib/paraglide/messages';
-	import { createTrackpadGestures, type TrackpadActions } from '#lib/pairing/trackpadGestures';
+	import { createTrackpadGestures, type TrackpadActions } from '#lib/remote/trackpadGestures';
 
 	let { actions }: { actions: TrackpadActions } = $props();
 

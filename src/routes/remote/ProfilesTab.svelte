@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
-	import type { TvState } from '#lib/pairing/remoteController.svelte';
+	import type { TvState } from '#lib/remote/remoteController.svelte';
 	import { profileGradient } from '#lib/profileColor';
 
 	let { profiles, onSelect }: { profiles: TvState['profiles']; onSelect: (id: string) => void } =

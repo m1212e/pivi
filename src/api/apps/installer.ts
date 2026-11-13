@@ -6,7 +6,12 @@ import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef
 import type { PermissionKey, AppManifest } from '#sdk/manifest';
 import type { AppDeps } from './deps';
 import { pinnedReference, resolveImage } from './registry';
-import { volumeBelongsToApp, volumeName } from './sandbox/spec';
+import {
+	volumeBelongsToApp,
+	volumeBelongsToProfile,
+	volumeName,
+	volumeOfUnknownProfile
+} from './sandbox/spec';
 import { parseAppSigner, type AppSigner } from './signature';
 import type { InstalledApp } from './store';
 
@@ -98,6 +103,9 @@ export async function installApp(
 	// Pulled now, while the user is waiting for an install, so it can start later
 	// without the network. Nothing is recorded if this fails.
 	await deps.backend.prepare(pinnedReference(ref, resolved.digest));
+	// Any volume under this id is left over from an earlier app that claimed the
+	// same id, which is self-declared, so it must not hand its data to this one.
+	await deps.backend.removeVolumes(volumeBelongsToApp(manifest.id));
 
 	const row = {
 		appId: manifest.id,
@@ -137,7 +145,11 @@ export async function uninstallApp(deps: AppDeps, appId: string): Promise<void> 
 	const row = await requireInstalled(deps, appId);
 	await deps.control.stop(appId);
 	await deps.store.remove(appId);
-	await deps.backend.removeVolumes(volumeBelongsToApp(appId));
+	// Not fatal, the app is gone either way and installApp clears leftovers
+	// before anything can reuse the id.
+	await deps.backend
+		.removeVolumes(volumeBelongsToApp(appId))
+		.catch((error) => console.error(`[apps] ${appId}: ${error}`));
 	await deps.backend.removeImage(pinnedReference(parseImageRef(row.imageRef), row.imageDigest));
 	if (row.pendingUpdate) {
 		await deps.backend.removeImage(
@@ -211,4 +223,26 @@ export async function clearAppStorage(deps: AppDeps, appId: string, userId: stri
 	await deps.control.stop(appId);
 	const name = volumeName(appId, userId, 'storage');
 	await deps.backend.removeVolumes((candidate) => candidate === name);
+}
+
+/**
+ * Frees every app's storage and cache of a deleted profile. Call it once the
+ * profile row is gone. Not fatal, like uninstall: the sweep at boot
+ * (removeOrphanedProfileVolumes) catches whatever this couldn't remove.
+ */
+export async function removeProfileAppData(deps: AppDeps, userId: string): Promise<void> {
+	await deps.backend
+		.removeVolumes(volumeBelongsToProfile(userId))
+		.catch((error) => console.error(`[apps] profile ${userId}: ${error}`));
+}
+
+/**
+ * Removes app volumes of profiles not in `userIds`, however they were
+ * deleted. Run at boot by lifecycle.ts with every existing profile id.
+ */
+export async function removeOrphanedProfileVolumes(
+	deps: AppDeps,
+	userIds: readonly string[]
+): Promise<void> {
+	await deps.backend.removeVolumes(volumeOfUnknownProfile(userIds));
 }
