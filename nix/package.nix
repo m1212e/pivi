@@ -160,6 +160,15 @@ stdenv.mkDerivation {
     libcap_ng
   ];
 
+  # Packages like lightningcss ship glibc and musl builds as optional deps
+  # without saying which libc each needs, so bun installs both. Only the glibc
+  # one is ever loaded here (they pick at runtime), and the musl one has no
+  # libc to be patched against, which would otherwise fail the build.
+  autoPatchelfIgnoreMissingDeps = [
+    "libc.musl-x86_64.so.1"
+    "libc.musl-aarch64.so.1"
+  ];
+
   dontConfigure = true;
 
   buildPhase = ''
