@@ -1,15 +1,10 @@
-// Every TV-facing page (everything except /remote, which is read up close on
-// the phone that pairs to it, not from across a room) is built entirely out
-// of Tailwind's rem-based utilities against a 1920x1080 design baseline --
-// scaling the root font-size is what makes literally every one of them grow
-// or shrink together for whatever the actual screen size turns out to be,
-// with no per-component work. `min()` of the width and height ratios (not
-// just width) is what keeps this correct for non-16:9 windows too -- an
-// ultrawide window wouldn't blow the UI up past what actually fits
-// vertically.
+// TV pages are designed in rem against a 1920x1080 baseline, so scaling the
+// root font-size fits the whole UI to any screen with no per-component work.
+// The min of both ratios keeps non 16:9 windows from overflowing vertically.
 const BASELINE_WIDTH = 1920;
 const BASELINE_HEIGHT = 1080;
 const BASE_FONT_SIZE = 16;
+// Clamp so a tiny or huge window can't make the UI unreadable or absurdly large.
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 
@@ -20,6 +15,7 @@ function computeScale(): number {
 
 let removeResizeListener: (() => void) | undefined;
 
+/** Called by the root layout on every TV page. Pair with clearTvScale. */
 export function applyTvScale() {
 	const update = () => {
 		document.documentElement.style.fontSize = `${BASE_FONT_SIZE * computeScale()}px`;
@@ -29,6 +25,7 @@ export function applyTvScale() {
 	removeResizeListener = () => window.removeEventListener('resize', update);
 }
 
+/** The root layout calls this on /remote, which is read up close on the phone and keeps the default size. */
 export function clearTvScale() {
 	removeResizeListener?.();
 	removeResizeListener = undefined;

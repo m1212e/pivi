@@ -1,7 +1,7 @@
 // Starts, caches and stops the running apps. What's installed is the
-// installed_app table (installer.ts); what's running is a sandbox started
+// installed_app table (installer.ts). What's running is a sandbox started
 // from the row's pinned image with only the permissions the user granted, bound
-// to whichever profile is active — its storage and cache are that profile's.
+// to whichever profile is active, its storage and cache are that profile's.
 //
 // An app starts on first use rather than at boot: starting is a VM boot, and
 // most of the time there's no profile active to start one for.
@@ -28,6 +28,7 @@ onHostLocaleChanged((locale) => {
 	for (const app of started.values()) app.setLocale(locale);
 });
 
+/** Built from the stored row, so the sandbox only ever gets what the user approved. */
 async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 	const user = await getActiveProfileUser();
 	if (!user) throw new Error('No active profile to run an app for');
@@ -60,6 +61,10 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 	});
 }
 
+/**
+ * The one way the screen, playback and stream handlers reach an app. Starts it
+ * on demand, and concurrent callers share one pending start so a VM never boots twice.
+ */
 export function getApp(appId: string): Promise<AppInstance> {
 	const existing = instances.get(appId);
 	if (existing) return existing;
@@ -84,9 +89,11 @@ export function getApp(appId: string): Promise<AppInstance> {
 	return instance;
 }
 
-// Starts every enabled app in the background and returns whichever are already
-// up, so a caller (the home screen) can render right away and pick the rest up
-// from the dashboard push events once they've booted.
+/**
+ * Lets the home screen render right away with whichever apps are up, while the
+ * rest boot in the background and arrive via dashboard events. Also called at
+ * login (auth.ts) to warm the apps up before /home asks.
+ */
 export async function getStartedApps(): Promise<{ appId: string; app?: AppInstance }[]> {
 	if (!(await getActiveProfileUser())) return [];
 
@@ -99,6 +106,10 @@ export async function getStartedApps(): Promise<{ appId: string; app?: AppInstan
 	});
 }
 
+/**
+ * Behind every stop path (profile switch, shutdown, processControl). Drops the
+ * stream cache too, since its urls came from the app that's going away.
+ */
 async function stopApp(appId: string): Promise<void> {
 	const instance = instances.get(appId);
 	instances.delete(appId);
@@ -115,12 +126,15 @@ async function stopApp(appId: string): Promise<void> {
 	await settled;
 }
 
-// Stops every running app, in parallel — used when the server shuts down, so
-// no microVM outlives the process that owned it.
+/** Called on server shutdown (lifecycle.ts) so no microVM outlives the process that owned it. */
 export async function stopAllApps(): Promise<void> {
 	await Promise.all([...instances.keys()].map(stopApp));
 }
 
+/**
+ * The real AppProcessControl, handed to installer.ts and updater.ts through
+ * defaultAppDeps so they can stop or restart apps without importing this module.
+ */
 export const processControl: AppProcessControl = {
 	isRunning: (appId) => instances.has(appId),
 	stop: stopApp,
@@ -133,7 +147,7 @@ export const processControl: AppProcessControl = {
 // Stopping every running app on every profile switch, rather than trusting
 // each one to selectively reset whatever it holds in memory (a signed-in
 // session, cached feeds, pending auth), is the only way to guarantee none of it
-// survives into the next profile's session — and it's also what re-binds each
+// survives into the next profile's session, and it's also what re-binds each
 // app's storage and cache to the new profile. Persisted state lives in the
 // profile's own volumes, which this leaves alone.
 onActiveProfileChanged(() => {

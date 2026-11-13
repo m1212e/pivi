@@ -1,15 +1,13 @@
-// Where an app comes from: an OCI image reference, written the way a
-// docker-compose `image:` is. A bare `name` or `owner/name` is on Docker Hub;
-// anything else names its registry first (`ghcr.io/owner/name:1.2`,
-// `registry.example.com:5000/name`). The same rules Docker itself uses to
-// tell the two apart, so a reference copied from a compose file means what the
-// person expects.
+// Apps are installed from an OCI image reference the user types in. Parsed
+// with Docker's own rules, so a reference copied from a compose file means
+// what the person expects.
 const DOCKER_HUB = 'docker.io';
 
+/** The parsed form the installer, updater and registry client work with. */
 export type ImageRef = {
 	// Canonical registry name, e.g. `docker.io`, `ghcr.io`, `localhost:5000`.
 	registry: string;
-	// Always includes the namespace; Docker Hub's bare `nginx` is `library/nginx`.
+	// Always includes the namespace. Docker Hub's bare `nginx` is `library/nginx`.
 	repository: string;
 	// Absent only when a digest pins the image instead.
 	tag?: string;
@@ -21,7 +19,7 @@ const TAG = /^[\w][\w.-]{0,127}$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 
 // The first path component is a registry rather than a namespace when it
-// looks like a host — contains a dot or a port, or is literally `localhost`.
+// looks like a host: contains a dot or a port, or is literally `localhost`.
 function looksLikeRegistry(component: string): boolean {
 	return component.includes('.') || component.includes(':') || component === 'localhost';
 }
@@ -47,6 +45,7 @@ function splitTag(reference: string, input: string): { rest: string; tag?: strin
 	return { rest: reference.slice(0, colon), tag };
 }
 
+// Docker Hub answers to several names, normalized so equal images compare equal.
 function canonicalRegistry(name: string): string {
 	const registry = name.toLowerCase();
 	return registry === 'index.docker.io' || registry === 'registry-1.docker.io'
@@ -63,6 +62,10 @@ function splitRegistry(path: string): { registry: string; parts: string[] } {
 	return { registry: DOCKER_HUB, parts };
 }
 
+/**
+ * Entry point for every image reference the app manager handles (install,
+ * updates). Throws on anything Docker would reject, before any pull.
+ */
 export function parseImageRef(input: string): ImageRef {
 	const reference = input.trim();
 	if (!reference) throw new Error('Empty image reference');
@@ -85,12 +88,15 @@ export function parseImageRef(input: string): ImageRef {
 	};
 }
 
+/**
+ * For storing and showing a reference (installer, registry errors). Always
+ * fully qualified, so a stored reference never depends on Docker Hub defaults.
+ */
 export function formatImageRef({ registry, repository, tag, digest }: ImageRef): string {
 	return `${registry}/${repository}${tag ? `:${tag}` : ''}${digest ? `@${digest}` : ''}`;
 }
 
-// The host to actually talk to for this registry's API — Docker Hub's lives
-// somewhere other than its pull name.
+/** Needed by the registry client because Docker Hub's API lives at a different host than its pull name. */
 export function registryApiHost(registry: string): string {
 	return registry === DOCKER_HUB ? 'registry-1.docker.io' : registry;
 }

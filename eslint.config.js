@@ -10,12 +10,6 @@ const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
-	{
-		// Third-party bundles committed verbatim (see vendor/inlang/README.md).
-		// Not ours to lint, and prebuilt/minified output trips a dozen rules that
-		// say nothing about this project.
-		ignores: ['vendor/**']
-	},
 	js.configs.recommended,
 	ts.configs.recommended,
 	svelte.configs.recommended,

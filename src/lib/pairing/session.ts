@@ -1,9 +1,7 @@
-// Phone-side driver for the pairing/reconnect handshake described in the
-// pairing plan and implemented server-side in src/api/ws/relay.ts. Runs the
-// signed-ephemeral-DH reconnect handshake (and, the first time, the pairing
-// exchange that precedes it), then hands back a send/onMessage API that
-// transparently AEAD-wraps every control message.
-import { PAIRING_WS_PORT } from '#lib/wsConfig';
+// Phone side of the pairing handshake that src/api/ws/relay.ts serves. Lets
+// remoteController.svelte.ts talk to the TV without knowing about pairing,
+// key exchange or encryption.
+import { pairingSocketUrl } from '#lib/wsConfig';
 import {
 	bytesToUtf8,
 	concatBytes,
@@ -33,29 +31,27 @@ import {
 	type RelayToPhone
 } from './protocol';
 
+// What callers get once the handshake is done. Encryption stays hidden behind it.
 export type RemoteSession = {
 	send: (message: Record<string, unknown>) => void;
 	close: () => void;
 };
 
+// Plaintext in, so the caller can feed it straight into its JSON-RPC reader.
 export type RemoteSessionCallbacks = {
 	onMessage: (message: Record<string, unknown>) => void;
 	onClose: () => void;
 };
 
-// Thrown by reconnect() when the *stored* credentials themselves are the
-// problem (the TV no longer recognizes this device, or isn't the TV this
-// device remembers pairing with) rather than a transient/network failure.
-// The one real-world cause: the TV's database got reset (dev reset, fresh
-// install, restored from backup) while this phone still has a since-deleted
-// deviceId cached in IndexedDB. Recoverable by forgetting the stale
-// credentials and pairing again, so it's kept distinct from other
-// reconnect() failures (e.g. a real signature mismatch) that connectRemoteSession
-// doesn't try to self-heal from.
+// The stored credentials no longer match the TV, in practice because its
+// database was reset while this phone kept its deviceId. Kept apart from other
+// failures because it's the one establishKeys recovers from by pairing again.
 class StaleCredentialsError extends Error {}
 
+// One key per direction, so a message can't be replayed back at its sender.
 type SessionKeys = { c2sKey: Uint8Array; s2cKey: Uint8Array };
 
+// Turns the one recoverable failure into a value so establishKeys can branch on it.
 async function reconnectOrClearStale(
 	socket: WebSocket,
 	credentials: DeviceCredentials
@@ -84,10 +80,10 @@ async function establishKeys(
 		await clearDeviceCredentials();
 		// The relay only tells us the credentials are stale after we've
 		// already sent it a 'hello', which moves its connection state past
-		// 'unauth' -- it won't accept a 'pair' message on this same socket
+		// 'unauth', it won't accept a 'pair' message on this same socket
 		// anymore, so recovering means starting over with a fresh one.
 		socket.close();
-		// Nothing left to recover with — same as never having paired.
+		// Nothing left to recover with, same as never having paired.
 		if (!token) return null;
 		socket = await openSocket();
 	}
@@ -97,6 +93,7 @@ async function establishKeys(
 	return { socket, keys: await reconnect(socket, paired) };
 }
 
+// Decrypts incoming frames and hands them to the caller.
 function attachMessageListener(
 	socket: WebSocket,
 	s2cKey: Uint8Array,
@@ -112,13 +109,16 @@ function attachMessageListener(
 			);
 			onMessage(JSON.parse(plaintext));
 		} catch {
-			// Malformed/undecryptable frame — drop it rather than crash the session.
+			// Malformed/undecryptable frame, drop it rather than crash the session.
 		}
 	});
 }
 
-// null return means "nothing to connect with" — no stored device and no
-// pairing token in the URL. The caller shows a "not paired" state.
+/**
+ * Entry point for the phone remote page. Returns null when there is nothing to
+ * connect with (no stored device and no pairing token in the URL), which the
+ * caller shows as a "not paired" state.
+ */
 export async function connectRemoteSession(
 	token: string | null,
 	callbacks: RemoteSessionCallbacks
@@ -148,6 +148,8 @@ export async function connectRemoteSession(
 	};
 }
 
+// Trades the QR token for a permanent device identity, first visit only.
+// Stores nothing itself, the caller persists the credentials.
 async function pair(socket: WebSocket, token: string): Promise<DeviceCredentials> {
 	const identity = generateIdentityKeypair();
 	sendJson(socket, { type: 'pair', token, devicePublicKey: toBase64Url(identity.publicKey) });
@@ -163,6 +165,8 @@ async function pair(socket: WebSocket, token: string): Promise<DeviceCredentials
 	};
 }
 
+// Mutual auth with fresh ephemeral keys, so a recorded session can't be
+// decrypted later even if a long term key leaks.
 async function reconnect(
 	socket: WebSocket,
 	credentials: DeviceCredentials
@@ -204,13 +208,11 @@ async function reconnect(
 	return { c2sKey, s2cKey };
 }
 
-// The two protocol steps of reconnect(), each of which is mostly "this had
-// better be the message we asked for", split out so neither the checks nor the
-// key exchange they guard have to carry the other's branching.
+// Response checks for reconnect(), split out so its key exchange reads straight through.
 function expectChallenge(message: RelayToPhone): Challenge {
 	if (message.type === 'authError') {
 		// The relay only sends this specific message when the deviceId isn't
-		// in its pairedDevice table at all — the one way that happens for a
+		// in its pairedDevice table at all, the one way that happens for a
 		// device we ourselves stored credentials for is the TV's database
 		// having been reset since.
 		if (message.message === 'Unknown device') throw new StaleCredentialsError(message.message);
@@ -229,6 +231,7 @@ function sendJson(socket: WebSocket, message: PhoneToRelay) {
 	socket.send(JSON.stringify(message));
 }
 
+// Network input is untrusted, so a bad frame becomes undefined for the schema to reject.
 function safeParse(data: unknown): Record<string, unknown> | undefined {
 	try {
 		return JSON.parse(String(data));
@@ -238,7 +241,7 @@ function safeParse(data: unknown): Record<string, unknown> | undefined {
 }
 
 async function openSocket(): Promise<WebSocket> {
-	const socket = new WebSocket(`ws://${location.hostname}:${PAIRING_WS_PORT}`);
+	const socket = new WebSocket(pairingSocketUrl());
 	await waitForOpen(socket);
 	return socket;
 }
@@ -252,6 +255,7 @@ function waitForOpen(socket: WebSocket): Promise<void> {
 	});
 }
 
+// The handshake is strictly request then reply, so awaiting one message at a time is enough.
 function nextMessage(socket: WebSocket): Promise<RelayToPhone> {
 	return new Promise((resolve, reject) => {
 		const onMessage = (event: MessageEvent) => {

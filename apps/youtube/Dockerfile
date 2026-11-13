@@ -1,6 +1,6 @@
 # The YouTube app as a pivi app image. Build it from the repository root
 # with `bun run app:build apps/youtube <tag>`, which also attaches the
-# manifest as the dev.pivi.manifest label (see scripts/build-app-image.ts).
+# manifest as the dev.pivi.manifest label (see scripts/apps.ts).
 #
 # Stage 1 bundles the app and everything it imports — including the shared
 # protocol code in src/lib — into one file, so nothing has to be installed where

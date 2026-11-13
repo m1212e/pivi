@@ -1,9 +1,7 @@
-// GraphQL surface for managing apps from the TV's own screen, so apps can be
-// installed and configured with nothing but the remote's gestures (a trackpad
-// and the phone's keyboard feeding the focused field).
-//
-// Mutations return as soon as the work is started — an install can take
-// minutes — and the outcome arrives through the subscription.
+// Serves the TV's /apps screen, so apps can be installed and configured with
+// nothing but the remote (trackpad plus the phone's keyboard relay).
+// Mutations return once the work has started since an install can take
+// minutes, the outcome arrives through the subscription.
 import { permissionKeySchema } from '#lib/apps/manifest';
 import { schemaBuilder } from '../rumble';
 import { appManagement } from '../appManagement';
@@ -95,6 +93,7 @@ const StateRef = schemaBuilder.objectRef<AppsState>('AppManagement').implement({
 	})
 });
 
+// One tap installs in the install form, since typing an image ref on a TV remote is painful.
 const SuggestedAppRef = schemaBuilder.objectRef<SuggestedApp>('SuggestedApp').implement({
 	fields: (t) => ({
 		id: t.exposeString('id'),
@@ -106,8 +105,8 @@ const SuggestedAppRef = schemaBuilder.objectRef<SuggestedApp>('SuggestedApp').im
 	})
 });
 
-// Starts the work and returns; failures are recorded in the shared state, which
-// is where the screen reads them.
+// Failures are recorded in the service's shared state, which is where the
+// screen reads them.
 function start(work: () => Promise<void> | void): boolean {
 	void Promise.resolve(work()).catch(() => {});
 	return true;

@@ -1,34 +1,36 @@
+// JSON-RPC contract between the phone remote (remoteController.svelte.ts) and
+// the TV (RemoteBridge.svelte), carried over the encrypted pairing channel.
+// Each method comes with a zod schema so both ends validate what crosses the
+// boundary (see rpc.ts) and can't drift apart.
 import { NotificationType, NotificationType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
 
 // Phone -> TV
 
+// Relative swipe distance, which the TV turns into a focus move (spatialNav.ts).
 export const moveParamsSchema = z.object({ dx: z.number(), dy: z.number() });
 export const moveNotification = new NotificationType<z.infer<typeof moveParamsSchema>>(
 	'remote/move'
 );
 
-// Press and release rather than a single tap-shaped notification, so a
-// genuine hold (see HoldToConfirmButton.svelte) sees real pointerdown and
-// pointerup with its own duration in between, instead of one synthetic click
-// with no duration at all -- which is all a single `select` could ever carry.
+// Press and release instead of one tap, so a hold on the TV
+// (HoldToConfirmButton.svelte) sees a real duration between the two.
 export const selectPressNotification = new NotificationType0('remote/selectPress');
 export const selectReleaseNotification = new NotificationType0('remote/selectRelease');
-// Sent instead of `selectRelease` when a touch that started a press turns
-// out to be a swipe once it crosses the move threshold -- ends the phantom
-// press on the TV (so nothing stays stuck "held") without the `release`
-// handler's `.click()`, which would otherwise fire a real selection on
-// whatever's focused every time a swipe merely started under a finger.
+// Ends a press that turned into a swipe (trackpadGestures.ts), so nothing
+// stays held on the TV and nothing gets clicked just because a swipe started.
 export const selectCancelNotification = new NotificationType0('remote/selectCancel');
+// Browser history back, offered while the TV reports `canGoBack`.
 export const backNotification = new NotificationType0('remote/back');
-// Distinct from `back` (browser history back, only shown when there's
-// somewhere to go back to) — this always jumps straight to /home regardless
-// of navigation depth, so it's shown unconditionally on the phone.
+// Jumps straight to /home however deep the TV is, unlike `back`.
 export const goHomeNotification = new NotificationType0('remote/goHome');
 
+// A digit from the phone's PIN tab, fed to the TV's PinPad without its key
+// flash so nobody near the TV can read off the PIN.
 export const keyParamsSchema = z.object({ value: z.string() });
 export const keyNotification = new NotificationType<z.infer<typeof keyParamsSchema>>('remote/key');
 
+// Replaces the focused TV field's value with the phone's copy on every edit.
 export const textParamsSchema = z.object({ value: z.string() });
 export const textNotification = new NotificationType<z.infer<typeof textParamsSchema>>(
 	'remote/text'
@@ -48,32 +50,28 @@ export const suggestionNotification = new NotificationType<z.infer<typeof sugges
 	'remote/suggestion'
 );
 
+// Submits the focused TV field, the phone keyboard's enter key.
 export const enterNotification = new NotificationType0('remote/enter');
 // Leaves text entry on the focused field without submitting it.
 export const exitTextNotification = new NotificationType0('remote/exitText');
+// Sent once the session is up, so the phone doesn't wait for the TV's next change to render.
 export const requestStateNotification = new NotificationType0('remote/requestState');
 
-// A profile tapped in the phone's own profile grid (see stateParamsSchema's
-// `profiles` below) rather than a generic `select` -- the phone doesn't hold
-// focus over any particular profile's element on the TV, so it has to name
-// which one directly.
+// A profile tapped in the phone's profile grid. Named by id because the
+// phone has no focus on the TV to `select` with.
 export const selectProfileParamsSchema = z.object({ id: z.string() });
 export const selectProfileNotification = new NotificationType<
 	z.infer<typeof selectProfileParamsSchema>
 >('remote/selectProfile');
 
-// Same idea as selectProfile, for one of the home dashboard's own app
-// shortcuts (see stateParamsSchema's `apps` below).
+// Same as selectProfile, for the home dashboard's app shortcuts.
 export const selectAppParamsSchema = z.object({ id: z.string() });
 export const selectAppNotification = new NotificationType<z.infer<typeof selectAppParamsSchema>>(
 	'remote/selectApp'
 );
 
-// One of the player's own quick controls (see stateParamsSchema's
-// `hasPlayer` below) -- dispatched as a plain DOM event on the TV (see
-// RemoteBridge.svelte) rather than clicking a specific element, since a few
-// of these (the info toggle) have no single button of their own to click in
-// the first place.
+// The phone's player tab buttons. Sent as an action, not a click target,
+// because some (the info toggle) have no single button on the TV to click.
 export const playerActionParamsSchema = z.object({
 	action: z.enum(['playPause', 'seekBack', 'seekForward', 'toggleInfo'])
 });
@@ -81,33 +79,26 @@ export const playerActionNotification = new NotificationType<
 	z.infer<typeof playerActionParamsSchema>
 >('remote/playerAction');
 
-// A drag on the phone's own progress bar -- a specific position rather than
-// a relative nudge, unlike playerActionNotification's seekBack/seekForward,
-// so it needs its own params.
+// A drag on the phone's progress bar, an absolute position unlike seekBack/seekForward.
 export const playerSeekParamsSchema = z.object({ seconds: z.number() });
 export const playerSeekNotification = new NotificationType<z.infer<typeof playerSeekParamsSchema>>(
 	'remote/playerSeek'
 );
 
-// A tap on one of the phone's quality options (see stateParamsSchema's
-// `qualityOptions` below).
+// A pick from the phone's quality list, mirrored from `qualityOptions`.
 export const playerQualityParamsSchema = z.object({ quality: z.number() });
 export const playerQualityNotification = new NotificationType<
 	z.infer<typeof playerQualityParamsSchema>
 >('remote/playerQuality');
 
-// A pick from the phone's own subtitle picker (see stateParamsSchema's
-// `subtitleTracks` below) -- `null` is the "Off" option, which is a real
-// choice here rather than an absent one, so the field is nullable rather
-// than optional.
+// A pick from the phone's subtitle picker. `null` is the explicit "Off"
+// choice, hence nullable rather than optional.
 export const playerSubtitleParamsSchema = z.object({ language: z.string().nullable() });
 export const playerSubtitleNotification = new NotificationType<
 	z.infer<typeof playerSubtitleParamsSchema>
 >('remote/playerSubtitle');
 
-// A drag on the phone's own volume slider -- an absolute 0..1 level rather
-// than playerActionNotification's volumeUp/volumeDown nudges, so it needs
-// its own params too.
+// A drag on the phone's volume slider, as an absolute 0..1 level.
 export const playerVolumeParamsSchema = z.object({ volume: z.number() });
 export const playerVolumeNotification = new NotificationType<
 	z.infer<typeof playerVolumeParamsSchema>
@@ -115,15 +106,14 @@ export const playerVolumeNotification = new NotificationType<
 
 // TV -> phone
 
+// A pre-login profile, enough for the phone to draw the same picker tile.
 const profileSchema = z.object({
 	id: z.string(),
 	username: z.string(),
 	image: z.string().nullable()
 });
 
-// icon/primaryColor/secondaryColor mirror the manifest's own optional brand
-// identity (manifest.ts) -- null when the app declared none, same as
-// everywhere else it's shown.
+// An app shortcut with the manifest's optional branding (manifest.ts), null when undeclared.
 const appSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -132,15 +122,17 @@ const appSchema = z.object({
 	secondaryColor: z.string().nullable()
 });
 
-// Mirrors the player page's own SubtitleTrack -- `url`/`format` deliberately
-// stay on the TV side (the phone only ever names a language back, never
-// fetches a track itself).
+// The player's SubtitleTrack minus `url`/`format`, since the phone only
+// names a language back and never fetches a track.
 const subtitleTrackSchema = z.object({
 	language: z.string(),
 	label: z.string().nullable(),
 	kind: z.enum(['caption', 'transcription'])
 });
 
+// Snapshot of what the TV is showing, pushed so the phone can pick the matching
+// input surface (see remoteTabs.ts) and mirror player state. The player fields
+// are placeholders while `hasPlayer` is false.
 export const stateParamsSchema = z.object({
 	hasPinPad: z.boolean(),
 	hasTextInput: z.boolean(),
@@ -151,68 +143,43 @@ export const stateParamsSchema = z.object({
 	// its keyboard.
 	suggestions: z.array(z.string()).default([]),
 	canGoBack: z.boolean(),
-	// Whether the "Home" button on the phone is worth showing -- true only
-	// while the TV is actually inside an app or the player, i.e. somewhere
-	// "Home" would take it somewhere new. Not shown on the home screen
-	// itself (nothing to go home to) or on the pre-login profile picker.
+	// True only inside an app or the player, where "Home" goes somewhere new.
 	canGoHome: z.boolean(),
-	// The pre-login picker's own profiles, straight from its DOM (see
-	// RemoteBridge.svelte's sendState) -- empty everywhere else. Lets the
-	// phone show the exact same grid for a direct tap-to-select instead of
-	// only offering the trackpad to spatially navigate to one.
+	// The pre-login picker's profiles, empty elsewhere. Lets the phone offer
+	// a direct tap instead of navigating there with the trackpad.
 	profiles: z.array(profileSchema),
-	// The home dashboard's first few app shortcuts, straight from its DOM
-	// (see RemoteBridge.svelte's sendState) -- empty everywhere else. Shown
-	// above the trackpad rather than replacing it, since the dashboard is
-	// still the trackpad's own home turf for spatial navigation and
-	// scrolling.
+	// The home dashboard's first few app shortcuts, empty elsewhere. Shown
+	// above the trackpad, not instead of it, since the dashboard still
+	// needs it for navigating and scrolling.
 	apps: z.array(appSchema),
-	// Whether the player's own quick controls are worth showing instead of
-	// just the trackpad -- true on /play/*, straight off the same
-	// `data-pivi-player` marker RemoteBridge.svelte dispatches
-	// playerActionNotification through.
+	// True on /play/*, switches the phone to its player tab.
 	hasPlayer: z.boolean(),
-	// Whether the player is actually playing right now, straight off the
-	// `<video>` element's own `paused` property -- lets the phone's play/pause
-	// button show the action it would actually take instead of a fixed icon.
-	// Meaningless (and always false) whenever `hasPlayer` is false.
+	// Lets the play/pause button show the action it would actually take.
 	playing: z.boolean(),
-	// Straight off the player page's own `position`/`duration` -- lets the
-	// phone show and drag the exact same progress bar the TV does. Meaningless
-	// (and always 0) whenever `hasPlayer` is false.
+	// So the phone can show and drag the same progress bar as the TV.
 	position: z.number(),
 	duration: z.number(),
-	// The currently-selected quality tier and the full list of tiers the TV
-	// offers, so the phone can render the same picker instead of guessing at
-	// its own set of options. Meaningless whenever `hasPlayer` is false.
+	// The TV's own tiers, so the phone's picker never offers one the TV lacks.
 	quality: z.number(),
 	qualityOptions: z.array(z.number()),
-	// Per-tier direct/mse/ffmpeg indicator, keyed by quality (as a string --
-	// JSON object keys always are) -- same icons as the TV's own quality
-	// list. A tier missing from this map means its mode isn't known yet, same
-	// as the TV showing no icon for it.
+	// Per-tier playback mode for the same icons as the TV's quality list,
+	// keyed by quality as a string (JSON keys are). Missing means not known yet.
 	qualityModes: z.record(z.string(), z.enum(['direct', 'mse', 'ffmpeg'])),
-	// The session's caption tracks and which one is showing right now (`null`
-	// = off), so the phone can render the same picker the TV does. Empty
-	// whenever the session has no tracks at all (most of them) or `hasPlayer`
-	// is false, which is also the phone's cue not to show the picker.
+	// Caption tracks and the active one (`null` is off). Empty hides the
+	// phone's picker, which is the usual case.
 	subtitleTracks: z.array(subtitleTrackSchema),
 	subtitleLanguage: z.string().nullable(),
-	// Whether the TV's own playback-diagnostics panel is open right now, so
-	// the phone's info toggle reflects it instead of tracking its own,
-	// possibly out-of-sync, guess. Meaningless whenever `hasPlayer` is false.
+	// Mirrored so the phone's info toggle can't fall out of sync with the TV.
 	diagnosticsOpen: z.boolean(),
-	// The player's own current volume (0..1), straight off the `<video>`
-	// element -- lets the phone show and drag the exact same volume slider
-	// the TV does. Meaningless (and always 0) whenever `hasPlayer` is false.
+	// 0..1, so the phone's volume slider starts where the TV's is.
 	volume: z.number()
 });
 export const stateNotification = new NotificationType<z.infer<typeof stateParamsSchema>>(
 	'remote/state'
 );
 
-// Carries the paired device's own name (see relay.ts's deriveDeviceName) so
-// the TV's toast can say which phone rather than just "a phone".
+// Sent by the relay to the TV for its connect/disconnect toasts, with the
+// device name (relay.ts's deriveDeviceName) so the toast says which phone.
 export const remoteDeviceParamsSchema = z.object({ name: z.string() });
 export const remoteConnectedNotification = new NotificationType<
 	z.infer<typeof remoteDeviceParamsSchema>
@@ -221,25 +188,12 @@ export const remoteDisconnectedNotification = new NotificationType<
 	z.infer<typeof remoteDeviceParamsSchema>
 >('remote/remoteDisconnected');
 
-// Host -> phone, sent directly (not via the TV's own connection — see
-// relay.ts's sendToPhones) whenever an app publishes a PhoneAuthHandoff
-// (src/lib/apps/auth.ts). Generic on purpose: any app that needs the
-// phone to complete a login (or, someday, anything else that needs a real
-// browser tab) gets this for free rather than building its own version.
+// Host -> phone, sent by the openUrlOnPhone mutation (handlers/remote.ts) so
+// an app can finish a login, or anything needing a real browser, on the phone.
 export const openUrlParamsSchema = z.object({ url: z.string() });
 export const openUrlNotification = new NotificationType<z.infer<typeof openUrlParamsSchema>>(
 	'remote/openUrl'
 );
 
-// Wifi management lives entirely on the TV's own /wifi screen now (see
-// src/lib/wifi/management.ts and handlers/wifi.ts) — the phone only ever
-// contributed the paired connection those mutations require and the keyboard
-// relay that types a password into the TV's own form field, not a UI of its
-// own. The provisioning access point (src/api/wifiBootstrap.ts) is still how
-// a phone gets paired in the first place when the device has no network yet.
-
-// App management lives entirely on the TV's own /apps screen now (see
-// src/lib/apps/management.ts and handlers/appManagement.ts) — the phone
-// only ever contributed the paired connection those mutations require and the
-// keyboard relay that types into the TV's own form fields (see textNotification
-// above), not a UI of its own.
+// No wifi or app management messages on purpose. Both live on the TV's own
+// screens (/wifi, /apps) and the phone only types into their fields.

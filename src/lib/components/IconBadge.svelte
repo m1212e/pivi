@@ -1,6 +1,6 @@
 <script lang="ts">
-	// A glyph in a round translucent badge. `path` is the `d` of a single
-	// 24x24 SVG path, so callers need no image assets.
+	// Lets sandboxed apps show an icon through UiNodeRenderer without shipping
+	// image assets. They send the `d` of a single 24x24 SVG path.
 	let { path, size = 'normal' }: { path: string; size?: 'normal' | 'large' } = $props();
 </script>
 

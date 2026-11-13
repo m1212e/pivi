@@ -138,10 +138,6 @@ stdenv.mkDerivation {
       ../src
       ../static
       ../messages
-      # Referenced by relative path from project.inlang/settings.json — see
-      # vendor/inlang/README.md for why it isn't a CDN URL any more. Without
-      # it the paraglide build step would need network access.
-      ../vendor
       ../project.inlang
       ../deploy
     ];

@@ -2,9 +2,13 @@
 	import { Smartphone } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 	import * as m from '#lib/paraglide/messages';
+	import { PIN_LENGTH } from '#lib/pinRules';
+	import { DOM_EVENTS } from '#lib/domEvents';
 
+	// PIN entry for the TV's login and register screens and the phone remote's
+	// PIN tab, so both look the same. The phone's keys are forwarded to the TV pad.
 	let {
-		length = 4,
+		length = PIN_LENGTH,
 		value = $bindable(''),
 		error = null,
 		showKeypad = true,
@@ -15,11 +19,8 @@
 		length?: number;
 		value?: string;
 		error?: string | null;
-		// The TV itself shouldn't invite PIN entry by remote-control button
-		// mashing — the phone remote is the intended input path. The key
-		// grid still renders (hidden) when this is false, since the remote
-		// bridge drives it by clicking [data-key] buttons directly (see
-		// RemoteBridge.svelte's pressPinKey).
+		// Hides the grid on screens where the phone is the intended input.
+		// Phone presses still arrive through the `pivi-remote-press` event.
 		showKeypad?: boolean;
 		// Focuses the "1" key on mount so TV remote navigation starts there.
 		autofocus?: boolean;
@@ -31,11 +32,8 @@
 	let pressedKey = $state<string | null>(null);
 	let pressedTimeout: ReturnType<typeof setTimeout> | undefined;
 
-	// Briefly highlights the key that was just pressed, for feedback when
-	// someone enters a PIN directly on the TV. Never called for a remote
-	// (phone) press -- see the `pivi-remote-press` listener below -- so
-	// entering a PIN from a paired phone doesn't flash which key it was on
-	// the TV screen for anyone else in the room to read off.
+	// Press feedback for PINs typed on the TV. Skipped for phone presses so
+	// others in the room can't read the PIN off the screen.
 	function flash(key: string) {
 		pressedKey = key;
 		clearTimeout(pressedTimeout);
@@ -72,8 +70,8 @@
 			if (key === 'backspace') backspace({ silent: true });
 			else press(key, { silent: true });
 		}
-		node.addEventListener('pivi-remote-press', onRemotePress);
-		return () => node.removeEventListener('pivi-remote-press', onRemotePress);
+		node.addEventListener(DOM_EVENTS.remotePress, onRemotePress);
+		return () => node.removeEventListener(DOM_EVENTS.remotePress, onRemotePress);
 	});
 
 	$effect(() => {

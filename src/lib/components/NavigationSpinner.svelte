@@ -1,15 +1,12 @@
 <script lang="ts">
-	// Opening the player takes a real network round trip (resolving the
-	// session with the app) before the destination page's own top-level
-	// await settles -- see the `info` fetch in play/[appId]/[sessionId]'s
-	// +page.svelte -- so SvelteKit sits on the old screen for a moment with no
-	// feedback that the click landed. Shown only for that navigation, not
-	// every one, since screens like home<->app resolve fast enough that a
-	// spinner would just flash.
+	import { isPlayPath } from '#lib/routes';
+	// Mounted in the root layout. Opening the player waits on the app to resolve
+	// the session, so SvelteKit lingers on the old screen with no feedback.
+	// Limited to /play/ navigations since others resolve too fast to need it.
 	import { LoaderCircle } from '@lucide/svelte';
 	import { navigating } from '$app/state';
 
-	const isPlayerNav = $derived(navigating.to?.url.pathname.startsWith('/play/') ?? false);
+	const isPlayerNav = $derived(isPlayPath(navigating.to?.url.pathname ?? ''));
 
 	// Delayed rather than shown the instant navigation starts, so a
 	// fast-enough resolve never flashes a spinner for a frame or two.

@@ -2,10 +2,16 @@
 // the pre-login profile picker nor the home screen has anywhere sensible to go
 // back to, and Home only goes somewhere new from inside an app or the player
 // (mirroring hooks.server.ts's own definition of "has an active profile").
-const NO_BACK = new Set(['/', '/home']);
-const HOME_EXACT = new Set(['/apps', '/wifi']);
-const HOME_PREFIXES = ['/apps/', '/play/'];
+import { APPS_PREFIX, PLAY_PREFIX, ROUTES } from './routes';
 
+const NO_BACK = new Set<string>([ROUTES.login, ROUTES.home]);
+const HOME_EXACT = new Set<string>([ROUTES.apps, ROUTES.wifi]);
+const HOME_PREFIXES = [APPS_PREFIX, PLAY_PREFIX];
+
+/**
+ * RemoteBridge sends these to the paired phone so it can hide Back and Home
+ * where they would do nothing.
+ */
 export function navigationFlagsFor(pathname: string) {
 	return {
 		canGoBack: !NO_BACK.has(pathname),

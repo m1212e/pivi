@@ -1,11 +1,7 @@
-// The logic of scanning for and joining a wifi network, for the TV's own
-// /wifi screen (over GraphQL, see handlers/wifi.ts, so a network can be
-// picked with nothing but the remote's gestures and the phone's keyboard
-// relay typing the password into whatever field has focus).
-//
-// The service only decides *what to do*; who is allowed to ask is the
-// caller's business (the GraphQL side requires a paired phone to be
-// connected, since that's the only way to drive this page at all).
+// Scanning for and joining a wifi network from the TV's own /wifi screen
+// (served over GraphQL by handlers/wifi.ts), so a network can be picked with
+// the remote and the password typed through the phone's keyboard relay.
+// Access control is left to the GraphQL side.
 import type { WifiManagementState } from '#lib/wifi/management';
 import { connectToNetwork, getNetworkState, isAvailable, scanNetworks, startHotspot } from './wifi';
 
@@ -20,16 +16,15 @@ type Session = {
 	error: string | null;
 };
 
+/** How the service tells the /wifi subscription to push fresh state, wired in wifiManagement.ts. */
 export type ManagementEvents = {
 	// The state shown to the user changed (scanning, connecting, an error, or
 	// the networks/current-connection the device reports).
 	stateChanged(): void;
 };
 
-// What to report when NetworkManager can't be reached at all (not merely
-// "no wifi radio" -- see state() below, which asks regardless of that): the
-// most conservative reading, rather than a field-by-field pile of fallbacks
-// at the point of use.
+// Reported when NetworkManager can't be reached at all, the most conservative
+// reading instead of per field fallbacks at the point of use.
 const UNKNOWN_NETWORK = {
 	mode: 'disconnected',
 	ssid: null,
@@ -37,6 +32,10 @@ const UNKNOWN_NETWORK = {
 	ethernet: false
 } satisfies Pick<WifiManagementState, 'mode' | 'ssid' | 'online' | 'ethernet'>;
 
+/**
+ * Create one per process (wifiManagement.ts). Every screen shares its session,
+ * so they all see the same scan results and join progress.
+ */
 export function createWifiManagement(events: ManagementEvents) {
 	const session: Session = {
 		networks: null,
@@ -51,12 +50,8 @@ export function createWifiManagement(events: ManagementEvents) {
 
 	return {
 		async state(): Promise<WifiManagementState> {
-			// Asked regardless of `available`: ethernet and internet connectivity
-			// are independent of whether this device can also manage wifi, and a
-			// wired-only box (or one mid-way through losing its wifi radio) still
-			// has a real answer for both -- getNetworkState() itself handles there
-			// being no wifi device at all, reporting a disconnected radio rather
-			// than throwing.
+			// Asked regardless of `available`, since a wired only box still has a
+			// real answer for ethernet and internet connectivity.
 			const [available, network] = await Promise.all([isAvailable(), currentNetwork()]);
 			return {
 				available,
@@ -69,10 +64,8 @@ export function createWifiManagement(events: ManagementEvents) {
 		},
 
 		async scan(): Promise<void> {
-			// The screen already hides the scan button once `available` is false
-			// (see WifiManagerPanel.svelte), so a request reaching here anyway (a
-			// stale screen, a second one) is simply ignored rather than attempting
-			// an nmcli call a device without wifi hardware can't usefully answer.
+			// The screen hides the button without wifi hardware, so a request from
+			// a stale screen is ignored instead of running a pointless nmcli call.
 			if (!(await isAvailable())) return;
 
 			session.scanning = true;

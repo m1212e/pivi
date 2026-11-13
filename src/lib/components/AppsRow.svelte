@@ -1,10 +1,13 @@
 <script lang="ts">
+	import { ROUTES } from '#lib/routes';
 	import { Plus } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 	import ContentRow from '#lib/components/ContentRow.svelte';
 	import AppCard from '#lib/components/AppCard.svelte';
 	import * as m from '#lib/paraglide/messages';
 
+	// The dashboard's row of installed apps. Separate from VideoRow because its
+	// tiles are apps, and it always ends with the add-app entry.
 	let {
 		title,
 		items
@@ -44,7 +47,7 @@
 		in:fly|global={{ y: 24, duration: 400, delay: items.length * 70 }}
 	>
 		<a
-			href="/apps"
+			href={ROUTES.apps}
 			class="group flex w-28 shrink-0 flex-col items-center gap-2 focus:outline-none sm:w-32"
 		>
 			<span

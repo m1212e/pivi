@@ -12,12 +12,13 @@
 //   - A VM killed from outside ends the output stream without an "exited"
 //     event, so the end of the stream is treated as an exit too.
 //   - The runtime keeps a unix socket per sandbox under its home directory, whose
-//     path must be short (< 108 bytes) — hence PIVI_SANDBOX_HOME.
+//     path must be short (< 108 bytes), hence PIVI_SANDBOX_HOME.
 import { chunkBytes } from '#lib/apps/ndjson';
 import { isLocalRegistry } from '../registry';
 import { SANDBOX_PREFIX } from './spec';
 import type { RunningSandbox, SandboxBackend, SandboxHandlers, SandboxSpec } from './types';
 
+// Type only, the real import stays lazy (see loadRuntime).
 type Msb = typeof import('microsandbox');
 
 let runtime: Promise<Msb> | undefined;
@@ -36,15 +37,16 @@ function loadRuntime(): Promise<Msb> {
 }
 
 // An image pulled from a registry on this machine is fetched over plain HTTP,
-// matching how the registry client reaches it; any other registry is HTTPS.
+// matching how the registry client reaches it. Any other registry is HTTPS.
 const usesLocalRegistry = (image: string) => isLocalRegistry(image.split('/')[0]);
 
+// Apps only get web traffic, whatever the domain.
 const WEB_PORTS = [80, 443];
 
 // The default TLS configuration is the one that intercepts (see the header).
 const interceptTls = <T>(tls: T): T => tls;
 
-// `*.example.com` covers the suffix and the bare domain itself; the sandbox's
+// `*.example.com` covers the suffix and the bare domain itself. The sandbox's
 // own suffix rule only promises subdomains, so the apex gets its own rule.
 function buildNetworkPolicy(msb: Msb, domains: readonly string[]) {
 	const policy = msb.NetworkPolicy.builder().defaultDeny();
@@ -60,6 +62,7 @@ function buildNetworkPolicy(msb: Msb, domains: readonly string[]) {
 	return policy.build();
 }
 
+// Created on first use so volumes exist exactly when a permission needs them.
 async function ensureVolume(msb: Msb, name: string, quotaMiB: number): Promise<void> {
 	try {
 		await msb.Volume.get(name);
@@ -68,6 +71,7 @@ async function ensureVolume(msb: Msb, name: string, quotaMiB: number): Promise<v
 	}
 }
 
+// Where the spec's limits and grants actually turn into VM settings.
 async function createSandbox(msb: Msb, spec: SandboxSpec) {
 	for (const volume of spec.volumes) await ensureVolume(msb, volume.name, volume.quotaMiB);
 
@@ -96,6 +100,8 @@ async function createSandbox(msb: Msb, spec: SandboxSpec) {
 	return builder.create();
 }
 
+// Starts the app's command and forwards its output. Returns stdin, the host's
+// only way to talk to it.
 async function startProcess(
 	sandbox: Awaited<ReturnType<typeof createSandbox>>,
 	spec: SandboxSpec,
@@ -132,6 +138,7 @@ async function startProcess(
 	return stdin;
 }
 
+// Kills the VM if the app process can't start, so a failed start leaves nothing running.
 async function startMicrosandbox(
 	spec: SandboxSpec,
 	handlers: SandboxHandlers
@@ -169,13 +176,18 @@ async function startMicrosandbox(
 	};
 }
 
+// Fixed so a leftover prepare sandbox is replaced rather than accumulating.
 const PREPARE_NAME = `${SANDBOX_PREFIX}prepare`;
 
+/**
+ * The only backend, used by manager.ts to start apps and through
+ * defaultAppDeps for installs, updates and cleanup.
+ */
 export const microsandboxBackend: SandboxBackend = {
 	start: startMicrosandbox,
 
 	// Booting a throwaway sandbox is how the runtime pulls (and unpacks) an
-	// image; there's no standalone pull.
+	// image, there's no standalone pull.
 	async prepare(image) {
 		const msb = await loadRuntime();
 		let builder = msb.Sandbox.builder(PREPARE_NAME)
@@ -195,12 +207,9 @@ export const microsandboxBackend: SandboxBackend = {
 
 	async removeVolumes(predicate) {
 		const msb = await loadRuntime();
-		// `Volume.list()` hands back read-only handles -- calling `.remove()`
-		// on one of those throws ("fetch a live handle via Volume.get(name)"),
-		// which the `.catch(() => {})` below used to swallow silently, so
-		// uninstalling an app looked like it worked while its /storage and
-		// /cache volumes were quietly left behind on disk. The static
-		// `Volume.remove(name)` deletes by name directly, no live handle needed.
+		// The static `Volume.remove(name)`, since `.remove()` on a handle from
+		// `Volume.list()` throws (it's read-only), and the catch below would
+		// silently leave the volumes on disk.
 		for (const volume of await msb.Volume.list()) {
 			if (predicate(volume.name)) await msb.Volume.remove(volume.name).catch(() => {});
 		}

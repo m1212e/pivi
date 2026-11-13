@@ -9,12 +9,16 @@ import type { AppImage } from '../image';
 import { pinnedReference } from '../registry';
 import type { SandboxSpec, VolumeSpec } from './types';
 
-// Every app gets the same ceiling for now; an app needing more is a
-// manifest field to add once one does.
+// Bounds what one app can take from the TV box. Every app gets the same
+// ceiling for now, an app needing more is a manifest field to add once one does.
 const RESOURCE_LIMITS = { memoryMiB: 256, cpus: 1 } as const;
 const STORAGE_QUOTA_MIB = 256;
 const CACHE_QUOTA_MIB = 512;
 
+/**
+ * Marks sandboxes as ours, so the stale cleanup at boot (lifecycle.ts) never
+ * touches anything else on the machine.
+ */
 export const SANDBOX_PREFIX = 'pivi-';
 
 function sandboxName(appId: string): string {
@@ -26,16 +30,22 @@ function profileKey(userId: string): string {
 	return createHash('sha256').update(userId).digest('hex').slice(0, 12);
 }
 
-// Fields are joined with `_`, which an app id (lowercase letters, digits and
-// dashes) can never contain — so one app's volume names can't be mistaken for
-// another's, e.g. `demo` for an app called `demo-two`.
+/**
+ * Also used by installer.ts to clear one profile's cache or storage. Joined
+ * with `_`, which an app id can't contain, so `demo` never matches `demo-two`'s volumes.
+ */
 export function volumeName(appId: string, userId: string, kind: 'storage' | 'cache'): string {
 	return `${SANDBOX_PREFIX}${appId}_${profileKey(userId)}_${kind}`;
 }
 
+/** Lets uninstallApp remove every profile's volumes for one app. */
 export const volumeBelongsToApp = (appId: string) => (name: string) =>
 	name.startsWith(`${SANDBOX_PREFIX}${appId}_`);
 
+/**
+ * Called by manager.ts each time an app starts, which is why a permission
+ * change takes effect on restart.
+ */
 export function buildSandboxSpec(input: {
 	ref: ImageRef;
 	image: AppImage;

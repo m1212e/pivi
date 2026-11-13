@@ -8,6 +8,8 @@
 	import { goto } from '$app/navigation';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import * as m from '#lib/paraglide/messages';
+	import { PIN_LENGTH } from '#lib/pinRules';
+	import { ROUTES } from '#lib/routes';
 
 	let step = $state<'name' | 'pin'>('name');
 	let username = $state('');
@@ -36,16 +38,16 @@
 			// The previous profile's cached query results must not leak into the
 			// new one; urql's cache can't be cleared outright (see client.ts).
 			resetClientState();
-			await goto('/home');
+			await goto(ROUTES.home);
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.could_not_create_profile());
 			pin = '';
 		}
 	}
 
-	// Wait for the effect queue so the fully-updated 4-digit value is read.
+	// Wait for the effect queue so the fully-updated PIN is read.
 	$effect(() => {
-		if (step === 'pin' && pin.length === 4) submit();
+		if (step === 'pin' && pin.length === PIN_LENGTH) submit();
 	});
 
 	$effect(() => {

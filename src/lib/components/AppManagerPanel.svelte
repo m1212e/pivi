@@ -1,12 +1,7 @@
 <script lang="ts">
-	// Installing an app and deciding, for each one, what it's allowed to do. The
-	// TV's own page (/apps), driven with nothing but the remote's gestures — so
-	// everything here works by moving focus and pressing: every control is a
-	// button (a switch is a button, not a checkbox), text goes into ordinary
-	// fields (the remote relays the phone's keyboard to whichever one has focus),
-	// and nothing opens a native dialog that a remote could never answer.
-	//
-	// It sends nothing itself: whoever renders it passes the actions in.
+	// Install, permissions and updates for the TV's /apps page. Driven only by
+	// remote focus and press, so switches are buttons, text goes into TextFields
+	// the phone types into, and nothing opens a native dialog. The page owns the API calls.
 	import {
 		ChevronDown,
 		Eraser,
@@ -60,22 +55,16 @@
 
 	let image = $state('');
 	let publicKey = $state('');
-	// Off by default: most installs here are a build someone's trying out, not
-	// yet a signed release, so skipping verification is the path that needs no
-	// extra tap. Switching it on reveals the key field; leaving it off sends no
-	// `publicKey` at all, not an empty one.
+	// Off by default since most installs here are test builds, not signed
+	// releases. Leaving it off sends no `publicKey` at all, not an empty one.
 	let verifySignature = $state(false);
-	// What the user has left switched on in the preview. Starts with everything the
-	// app asks for; they turn off what they don't want to give.
+	// Starts with everything the app asks for, the user turns off what they won't give.
 	let chosen = $derived<PermissionKey[]>(apps.preview ? [...apps.preview.permissions] : []);
-	// Installed apps render as a compact row; its settings (toggles,
-	// permissions, actions) only show for whichever one is expanded, so a
-	// list of several apps doesn't turn into a wall of switches.
+	// Only one app's settings show at a time, so several apps don't become a
+	// wall of switches.
 	let expandedAppId = $state<string | null>(null);
 
-	// A suggested app that's already installed has nothing left to offer --
-	// tapping it would just preview-install over the real thing. Filtered
-	// here rather than left for the user to notice it does nothing.
+	// Picking an installed one would just preview-install over it.
 	const visibleSuggested = $derived(
 		suggested.filter((entry) => !apps.apps.some((app) => app.id === entry.id))
 	);
@@ -104,11 +93,8 @@
 			}[apps.busy]
 	);
 
-	// What the last "Check for updates" run actually found -- shown once
-	// `busy` clears, otherwise a check that finds nothing to do (or that
-	// silently applies one, for an app whose version string doesn't change
-	// between builds) looks indistinguishable from the button not doing
-	// anything at all.
+	// Without this a check that finds nothing, or silently applies an update
+	// with an unchanged version, looks like the button did nothing.
 	const checkSummaryText = $derived.by(() => {
 		const summary = apps.lastCheckSummary;
 		if (!summary || apps.busy) return null;
@@ -148,9 +134,8 @@
 		actions.preview(image.trim(), verifySignature ? publicKey.trim() : undefined);
 	}
 
-	// Enter after the image means "next", not "go", when the key is still to be
-	// filled in -- with verification off there's nothing left to fill, so Enter
-	// is left to submit the form like it would anywhere else.
+	// With verification on, Enter after the image moves to the key field
+	// instead of submitting an incomplete form.
 	function nextAfterImage(event: KeyboardEvent) {
 		if (!verifySignature) return;
 		event.preventDefault();
@@ -163,6 +148,7 @@
 	const buttonBase =
 		'rounded-2xl px-5 py-3 font-medium transition focus:outline-none disabled:opacity-50';
 
+	// Clearing only makes sense for data the app was allowed to keep.
 	const appHasClearCache = (app: InstalledApp) =>
 		app.permissions.some((p) => p.key === 'cache' && p.granted);
 	const appHasClearStorage = (app: InstalledApp) =>

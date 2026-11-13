@@ -14,9 +14,11 @@ import { formatImageRef, registryApiHost, type ImageRef } from '#lib/apps/imageR
 import { MANIFEST_LABEL, appManifestSchema, type AppManifest } from '#lib/apps/manifest';
 import { SUPPORTED_PROTOCOLS } from '#lib/apps/host';
 
+// Caps on what a registry can make the host buffer in memory.
 const MAX_MANIFEST_BYTES = 4 << 20;
 const MAX_BLOB_BYTES = 4 << 20;
 
+// Offered in Accept so registries serve either OCI or Docker flavored manifests.
 const MANIFEST_TYPES = [
 	'application/vnd.oci.image.index.v1+json',
 	'application/vnd.oci.image.manifest.v1+json',
@@ -24,10 +26,13 @@ const MANIFEST_TYPES = [
 	'application/vnd.docker.distribution.manifest.v2+json'
 ];
 
+/** Marks errors whose message the install form shows the user as is. */
 export class RegistryError extends Error {}
 
+/** Picks the right build out of a multi-arch image, for the only targets apps are published for. */
 export type Platform = { os: 'linux'; architecture: 'amd64' | 'arm64' };
 
+// Apps run in a Linux sandbox whatever the host OS is, so only the CPU varies.
 function hostPlatform(): Platform {
 	return { os: 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'amd64' };
 }
@@ -36,8 +41,10 @@ function sha256Digest(bytes: Uint8Array): string {
 	return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
-// A registry on this machine is spoken to in plain HTTP (how a development
-// registry is normally run); everything else is HTTPS only.
+/**
+ * A registry on this machine is spoken to in plain HTTP, since that's how a
+ * development registry normally runs. microsandbox.ts pulls from it the same way.
+ */
 export function isLocalRegistry(registry: string): boolean {
 	const host = registry.replace(/:\d+$/, '');
 	return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
@@ -49,6 +56,8 @@ function schemeFor(registry: string): 'http' | 'https' {
 
 type Challenge = { realm: string; service?: string; scope?: string };
 
+// Registries answer 401 with where to get a token. Null when it isn't the
+// anonymous bearer flow we know how to follow.
 function parseBearerChallenge(header: string | null): Challenge | null {
 	if (!header || !/^bearer\s/i.test(header)) return null;
 	const fields = Object.fromEntries(
@@ -65,12 +74,17 @@ function unreachable(registry: string): never {
 	throw new RegistryError(`Could not reach the registry ${registry}`);
 }
 
+/**
+ * Kept as unparsed json since the same fetch serves indexes, image manifests
+ * and cosign signature manifests (signature.ts), each validated by its caller.
+ */
 export type RegistryManifest = {
 	digest: string;
 	mediaType: string;
 	json: unknown;
 };
 
+// Only the fields the host reads, so unrelated registry extras can't fail parsing.
 const descriptorSchema = z.object({
 	digest: z.string(),
 	mediaType: z.string().optional(),
@@ -89,6 +103,10 @@ const imageManifestSchema = z.object({
 });
 type ImageManifest = z.infer<typeof imageManifestSchema>;
 
+/**
+ * Shared by image resolution here and signature checks (signature.ts), and
+ * reached through AppDeps. fetchImpl is injectable so tests can fake a registry.
+ */
 export class RegistryClient {
 	// Anonymous pull tokens, per registry and scope. Short-lived and cheap to
 	// refetch, so no expiry handling: a stale one just earns a fresh challenge.
@@ -116,6 +134,7 @@ export class RegistryClient {
 		return token;
 	}
 
+	// Handles the anonymous token dance once, then retries the request.
 	private async request(ref: ImageRef, path: string, accept?: string): Promise<Response> {
 		const url = this.url(ref, path);
 		const cacheKey = `${ref.registry}/${ref.repository}`;
@@ -143,6 +162,7 @@ export class RegistryClient {
 		return response;
 	}
 
+	// Checked after download, which still bounds what gets hashed and parsed.
 	private async readBounded(response: Response, limit: number): Promise<Uint8Array> {
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (bytes.length > limit) throw new RegistryError(`Response exceeds ${limit} bytes`);
@@ -188,10 +208,11 @@ const imageConfigSchema = z.object({
 		.default({})
 });
 
+/** Everything install and update need to show an app for approval and later boot it. */
 export type ResolvedImage = {
 	ref: ImageRef;
 	// What the reference resolved to at the top level (the index for a
-	// multi-arch image) — the thing that gets pinned, and that a signature
+	// multi-arch image), the thing that gets pinned, and that a signature
 	// covers.
 	digest: string;
 	manifest: AppManifest;
@@ -200,6 +221,7 @@ export type ResolvedImage = {
 	workingDir?: string;
 };
 
+// A single-platform image has no index, so its root manifest is used as is.
 async function selectPlatformManifest(
 	client: RegistryClient,
 	ref: ImageRef,
@@ -220,8 +242,10 @@ async function selectPlatformManifest(
 	return imageManifestSchema.parse((await client.getManifest(ref, match.digest)).json);
 }
 
-// Resolves an image reference to what the host needs to show it for approval
-// and later run it, reading nothing but manifests and the config blob.
+/**
+ * Answers "what is this app" for the install preview, the updater and the
+ * update badge. Reads only manifests and the config blob, no layers.
+ */
 export async function resolveImage(
 	ref: ImageRef,
 	client: RegistryClient = new RegistryClient(),
@@ -260,8 +284,10 @@ export async function resolveImage(
 	};
 }
 
-// The reference to hand the sandbox to pull: pinned to the digest that was
-// verified, never the mutable tag.
+/**
+ * What the sandbox pulls and boots (spec.ts, installer.ts, updater.ts): pinned
+ * to the verified digest, never the mutable tag a registry could repoint.
+ */
 export function pinnedReference(ref: ImageRef, digest: string): string {
 	return formatImageRef({ registry: ref.registry, repository: ref.repository, digest });
 }

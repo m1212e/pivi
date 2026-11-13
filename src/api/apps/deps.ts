@@ -7,16 +7,24 @@ import { microsandboxBackend } from './sandbox/microsandbox';
 import type { SandboxBackend } from './sandbox/types';
 import { dbAppStore, type AppStore } from './store';
 
-// How the install logic affects apps that are running right now.
+/**
+ * How install and update logic stops or restarts running apps without
+ * importing manager.ts, so tests can swap in a fake (processControl is the real one).
+ */
 export interface AppProcessControl {
 	isRunning(appId: string): boolean;
-	// Stops it (and forgets any caches of what it produced); it starts again on
-	// next use.
+	// Stops it (and forgets any caches of what it produced). It starts again
+	// on next use.
 	stop(appId: string): Promise<void>;
 	// Stops it and starts it again right away, rejecting if it can't start.
 	restart(appId: string): Promise<void>;
 }
 
+/**
+ * Passed into installer.ts, updater.ts and updateAvailability.ts instead of
+ * them importing the database, registry and sandbox directly, so tests can
+ * replace single pieces.
+ */
 export type AppDeps = {
 	store: AppStore;
 	registry: RegistryClient;
@@ -25,6 +33,7 @@ export type AppDeps = {
 	control: AppProcessControl;
 };
 
+/** The real wiring, used by app management, the home screen tiles and lifecycle.ts. */
 export const defaultAppDeps: AppDeps = {
 	store: dbAppStore,
 	registry: new RegistryClient(),

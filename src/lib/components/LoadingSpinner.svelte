@@ -1,8 +1,8 @@
 <script lang="ts">
 	import * as m from '#lib/paraglide/messages';
 
-	// Ring spinner with a soft pulsing halo, for content that has no known
-	// shape yet (a skeleton needs one). The label is only for screen readers.
+	// For content with no known shape yet, where a skeleton can't be drawn, like
+	// an app's screen before its first render. Apps can also show it themselves.
 	let { label = m.loading() }: { label?: string } = $props();
 </script>
 

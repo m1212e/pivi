@@ -8,6 +8,10 @@ function isLanInterface(iface: { family: string; internal: boolean }): boolean {
 	return iface.family === 'IPv4' && !iface.internal;
 }
 
+/**
+ * hooks.server.ts builds the phone pairing URL from this. QR_BIND_HOSTNAME and
+ * QR_BIND_IP override the detected address. Null without a usable one.
+ */
 export function getLanAddressOrHostname() {
 	if (QR_BIND_HOSTNAME) {
 		return QR_BIND_HOSTNAME;

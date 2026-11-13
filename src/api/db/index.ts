@@ -3,6 +3,8 @@ import { building } from '$app/env';
 import { DATABASE_URL } from '$app/env/private';
 import { relations } from './relations';
 
+// Nothing can connect to Postgres while building, so a mock stands in and
+// importing this module doesn't need DATABASE_URL then.
 const conf = { relations, jit: true } as const;
 
 if (!building && !DATABASE_URL) throw new Error('DATABASE_URL is not set');

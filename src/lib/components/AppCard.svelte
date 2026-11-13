@@ -2,6 +2,10 @@
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import * as m from '#lib/paraglide/messages';
 
+	// An installed app's tile on the dashboard. AppIcon only draws the tile, so
+	// this adds the link and label. The `data-pivi-app-*` attributes are read by
+	// RemoteBridge to show the apps on the phone and to click one when the
+	// phone picks it.
 	let {
 		id,
 		name,

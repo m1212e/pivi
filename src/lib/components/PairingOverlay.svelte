@@ -1,16 +1,13 @@
 <script lang="ts">
-	// A persistent "scan to connect a phone" affordance, shown over every
-	// screen it makes sense on -- see +layout.svelte for exactly which
-	// (the routes that already show their own pairing QR as primary content,
-	// and the player, are excluded there). Hidden the moment a phone is
-	// already connected, since the whole point is getting one connected: the
-	// remote is this app's only input device apart from the TV itself, so a
-	// corner QR nobody needs to scan is just noise once that's solved.
+	// Corner QR from the root layout so a phone remote can be paired from any
+	// screen. The layout hides it where a pairing QR is already the main content
+	// and in the player. It also hides once a phone connects, as it's just noise then.
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
 	import { getPairing } from '#lib/state/pairing.svelte';
+	import { pollEvery } from '#lib/poll';
 	import PairingQr from './PairingQr.svelte';
 
 	let { hidden }: { hidden: boolean } = $props();
@@ -18,30 +15,26 @@
 	let remoteUrl = $state<string | null>(null);
 	let phoneConnected = $state(true);
 
-	// Same short-lived-token refresh as the home/login screens -- this can
-	// sit visible long enough for the pairing code to expire.
-	//
-	// phoneConnected also gets re-polled here, not just pushed over the
-	// subscription: if the long-lived subscription stream ever dies (proxy
-	// idle timeout, server restart) it tears down silently with nothing to
-	// reconnect it, and the TV can stay on for days without a reload, so a
-	// stale "disconnected" reading could otherwise stick forever.
+	// The pairing token is refreshed since the overlay can outlive it. The phone
+	// state is polled on top of the subscription because a dead stream never
+	// reconnects, and the TV may run for days without a reload.
 	onMount(() => {
 		let cancelled = false;
-		getPairing().then((pairing) => {
-			if (!cancelled) remoteUrl = pairing.remoteUrl;
+		getPairing()
+			.then((pairing) => {
+				if (!cancelled) remoteUrl = pairing.remoteUrl;
+			})
+			.catch(() => {});
+		const stopPairingPoll = pollEvery(60_000, getPairing, (pairing) => {
+			remoteUrl = pairing.remoteUrl;
 		});
-		const interval = setInterval(async () => {
-			const pairing = await getPairing();
-			if (!cancelled) remoteUrl = pairing.remoteUrl;
-
-			try {
-				const result = await client.query.phoneConnection({ connected: true });
-				if (!cancelled) phoneConnected = result.connected;
-			} catch {
-				// transient network/server hiccup -- next poll will retry
+		const stopPhonePoll = pollEvery(
+			60_000,
+			() => client.query.phoneConnection({ connected: true }),
+			(result) => {
+				phoneConnected = result.connected;
 			}
-		}, 60_000);
+		);
 
 		const subscription = client.liveQuery
 			.phoneConnection({ connected: true })
@@ -51,7 +44,8 @@
 
 		return () => {
 			cancelled = true;
-			clearInterval(interval);
+			stopPairingPoll();
+			stopPhonePoll();
 			stopSubscription(subscription);
 		};
 	});

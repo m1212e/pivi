@@ -1,5 +1,6 @@
 import { urqlClient } from '#lib/api/client';
 
+/** What the setup and home screens need to show connectivity and offer the hotspot. */
 export type NetworkStatus = {
 	available: boolean;
 	mode: string;
@@ -24,12 +25,10 @@ const NETWORK_QUERY = /* GraphQL */ `
 	}
 `;
 
-// Same reasoning as state/pairing.svelte.ts's getPairing: this is polled
-// precisely to notice a change the server made (the phone joined a network, so
-// the setup screen should get out of the way), and the generated client's
-// cache-and-network helper would happily answer from a cached result that
-// predates it. 'network-only' plus .toPromise() means every call is a real
-// round trip.
+/**
+ * Polled by the setup and home screens to notice server side changes, like the
+ * phone finishing a wifi join. Always a real round trip, same reasoning as getPairing.
+ */
 export async function getNetworkStatus(): Promise<NetworkStatus> {
 	const result = await urqlClient
 		.query<{ network: NetworkStatus }>(NETWORK_QUERY, {}, { requestPolicy: 'network-only' })

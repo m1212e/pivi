@@ -1,10 +1,7 @@
-// A generic "push this URL to the paired phone" capability — not tied to
-// YouTube or any one app. An app builds whatever it needs (a sign-in code,
-// a login link) out of its own screen content and wires one button to this
-// (see dashboard.ts's `openOnPhone` action and UiNodeRenderer.svelte), or a
-// page triggers it directly (e.g. "Open on your phone" next to a device
-// code) — either way it's just relay.ts's sendToPhones +
-// remoteProtocol.ts's openUrlNotification.
+// What the TV knows about the paired phone: whether one is connected (for
+// PairingOverlay.svelte) and a generic "open this URL on the phone" mutation,
+// which app UIs wire to a button through UiNodeRenderer.svelte, e.g. for a
+// sign in link.
 import { GraphQLError } from 'graphql';
 import { schemaBuilder } from '../rumble';
 import { openUrlNotification } from '#lib/pairing/remoteProtocol';
@@ -13,10 +10,8 @@ import { PHONE_CONNECTION_EVENT, remotePubSub } from '../ws/remotePubsub';
 
 type PhoneConnection = { connected: boolean };
 
-// Wrapped in an object rather than exposed as a raw top-level scalar field —
-// see the comment on `Pairing` in handlers/pairing.ts: a scalar top-level
-// query field resolves to a `Subscribeable` wrapper on the generated client,
-// an object-shaped one resolves directly to usable data.
+// An object rather than a scalar field so the generated client resolves it
+// to plain data, see handlers/pairing.ts.
 const PhoneConnectionRef = schemaBuilder.objectRef<PhoneConnection>('PhoneConnection').implement({
 	fields: (t) => ({ connected: t.exposeBoolean('connected') })
 });
@@ -26,9 +21,8 @@ function resolvePhoneConnection(): PhoneConnection {
 }
 
 schemaBuilder.queryFields((t) => ({
-	// Whether a paired phone is connected right now -- lets the TV's own UI
-	// (the pairing QR overlay, see PairingOverlay.svelte) show "scan to
-	// connect" only while that's actually true, instead of unconditionally.
+	// Lets PairingOverlay.svelte show "scan to connect" only while no phone is
+	// connected.
 	phoneConnection: t.field({ type: PhoneConnectionRef, resolve: resolvePhoneConnection })
 }));
 
@@ -45,9 +39,8 @@ schemaBuilder.mutationFields((t) => ({
 		type: 'Boolean',
 		args: { url: t.arg.string({ required: true }) },
 		resolve: (_root, args) => {
-			// sendToPhones silently does nothing if none is connected, which looked
-			// like a dead button -- this is the only thing that distinguishes "it
-			// worked" from "there was nobody to tell" for the caller.
+			// sendToPhones silently does nothing without a phone, which looked
+			// like a dead button, so the caller gets an error instead.
 			if (!hasConnectedPhone()) {
 				throw new GraphQLError('Pair a phone first to open this link there');
 			}

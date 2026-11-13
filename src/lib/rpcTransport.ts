@@ -1,10 +1,7 @@
-// A push-based MessageReader/MessageWriter pair for vscode-jsonrpc, for
-// transports that hand you messages via a callback rather than exposing a
-// readable/writable stream: a WebSocket's `onmessage` (RemoteBridge.svelte,
-// the phone remote page), or the pairing session's already-decrypted
-// `onMessage` callback (session.ts). Nothing here is specific to any one of
-// those — it's the same seam the app host (api/apps/runtime.ts) uses
-// for its child-process IPC channel.
+// vscode-jsonrpc only ships stream based readers and writers, but our
+// transports deliver messages through callbacks: the TV's relay socket
+// (RemoteBridge), the phone's decrypted pairing session (remoteController), the
+// app host's IPC channel (api/apps/runtime.ts) and app stdio (stdioConnection).
 import {
 	AbstractMessageReader,
 	AbstractMessageWriter,
@@ -12,12 +9,12 @@ import {
 	type Message
 } from 'vscode-jsonrpc';
 
+/** Lets callback based transports feed vscode-jsonrpc. Call `push` per incoming message. */
 export class PushMessageReader extends AbstractMessageReader {
 	private callback?: (data: Message) => void;
 
 	// Called by vscode-jsonrpc itself (MessageConnection wiring), not by our
 	// own code, so static analysis can't see it's reachable.
-	// fallow-ignore-next-line unused-class-member
 	listen(callback: (data: Message) => void): Disposable {
 		this.callback = callback;
 		return { dispose: () => (this.callback = undefined) };
@@ -28,11 +25,13 @@ export class PushMessageReader extends AbstractMessageReader {
 		this.callback?.(message);
 	}
 
+	// Lets the owner signal a dropped transport so the connection shuts down
 	close() {
 		this.fireClose();
 	}
 }
 
+/** Lets vscode-jsonrpc send over any transport. The sink does the actual sending. */
 export class SinkMessageWriter extends AbstractMessageWriter {
 	constructor(private sink: (message: Message) => void) {
 		super();
@@ -40,12 +39,11 @@ export class SinkMessageWriter extends AbstractMessageWriter {
 
 	// Called by vscode-jsonrpc itself whenever it sends a message, not by our
 	// own code, so static analysis can't see it's reachable.
-	// fallow-ignore-next-line unused-class-member
 	write(msg: Message): Promise<void> {
 		this.sink(msg);
 		return Promise.resolve();
 	}
 
-	// fallow-ignore-next-line unused-class-member
+	// Nothing to flush or close, the sink owns the underlying transport.
 	end() {}
 }

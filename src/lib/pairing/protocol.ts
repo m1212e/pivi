@@ -1,16 +1,12 @@
-// Wire format for the phone<->relay handshake and encrypted control channel.
-// Shared between the relay server (src/api/ws/relay.ts) and the phone-side
-// session driver (src/lib/pairing/session.ts) so both sides agree on one
-// definition instead of duplicating string literals.
-//
-// Every shape is a zod schema (types are derived from it, not the other way
-// round) so both sides can validate a message crossing this untrusted
-// network boundary at runtime, the same way the app RPC/UI boundaries
-// already do, instead of trusting a TypeScript cast.
+// Wire format for the phone<->relay handshake and encrypted control channel,
+// shared by the relay (src/api/ws/relay.ts) and the phone (session.ts) so the
+// two can't drift. Zod schemas rather than plain types because both sides
+// have to validate what arrives over the network at runtime.
 import { z } from 'zod';
 
 // Sent by the TV kiosk tab (src/lib/components/RemoteBridge.svelte)
-// immediately after connecting — the relay only accepts this from loopback.
+// immediately after connecting. The relay only accepts this from loopback,
+// so a phone can't pose as the TV.
 export const tvHelloSchema = z.object({ type: z.literal('tvHello') });
 export type TvHello = z.infer<typeof tvHelloSchema>;
 
@@ -23,6 +19,7 @@ export const pairRequestSchema = z.object({
 });
 export type PairRequest = z.infer<typeof pairRequestSchema>;
 
+// Relay's answer to a valid token: the id to reconnect with and the TV key to verify it by.
 const pairSuccessSchema = z.object({
 	type: z.literal('paired'),
 	deviceId: z.string(),
@@ -30,12 +27,13 @@ const pairSuccessSchema = z.object({
 });
 export type PairSuccess = z.infer<typeof pairSuccessSchema>;
 
+// Expired or already used token. The message ends up on the phone as is.
 const pairErrorSchema = z.object({ type: z.literal('pairError'), message: z.string() });
 export type PairError = z.infer<typeof pairErrorSchema>;
 
 // Reconnect: phone proves it holds the secret key matching a previously
 // paired public key, via a fresh signed-ephemeral-DH exchange (mutual auth +
-// forward secrecy — see src/lib/crypto/pairing.ts).
+// forward secrecy, see src/lib/crypto/pairing.ts).
 export const helloRequestSchema = z.object({
 	type: z.literal('hello'),
 	deviceId: z.string(),
@@ -43,6 +41,7 @@ export const helloRequestSchema = z.object({
 });
 export type HelloRequest = z.infer<typeof helloRequestSchema>;
 
+// The TV's half of the exchange, signed so the phone knows it is the TV it paired with.
 const challengeSchema = z.object({
 	type: z.literal('challenge'),
 	ephemeralPublicKey: z.string(),
@@ -50,15 +49,18 @@ const challengeSchema = z.object({
 });
 export type Challenge = z.infer<typeof challengeSchema>;
 
+// The phone's signature over the same transcript, proving it holds the device key.
 export const challengeResponseSchema = z.object({
 	type: z.literal('response'),
 	signature: z.string()
 });
 export type ChallengeResponse = z.infer<typeof challengeResponseSchema>;
 
+// Handshake done, encrypted traffic may start.
 const readySchema = z.object({ type: z.literal('ready') });
 export type Ready = z.infer<typeof readySchema>;
 
+// Handshake rejected. session.ts treats 'Unknown device' as stale credentials.
 const authErrorSchema = z.object({ type: z.literal('authError'), message: z.string() });
 export type AuthError = z.infer<typeof authErrorSchema>;
 
@@ -72,6 +74,7 @@ export const encryptedSchema = z.object({
 });
 export type Encrypted = z.infer<typeof encryptedSchema>;
 
+// Unions per direction so each side only has to accept what the other can send.
 export const phoneToRelaySchema = z.union([
 	pairRequestSchema,
 	helloRequestSchema,

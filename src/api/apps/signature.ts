@@ -1,12 +1,12 @@
-// An app's image is checked against a key the user trusts, if they supplied
-// one -- the user can opt out of signature verification entirely at install
-// time, trading that guarantee for being able to install an unsigned image.
+// Proves an app image (and every later update) comes from the publisher whose
+// key the user pasted at install, so whoever controls the registry tag can't
+// swap in other code. The user may skip this at install for unsigned images.
 //
 // The signature format is cosign's: for an image with digest `sha256:<hex>`,
 // the signature lives in the same repository under the tag `sha256-<hex>.sig`,
 // as an OCI manifest whose layers each hold a "simple signing" JSON payload
 // (naming the digest that was signed) with the signature itself in an
-// annotation. Publishing is `cosign sign --key cosign.key <image>`; the
+// annotation. Publishing is `cosign sign --key cosign.key <image>`, and the
 // publisher gives users `cosign.pub`, which is what gets pinned at install.
 //
 // Only key-based signatures are verified. Keyless (certificate/OIDC identity)
@@ -20,14 +20,19 @@ import { RegistryClient } from './registry';
 const SIGNATURE_LAYER_TYPE = 'application/vnd.dev.cosign.simplesigning.v1+json';
 const SIGNATURE_ANNOTATION = 'dev.cosignproject.cosign/signature';
 
+/** Marks errors whose message the install form shows the user as is. */
 export class SignatureError extends Error {}
 
-// What's stored for an installed app: the key its signature checked out
-// against, and a fingerprint of it to show the user.
+/**
+ * The key an app was installed with, stored on its row (db/schema.ts) so
+ * updater.ts can demand the same signer for every update. The fingerprint is
+ * what the install preview shows.
+ */
 export type AppSigner = { publicKeyPem: string; fingerprint: string };
 
+// Turns OpenSSL's cryptic failures into messages the person pasting the key can act on.
 function loadPublicKey(pem: string): KeyObject {
-	// Node would derive a public key from a private one without complaint; a
+	// Node would derive a public key from a private one without complaint, but a
 	// private key pasted here is a mistake worth surfacing (and never kept).
 	if (/PRIVATE KEY/.test(pem)) {
 		throw new SignatureError('That is a private key — paste the public key (cosign.pub)');
@@ -48,10 +53,10 @@ function loadPublicKey(pem: string): KeyObject {
 	return key;
 }
 
-// A key pasted into a single-line field arrives with its line breaks replaced by
-// spaces (or gone), which OpenSSL won't read. Rebuilds the standard layout — the
-// header, the base64 body in 64-character lines, the footer — from whatever
-// whitespace the text came with.
+/**
+ * A key pasted into the install form's single-line field loses its line breaks,
+ * which OpenSSL won't read, so parseAppSigner rebuilds the standard PEM layout first.
+ */
 export function normalizePem(text: string): string {
 	const match = text.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
 	if (!match) return text.trim();
@@ -61,8 +66,10 @@ export function normalizePem(text: string): string {
 	return [`-----BEGIN ${match[1]}-----`, ...lines, `-----END ${match[1]}-----`].join('\n');
 }
 
-// Normalizes a pasted PEM and computes the fingerprint the UI shows (SHA-256 of
-// the key's DER encoding), so the same key always reads the same way.
+/**
+ * Turns the key pasted at install (installer.ts) into what's stored and shown.
+ * The fingerprint hashes the DER encoding, so the same key always reads the same.
+ */
 export function parseAppSigner(pem: string): AppSigner {
 	const key = loadPublicKey(normalizePem(pem));
 	const der = key.export({ type: 'spki', format: 'der' });
@@ -72,6 +79,8 @@ export function parseAppSigner(pem: string): AppSigner {
 	};
 }
 
+// The cosign payload names the digest that was signed. Checking it stops a
+// signature made for another image from being replayed here.
 const payloadSchema = z.object({
 	critical: z.object({
 		type: z.string(),
@@ -80,7 +89,7 @@ const payloadSchema = z.object({
 });
 
 function signatureMatches(key: KeyObject, payload: Uint8Array, signature: Buffer): boolean {
-	// ed25519 signs the message directly; EC and RSA sign its SHA-256.
+	// ed25519 signs the message directly, EC and RSA sign its SHA-256.
 	const algorithm = key.asymmetricKeyType === 'ed25519' ? null : 'sha256';
 	try {
 		return verify(algorithm, payload, key, signature);
@@ -89,7 +98,10 @@ function signatureMatches(key: KeyObject, payload: Uint8Array, signature: Buffer
 	}
 }
 
-// Throws unless `digest` of `ref` carries a signature made by `signer`'s key.
+/**
+ * Gate used (through AppDeps.verify) before installing an image or accepting
+ * an update for it. Throws unless `digest` carries a signature by `signer`'s key.
+ */
 export async function verifyImageSignature(
 	ref: ImageRef,
 	digest: string,
@@ -124,7 +136,7 @@ export async function verifyImageSignature(
 		const signature = Buffer.from(encoded, 'base64');
 		if (!signatureMatches(key, payloadBytes, signature)) continue;
 
-		// The signature is genuine; make sure it was made over *this* image and
+		// The signature is genuine, so make sure it was made over *this* image and
 		// not some other one the same key signed.
 		const payload = payloadSchema.safeParse(JSON.parse(new TextDecoder().decode(payloadBytes)));
 		if (

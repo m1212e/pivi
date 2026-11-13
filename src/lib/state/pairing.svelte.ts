@@ -1,5 +1,6 @@
 import { urqlClient } from '#lib/api/client';
 
+/** The data behind the pairing QR code and remote link. */
 type Pairing = { pairingToken: string; remoteUrl: string | null };
 
 const PAIRING_QUERY = /* GraphQL */ `
@@ -11,13 +12,11 @@ const PAIRING_QUERY = /* GraphQL */ `
 	}
 `;
 
-// Bypasses the generated client's client.query.pairing() on purpose: that
-// helper resolves as soon as the first result comes in, which under
-// 'cache-and-network' is the (possibly minutes-old) cached one -- exactly
-// wrong for a poll whose entire point is noticing the pairing token expired
-// server-side and picking up the newly-minted one. requestPolicy:
-// 'network-only' plus urql's own .toPromise() (which filters out `stale`
-// results) guarantees this always waits for a real round trip.
+/**
+ * Polled by the setup and login screens so an expired pairing token gets
+ * replaced. Skips the generated client's helper, which would resolve with a
+ * possibly minutes old cached result first.
+ */
 export async function getPairing(): Promise<Pairing> {
 	const result = await urqlClient
 		.query<{ pairing: Pairing }>(PAIRING_QUERY, {}, { requestPolicy: 'network-only' })

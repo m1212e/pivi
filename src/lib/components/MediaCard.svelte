@@ -1,10 +1,7 @@
 <script lang="ts">
-	// The one media card: a thumbnail with a title and a meta line underneath.
-	// Video shelves, poster shelves, continue-watching rows and an app's own
-	// grids all configure this, so a size or text change is one edit.
-	//
-	// Either a link (`href`) or a button (`onSelect`, for a card that changes the
-	// screen it is on instead of navigating, like an app's playlist card).
+	// The one media card, used by the dashboard's VideoRow and by apps through
+	// UiNodeRenderer, so a size or text change is one edit. `onSelect` is for
+	// cards that change the app's screen instead of navigating.
 	let {
 		title,
 		meta,
@@ -46,9 +43,8 @@
 		`group flex ${WIDTH[shape]} shrink-0 flex-col gap-2 focus:outline-none ${shape === 'avatar' ? 'items-center text-center' : 'text-left'}`
 	);
 
-	// maxresdefault (the highest-res YouTube thumbnail) 404s for videos with
-	// no high-res source — degrade to mqdefault (always generated) rather
-	// than showing a broken image.
+	// YouTube's maxresdefault 404s for videos without a high-res source,
+	// mqdefault always exists.
 	function onImageError(event: Event) {
 		const img = event.currentTarget as HTMLImageElement;
 		if (img.src.includes('maxresdefault.jpg')) {

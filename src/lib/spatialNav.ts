@@ -1,5 +1,6 @@
-// Spatial navigation for the remote's swipes. Pure DOM geometry, no app state.
-
+// Turns phone swipes into TV focus moves (RemoteBridge). It works on rendered
+// rects instead of a fixed grid or tab order, so any screen layout is navigable
+// without per-page wiring.
 type Point = { x: number; y: number };
 type Rank = { tier: number; score: number };
 
@@ -65,6 +66,7 @@ function rankOf(
 	return result.cos < 0.5 ? null : { tier: 1, score: result.distance / result.cos };
 }
 
+// Tier first, then score, lower is better.
 function isBetter(rank: Rank, other: Rank | undefined): boolean {
 	return !other || (rank.tier - other.tier || rank.score - other.score) < 0;
 }
@@ -92,13 +94,13 @@ function isMember(active: Element | null, els: HTMLElement[]): active is HTMLEle
 	return active instanceof HTMLElement && els.includes(active);
 }
 
+/** `scroll` is false for the first focus on a page, which should not jump the view. */
 export type FocusMove = { el: HTMLElement; scroll: boolean };
 
 /**
- * Picks where a swipe sends focus. With nothing focused (or focus somewhere
- * that is not a candidate, e.g. <body> after a navigation) the first
- * candidate takes it, so a swipe always gets focus onto the page. `scroll`
- * is set for real moves, which also bring the target into view.
+ * RemoteBridge's entry point for every swipe. When focus is on no candidate
+ * (like <body> after a navigation) the first one takes it, so a swipe always
+ * lands somewhere.
  */
 export function planMove(
 	els: HTMLElement[],

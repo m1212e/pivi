@@ -1,9 +1,10 @@
-// Known apps offered in the install form so a user can tap one instead of
-// typing out an image ref. `icon` is the same inline SVG the app's own
-// manifest carries (manifest.ts's `icon`) -- duplicated here because this list
-// is shown before anything is installed or even pulled, so there's no
-// manifest yet to read it from. Keep it in sync with the app's actual
-// manifest.json so the suggestion and the installed app look the same.
+import { DEV_REGISTRY } from '#lib/apps/devRegistry';
+
+/**
+ * An app offered in the install form (AppManagerPanel.svelte) so the user can
+ * tap it instead of typing an image ref on a TV remote. `icon` copies the app's
+ * manifest icon since nothing is pulled yet to read it from, so keep the two in sync.
+ */
 export type SuggestedApp = {
 	id: string;
 	name: string;
@@ -19,10 +20,11 @@ const SUGGESTED_APPS: SuggestedApp[] = [
 		name: 'YouTube',
 		description: 'Browse and watch YouTube on the TV',
 		icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="10" fill="#FF0000"/><path d="M20 16L32 24L20 32Z" fill="#FFFFFF"/></svg>',
-		image: 'localhost:5055/pivi-youtube'
+		image: `${DEV_REGISTRY}/pivi-youtube`
 	}
 ];
 
+/** Served by the suggestedApps GraphQL query (handlers/appManagement.ts). */
 export function suggestedApps(): SuggestedApp[] {
 	return SUGGESTED_APPS;
 }

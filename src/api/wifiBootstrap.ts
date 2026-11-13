@@ -1,23 +1,16 @@
-// Bringing up the provisioning access point at boot, if the device has no
-// other way to reach the network.
-//
-// This has to run before anything else needs wifi: with no known network and
-// no phone paired yet, there is nothing else that could get one connected —
-// the TV shows how to join this AP (NetworkSetup.svelte), and once a phone
-// has joined and paired it drives the TV's own /wifi screen (see
-// handlers/wifi.ts) like any other page, trackpad and keyboard relay
-// included.
+// Brings up the provisioning access point at boot when the device has no other
+// way onto a network. Without a known network or a paired phone nothing else
+// could get it connected, so the TV shows how to join this AP
+// (NetworkSetup.svelte) and the joined phone then drives the /wifi screen.
 import { getNetworkState, isAvailable, startHotspot, type NetworkState } from './wifi';
 
-// Ethernet counts: a wired device needs no provisioning, and raising an AP on
-// it would be noise. So would raising one when the radio is already on a
-// network, or when it is already serving the AP from a previous boot
-// ('hotspot').
+// A wired device, a radio already on a network or one still serving the AP
+// from a previous boot ('hotspot') needs no new AP.
 function needsProvisioning(network: Pick<NetworkState, 'mode' | 'online' | 'ethernet'>): boolean {
 	return !network.ethernet && !network.online && network.mode === 'disconnected';
 }
 
-/** Called once at startup (src/api/handlers/register.ts). */
+/** Started once from handlers/register.ts so a fresh device can be set up from a phone. */
 export async function startWifiProvisioning() {
 	if (!(await isAvailable())) return;
 

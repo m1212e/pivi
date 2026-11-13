@@ -1,10 +1,18 @@
 import * as m from '#lib/paraglide/messages';
+import { usernameIssue, type UsernameIssue } from './usernameRules';
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+// The server reports the same issues in plain English (api/validation.ts)
+const MESSAGES: Record<UsernameIssue, () => string> = {
+	too_short: m.username_too_short,
+	too_long: m.username_too_long,
+	invalid_chars: m.username_invalid_chars
+};
 
+/**
+ * Lets the register page reject a bad name before submitting, in the user's
+ * language. Undefined when the name is valid.
+ */
 export function usernameError(username: string): string | undefined {
-	if (username.length < 2) return m.username_too_short();
-	if (username.length > 20) return m.username_too_long();
-	if (!USERNAME_PATTERN.test(username)) return m.username_invalid_chars();
-	return undefined;
+	const issue = usernameIssue(username);
+	return issue ? MESSAGES[issue]() : undefined;
 }

@@ -1,9 +1,13 @@
 <script lang="ts">
+	import { DOM_EVENTS } from '#lib/domEvents';
 	import { onDestroy } from 'svelte';
 	import { osk } from '#lib/state/osk.svelte';
 	import Button from './Button.svelte';
 	import TextField from './TextField.svelte';
 
+	// A complete text entry for apps (see UiNodeRenderer): TextField plus submit,
+	// debounced input reporting and keyboard suggestions. TextField stays the
+	// bare field so other screens can build their own forms around it.
 	let {
 		label,
 		placeholder,
@@ -46,12 +50,14 @@
 	});
 
 	$effect(() => {
-		input?.addEventListener('pivi-suggestion', pickSuggestion);
-		return () => input?.removeEventListener('pivi-suggestion', pickSuggestion);
+		input?.addEventListener(DOM_EVENTS.suggestion, pickSuggestion);
+		return () => input?.removeEventListener(DOM_EVENTS.suggestion, pickSuggestion);
 	});
 
 	onDestroy(() => clearTimeout(inputTimer));
 
+	// A suggestion picked on the TV keyboard or the phone submits right away,
+	// since picking one means that's what the user wants.
 	function pickSuggestion(event: Event) {
 		value = (event as CustomEvent<string>).detail;
 		form?.requestSubmit();

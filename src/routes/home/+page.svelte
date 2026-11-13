@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ROUTES, appHref } from '#lib/routes';
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -12,7 +13,9 @@
 	import VideoRow from '#lib/components/VideoRow.svelte';
 	import VideoRowSkeleton from '#lib/components/VideoRowSkeleton.svelte';
 	import AppsRow from '#lib/components/AppsRow.svelte';
+	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import { getNetworkStatus } from '#lib/state/network.svelte';
+	import { pollEvery } from '#lib/poll';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
 	import { Cable, Music, VolumeX, Wifi } from '@lucide/svelte';
 
@@ -98,9 +101,6 @@
 		cards: { id: true, title: true, subtitle: true, image: true, actionJson: true }
 	} as const;
 
-	function appHref(appId: string): string {
-		return `/apps/${encodeURIComponent(appId)}`;
-	}
 	function cardHref(card: AppCard): string {
 		return appActionHref(
 			card.appId,
@@ -235,12 +235,11 @@
 	// unlike the pre-login picker's polling, nothing here is waiting on this to
 	// notice a change quickly, so a slow refresh is plenty.
 	let network = $state(await getNetworkStatus());
-	$effect(() => {
-		const interval = setInterval(async () => {
-			network = await getNetworkStatus();
-		}, 60_000);
-		return () => clearInterval(interval);
-	});
+	$effect(() =>
+		pollEvery(60_000, getNetworkStatus, (next) => {
+			network = next;
+		})
+	);
 
 	// If nobody's touched the dashboard in a while, it's likely sitting on a
 	// TV with nobody looking at the current scroll position — scroll back to
@@ -319,7 +318,7 @@
 				{/if}
 			</button>
 			<a
-				href="/wifi"
+				href={ROUTES.wifi}
 				aria-label={m.wifi_open_setup()}
 				title={m.wifi_open_setup()}
 				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
@@ -330,6 +329,7 @@
 					<Wifi class="size-5" />
 				{/if}
 			</a>
+			<LanguagePicker />
 		</div>
 	</div>
 {/snippet}

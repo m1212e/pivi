@@ -1,34 +1,13 @@
 <script lang="ts" generics="T">
 	import * as m from '#lib/paraglide/messages';
-	// A single collapsed button that expands on click/select and collapses
-	// again the moment one is chosen -- the discrete-choice counterpart to
-	// Slider.svelte's continuous one, for exactly the same reason Slider
-	// needed a press-first gesture: a long list of options rendered flat
-	// (every option always on screen, one button each) reads as an unusable
-	// wall of controls the moment there are more than a handful, and is
-	// genuinely painful to swipe through on a remote. A short list expands
-	// into a small dropdown panel; a long one (past FULL_SCREEN_THRESHOLD --
-	// a subtitle track list, easily) takes over the whole screen instead,
-	// since even a scrollable dropdown panel is too small a window onto
-	// dozens of options to browse comfortably.
-	//
-	// Unlike Slider, this needs no swipe-interception/armed dance of its own
-	// -- every option is a real, separately-focusable <button>, so
-	// RemoteBridge.svelte's existing geometry-based spatial nav already
-	// swipes between them (and into/out of the list) for free the moment
-	// they're actually rendered. The only real work here is *when* they're
-	// rendered at all: collapsed by default, expanded on a press, and
-	// re-collapsed on a choice or on losing focus, so the normal case is one
-	// small button, not the whole option list.
+	// The one dropdown, used by LanguagePicker, the player's track pickers and the
+	// remote's player tab. Options render only while expanded so a remote swipe
+	// doesn't walk through a wall of buttons. Long lists go full screen.
 	import type { Snippet } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { ChevronDown, ChevronUp, X } from '@lucide/svelte';
 
-	// Past this many options, the small dropdown panel itself becomes the
-	// problem (a subtitle track list can run into the dozens) -- swapping to
-	// a full-screen picker past this point trades the panel's own compact
-	// footprint for genuinely comfortable browsing/swiping room instead of a
-	// tiny scrollable sliver of the screen.
+	// A subtitle list can run into the dozens, too many for a small panel.
 	const FULL_SCREEN_THRESHOLD = 7;
 
 	let {
@@ -36,6 +15,7 @@
 		options,
 		label,
 		disabled = false,
+		placement = 'above',
 		option,
 		onChange
 	}: {
@@ -43,22 +23,13 @@
 		options: readonly T[];
 		label: string;
 		disabled?: boolean;
-		// Renders one option's content -- called once for the collapsed
-		// trigger (with the currently selected value) and once per row while
-		// expanded, so a caller only ever describes "how to show one option",
-		// never the trigger/list chrome around it. The second argument is
-		// whether *this particular rendering* sits on the solid white
-		// "selected row" background rather than the trigger/other rows' dark
-		// translucent one -- not simply "is this the selected value", since
-		// the trigger always shows the selected value but never gets that
-		// white background itself; a caller picking icon colors for contrast
-		// needs to know which background it's actually on.
+		// Defaults to above for the player's bottom-corner controls.
+		placement?: 'above' | 'below';
+		// Draws one option, for the trigger and for each row. The flag is true on
+		// the white selected row, so callers can pick contrasting icon colors.
 		option: Snippet<[T, boolean]>;
-		// For a choice that needs to do more than just update `value` (the
-		// quality picker's own selectQuality, say, which re-attaches
-		// playback) -- fired alongside the bindable `value` update, not
-		// instead of it, so a caller that only cares about the new value can
-		// still just bind it and ignore this.
+		// For choices with side effects, like the quality picker re-attaching
+		// playback. Fires alongside the `value` update.
 		onChange?: (next: T) => void;
 	} = $props();
 
@@ -78,31 +49,14 @@
 		onChange?.(next);
 	}
 
-	// Keeps whichever option currently has focus on screen -- both list
-	// containers scroll independently of the document (their own
-	// `overflow-y-auto`, one of them inside a `position: fixed` overlay to
-	// boot), so RemoteBridge.svelte's own scroll-the-focused-thing-into-view
-	// logic (scoped to `[data-pivi-row]`/`[data-pivi-hscroll]`, neither of
-	// which this is) never reaches them -- a remote swipe or a real arrow key
-	// moving focus through a long option list would otherwise walk focus
-	// straight off the visible, scrolled area. `center` rather than
-	// `nearest`: landing the focused option in the middle of the screen
-	// (rather than just barely scrolled into view at an edge) gives a remote
-	// swipe the most room in either direction before it needs to scroll again.
+	// The lists scroll on their own, outside RemoteBridge's row scrolling, so
+	// remote focus would walk off screen. Centered to leave swipe room both ways.
 	function scrollOptionIntoView(event: FocusEvent) {
 		(event.currentTarget as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
 	}
 
-	// Collapses on Escape, or the moment focus lands anywhere outside the
-	// control -- both scoped to document-level listeners installed only
-	// while actually expanded (see the effect below) rather than handlers on
-	// the wrapper `<div>` itself, which would need to be given some
-	// interactive ARIA role it doesn't really have just to satisfy the
-	// linter (RemoteBridge.svelte's own focus tracking uses this identical
-	// document-level-listener-plus-containment-check shape, for the same
-	// reason). Focus rather than a plain click-outside check, since a remote
-	// swipe carrying focus elsewhere should collapse this exactly like a
-	// mouse/touch interaction would.
+	// Focus rather than click outside, so a remote swipe away collapses it too.
+	// Document listeners avoid giving the wrapper div a fake interactive role.
 	function onDocumentFocusIn() {
 		if (root && document.activeElement && root.contains(document.activeElement)) return;
 		expanded = false;
@@ -125,15 +79,9 @@
 		};
 	});
 
-	// Moves focus itself rather than leaving it to whatever happens to still
-	// hold it: into the list (landing on the current selection so a remote
-	// swipe continues from there, not the top) the moment it opens, and back
-	// onto the trigger once it closes -- otherwise closing the list out from
-	// under a focused row would drop focus to <body> with no way back short
-	// of a real Tab. Skipped on the very first render (`opened` stays false
-	// until this has actually been expanded once) so mounting this component
-	// collapsed never steals focus from wherever the page's own initial
-	// focus target is.
+	// Closing under a focused row would drop focus to <body>, so it goes back
+	// to the trigger. Opening lands on the selection so swipes continue from it.
+	// `opened` keeps the first render from stealing the page's initial focus.
 	let opened = false;
 	$effect(() => {
 		if (expanded) {
@@ -145,41 +93,15 @@
 		}
 	});
 
-	// Reveals each chip (full-screen mode only) as it actually scrolls into
-	// view, rather than on a flat delay from when the panel opened -- a list
-	// long enough to need scrolling (the whole reason this mode exists)
-	// finishes animating everything within about a second regardless of
-	// where it sits in the list, so anything below the fold would already
-	// have reached its final resting state long before a viewer scrolls down
-	// far enough to actually see it, and never visibly animate at all (this
-	// is exactly what a flat `i`-based delay used to do here). Only the
-	// batch that's already visible the instant the panel opens gets the
-	// index-based stagger, matching the home dashboard's own shelves;
-	// anything revealed later, by actually scrolling to it, appears
-	// immediately instead of waiting on a delay that has nothing to do with
-	// how fast the viewer is scrolling.
+	// Full-screen options animate in as they scroll into view. A flat delay
+	// from opening would finish offscreen before the viewer ever got there.
 	const REVEAL_MS = 400;
-	// Anything revealed within this window of opening counts as part of the
-	// initial screenful, and gets the index-based stagger; anything revealed
-	// after it (by the viewer actually scrolling there) reveals immediately
-	// instead. A time window rather than "only entries from the very first
-	// observer callback": with enough elements to observe at once (a
-	// hundred-plus-language subtitle list, easily), the browser can split that
-	// very first check across more than one callback invocation, which used to
-	// hand out delay 0 to anything past whichever batch size the first
-	// invocation happened to contain -- visually, the stagger just stopped
-	// partway through the first screenful instead of covering all of it.
+	// Reveals within this window get the stagger. A time window because the
+	// browser may split the first intersection check across several callbacks.
 	const INITIAL_WINDOW_MS = 150;
 
-	// Duration explicitly zeroed here, not just left unset -- these buttons
-	// already carry Tailwind's own `transition` class (for their hover state),
-	// which comes with its own non-zero default duration covering
-	// opacity/transform among other properties. Leaving duration unset would
-	// still inherit that default, animating this initial hide as a visible
-	// fade-from-default flicker the instant the panel opens (every option
-	// briefly fading out before any of them fade back in). An explicit inline
-	// `0ms` here beats the class's own value the same way the reveal below
-	// beats it with its own explicit duration.
+	// Explicit 0ms, as Tailwind's `transition` class would otherwise animate
+	// the hide as a visible flicker.
 	function hideForReveal(buttons: HTMLElement[]) {
 		for (const button of buttons) {
 			button.style.transitionDuration = '0ms';
@@ -188,31 +110,18 @@
 		}
 	}
 
-	// `index` is the option's own fixed position in the list, not a counter of
-	// how many have been revealed so far -- a counter's value depends on which
-	// callback invocation (and in what order within it) delivered this entry,
-	// which isn't guaranteed to line up with visual order once the initial
-	// check is itself split across invocations the way described above. The
-	// list's own DOM order is exactly the on-screen order already, so indexing
-	// into it directly gives every option a stable delay regardless of how the
-	// browser happened to batch the notifications.
+	// `index` is the DOM position, which stays in visual order however the
+	// observer batches its callbacks.
 	function revealOption(el: HTMLElement, index: number, openedAt: number) {
 		const initial = performance.now() - openedAt < INITIAL_WINDOW_MS;
 		const delay = initial ? Math.min(index * 20, 300) : 0;
-		// Duration only, not the `transition` shorthand -- these buttons
-		// already carry Tailwind's own `transition` class (for their hover
-		// state), whose property list already covers opacity/transform; a
-		// shorthand override here would silently replace that list with just
-		// these two properties for good, killing the hover transition on
-		// color/background from then on.
+		// Duration only, the `transition` shorthand would drop Tailwind's hover
+		// transitions for good.
 		el.style.transitionDuration = `${REVEAL_MS}ms`;
 		el.style.transitionDelay = `${delay}ms`;
 		el.style.opacity = '1';
 		el.style.transform = 'none';
-		// Clears the duration/delay overrides once this option's own reveal has
-		// actually finished, so its Tailwind `transition` class goes back to
-		// its normal (much shorter) hover timing afterward instead of staying
-		// stuck at this reveal's.
+		// Restores the short hover timing once the reveal is done.
 		setTimeout(() => {
 			el.style.transitionDuration = '';
 			el.style.transitionDelay = '';
@@ -245,18 +154,9 @@
 		return startRevealOnScroll(container);
 	});
 
-	// Traps focus inside this control while it's expanded -- without this,
-	// RemoteBridge.svelte's geometry-based spatial nav (or a real Tab) can
-	// walk focus onto some other on-screen control that's still technically
-	// present and focusable in the DOM (just visually sitting behind this
-	// control's own overlay/panel), which the focus-loss handling above then
-	// reads as "focus left the control" and closes it right back out --
-	// especially easy to hit swiping past the last option in a long
-	// full-screen list. `inert` on every sibling along the path from this
-	// control up to <body> (not just this element's own direct siblings)
-	// removes everything else on the page from both focus and pointer
-	// interaction while expanded, which is the standard way to trap focus
-	// for a control that isn't rendered as its own top-level portal.
+	// Traps focus while expanded. Otherwise spatial nav could reach controls
+	// behind the overlay, which the focus-out handling reads as leaving and
+	// closes the list. `inert` up the whole ancestor path, as there is no portal.
 	function setChildrenInert(parent: Element, except: Element, isInert: boolean) {
 		for (const sibling of parent.children) {
 			if (sibling !== except) sibling.toggleAttribute('inert', isInert);
@@ -356,7 +256,9 @@
 		<div
 			role="listbox"
 			aria-label={label}
-			class="absolute right-0 bottom-full z-20 mb-2 flex max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
+			class="absolute right-0 z-20 flex {placement === 'above'
+				? 'bottom-full mb-2'
+				: 'top-full mt-2'} max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
 		>
 			{#each options as candidate (candidate)}
 				{@const selected = candidate === value}

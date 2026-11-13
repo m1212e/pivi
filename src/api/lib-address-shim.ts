@@ -1,6 +1,6 @@
 // @m1212e/rumble imports `lib-address` unconditionally at module load, for an
 // address-validation scalar pivi's schema never opts into. Its published
-// build is broken under Vite's SSR module runner — `dist/entry-node.mjs`
+// build is broken under Vite's SSR module runner, `dist/entry-node.mjs`
 // calls a bare `require()` that only exists under Node's CJS loader, not a
 // real ESM `import`. Since we never touch the address feature, this stands
 // in with harmless no-ops instead of fighting that package's module format.

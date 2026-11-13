@@ -5,25 +5,7 @@
 	// runs it directly; see DEPLOYMENT.md), so nothing imports it and the
 	// module graph can only see it as an unreachable file.
 	"entry": ["src/index.{ts,tsx,js,jsx}", "src/main.{ts,tsx,js,jsx}", "deploy/pivi-server.mjs"],
-	// The Tier-1 dashboard component set: src/lib/plugins/dashboard.ts and
-	// SKETCH.md both define plugin contributions as "shaped to match" these, so
-	// they are a deliberate part of the plugin contract waiting on the first
-	// plugin to contribute a dashboard row, not code nobody wanted. They stay in
-	// the module graph (ignoreFindings, not ignorePatterns) so a real break in
-	// them is still reported; only "nothing imports this yet" is hidden.
-	"ignoreFindings": [
-		"src/lib/api/rumbleClient/**",
-		"src/lib/components/ContinueWatchingCard.svelte",
-		"src/lib/components/ContinueWatchingRow.svelte",
-		"src/lib/components/PosterCard.svelte",
-		"src/lib/components/PosterRow.svelte"
-	],
-	// Third-party bundles committed verbatim (see vendor/inlang/README.md).
-	// Not ours to refactor, and loaded by path from project.inlang/settings.json
-	// rather than imported, so the module graph can't see them either.
-	// `ignorePatterns` rather than `ignoreFindings`: these should not be
-	// analyzed at all.
-	"ignorePatterns": ["vendor/**"],
+	"ignoreFindings": ["src/lib/api/rumbleClient/**"],
 	// Registered by URL string (navigator.serviceWorker.register), not an
 	// import, so the static module graph can't see it's reachable.
 	"dynamicallyLoaded": ["static/remote/sw.js"],
@@ -61,6 +43,12 @@
 		//   "**/generated/**"     // OpenAPI, Protobuf codegen
 		// ]
 	},
+	// Called by vscode-jsonrpc itself once a reader/writer is wired into a
+	// MessageConnection, so no call site exists in our code.
+	"usedClassMembers": [
+		{ "extends": "AbstractMessageReader", "members": ["listen"] },
+		{ "extends": "AbstractMessageWriter", "members": ["write", "end"] }
+	],
 	"rules": {
 		"unused-dependencies": "warn"
 	},
