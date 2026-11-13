@@ -107,7 +107,7 @@ export const urqlClient = new Client({
 	// liveQuery) when this is set, otherwise they're left unhandled.
 	fetchSubscriptions: true,
 	// Several pages poll a liveQuery on a timer for data rumble can't push, like
-	// the YouTube app's dashboard. 'cache-first' would answer those from cache
+	// an app's dashboard. 'cache-first' would answer those from cache
 	// forever, 'cache-and-network' keeps the fast cached answer but revalidates.
 	requestPolicy: 'cache-and-network'
 });

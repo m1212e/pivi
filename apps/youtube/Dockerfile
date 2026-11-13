@@ -2,19 +2,19 @@
 # with `bun run app:build apps/youtube <tag>`, which also attaches the
 # manifest as the dev.pivi.manifest label (see scripts/apps.ts).
 #
-# Stage 1 bundles the app and everything it imports — including the shared
-# protocol code in src/lib — into one file, so nothing has to be installed where
-# it runs. apps/youtube/package.json becomes the build's package.json: it
-# carries both the dependencies and the `#lib/*` import mapping.
+# Stage 1 bundles the app and the protocol SDK it imports into one file, so
+# nothing has to be installed where it runs. Only sdk/ and this directory go
+# into the build: the app can't reach host code even by accident, since it
+# isn't there. The layout mirrors the repo so the app's relative imports of
+# ../../sdk resolve the same way in both, and dependencies are installed at
+# the root from this app's own lockfile so the SDK finds them too.
 FROM oven/bun:1 AS build
 WORKDIR /build
-COPY apps/youtube/package.json ./package.json
-RUN bun install
-COPY src/lib ./src/lib
-COPY apps/youtube ./app
-# The copy of package.json inside ./app would become the nearest one for the
-# app's own files, and its `#lib/*` mapping is relative to the wrong directory.
-RUN rm ./app/package.json && bun build ./app/main.ts --target=bun --outfile=/out/main.js
+COPY apps/youtube/package.json apps/youtube/bun.lock ./
+RUN bun install --frozen-lockfile --production
+COPY sdk ./sdk
+COPY apps/youtube ./apps/youtube
+RUN bun build ./apps/youtube/main.ts --target=bun --outfile=/out/main.js
 
 # Stage 2 is the runtime: bun, the bundle, and the yt-dlp the app shells out
 # to. yt-dlp is baked in because at runtime the sandbox only lets the app

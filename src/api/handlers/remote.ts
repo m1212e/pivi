@@ -6,6 +6,7 @@ import { GraphQLError } from 'graphql';
 import { schemaBuilder } from '../rumble';
 import { openUrlNotification } from '#lib/pairing/remoteProtocol';
 import { hasConnectedPhone, sendToPhones } from '../ws/relay';
+import { isPhoneSafeUrl } from '../apps/sanitize';
 import { PHONE_CONNECTION_EVENT, remotePubSub } from '../ws/remotePubsub';
 
 type PhoneConnection = { connected: boolean };
@@ -39,6 +40,9 @@ schemaBuilder.mutationFields((t) => ({
 		type: 'Boolean',
 		args: { url: t.arg.string({ required: true }) },
 		resolve: (_root, args) => {
+			// The URL comes from an app's screen by way of the TV, so it gets the
+			// same https-only rule the screen's sanitizer applies.
+			if (!isPhoneSafeUrl(args.url)) throw new GraphQLError('Only https links can be opened');
 			// sendToPhones silently does nothing without a phone, which looked
 			// like a dead button, so the caller gets an error instead.
 			if (!hasConnectedPhone()) {

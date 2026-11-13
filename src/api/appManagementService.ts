@@ -2,7 +2,7 @@
 // (served over GraphQL by handlers/appManagement.ts), so apps can be managed
 // with nothing but the remote. Deps are injected so this can be tested.
 import type { AppsState as SharedAppsState } from '#lib/apps/management';
-import type { PermissionKey } from '#lib/apps/manifest';
+import type { PermissionKey } from '#sdk/manifest';
 import { describeApp } from './appState';
 import type { AppDeps } from './apps/deps';
 import {
@@ -10,6 +10,7 @@ import {
 	clearAppStorage,
 	installApp,
 	previewInstall,
+	ReviewOutdatedError,
 	setAppAutoUpdate,
 	setAppEnabled,
 	setAppPermission,
@@ -35,8 +36,8 @@ export type ManagementEvents = {
 };
 
 // `publicKey` is left out entirely to install unsigned, since signature
-// checking is opt in.
-type InstallRequest = { image: string; publicKey?: string };
+// checking is opt in. `digest` pins the install to the build that was previewed.
+type InstallRequest = { image: string; publicKey?: string; digest?: string };
 
 /** Create one per process (appManagement.ts). Every screen shares its session. */
 export function createAppManagement(
@@ -105,7 +106,7 @@ export function createAppManagement(
 					primaryColor: preview.manifest.primaryColor ?? null,
 					secondaryColor: preview.manifest.secondaryColor ?? null
 				};
-				previewed = request;
+				previewed = { ...request, digest: preview.digest };
 			});
 		},
 
@@ -113,7 +114,17 @@ export function createAppManagement(
 		install: (granted: PermissionKey[]) =>
 			run('installing', async () => {
 				if (!previewed) throw new Error('Review the app before installing it');
-				await installApp(deps, { ...previewed, granted });
+				try {
+					await installApp(deps, { ...previewed, granted });
+				} catch (error) {
+					// The preview shows a build that's no longer there, so it must not
+					// stay up as if installing it were still possible.
+					if (error instanceof ReviewOutdatedError) {
+						session.preview = null;
+						previewed = null;
+					}
+					throw error;
+				}
 				session.preview = null;
 				previewed = null;
 			}),

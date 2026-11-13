@@ -1,4 +1,4 @@
-import { buildSegmentBaseIndex, type SegmentBaseIndex } from './containerIndex';
+import { buildSegmentBaseIndex, type RangeFetcher, type SegmentBaseIndex } from './containerIndex';
 import { createTtlCache } from './ttlCache';
 
 const cache = createTtlCache<SegmentBaseIndex>(5 * 60 * 1000);
@@ -10,12 +10,13 @@ const cache = createTtlCache<SegmentBaseIndex>(5 * 60 * 1000);
  */
 export async function buildSegmentBaseIndexCached(
 	url: string,
-	container: 'mp4' | 'webm'
+	container: 'mp4' | 'webm',
+	fetcher: RangeFetcher
 ): Promise<SegmentBaseIndex> {
 	const hit = cache.get(url);
 	if (hit) return hit;
 
-	const value = await buildSegmentBaseIndex(url, container);
+	const value = await buildSegmentBaseIndex(fetcher, container);
 	cache.set(url, value);
 	return value;
 }

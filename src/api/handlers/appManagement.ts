@@ -2,13 +2,14 @@
 // nothing but the remote (trackpad plus the phone's keyboard relay).
 // Mutations return once the work has started since an install can take
 // minutes, the outcome arrives through the subscription.
-import { permissionKeySchema } from '#lib/apps/manifest';
+import { permissionKeySchema } from '#sdk/manifest';
 import { schemaBuilder } from '../rumble';
 import { appManagement } from '../appManagement';
 import type { AppsState } from '../appManagementService';
 import { APP_MANAGEMENT_EVENT } from '../apps/events';
 import { appPubSub } from '../apps/pubsub';
 import { suggestedApps, type SuggestedApp } from '../apps/suggested';
+import { defaultAppDeps } from '../apps/deps';
 
 type Entry = AppsState['apps'][number];
 type Preview = NonNullable<AppsState['preview']>;
@@ -98,10 +99,9 @@ const SuggestedAppRef = schemaBuilder.objectRef<SuggestedApp>('SuggestedApp').im
 	fields: (t) => ({
 		id: t.exposeString('id'),
 		name: t.exposeString('name'),
-		description: t.exposeString('description'),
+		description: t.exposeString('description', { nullable: true }),
 		icon: t.exposeString('icon', { nullable: true }),
-		image: t.exposeString('image'),
-		publicKey: t.exposeString('publicKey', { nullable: true })
+		image: t.exposeString('image')
 	})
 });
 
@@ -114,7 +114,10 @@ function start(work: () => Promise<void> | void): boolean {
 
 schemaBuilder.queryFields((t) => ({
 	appManagement: t.field({ type: StateRef, resolve: () => appManagement.state() }),
-	suggestedApps: t.field({ type: [SuggestedAppRef], resolve: () => suggestedApps() })
+	suggestedApps: t.field({
+		type: [SuggestedAppRef],
+		resolve: () => suggestedApps(defaultAppDeps.registry)
+	})
 }));
 
 schemaBuilder.subscriptionFields((t) => ({

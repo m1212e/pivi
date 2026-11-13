@@ -11,9 +11,9 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { pairingSocketUrl } from '#lib/wsConfig';
 	import type { TvHello } from '#lib/pairing/protocol';
-	import { ensureRal } from '#lib/rpcRal';
+	import { ensureRal } from '#sdk/rpcRal';
 	import { createReconnector } from '#lib/pairing/reconnect';
-	import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
+	import { PushMessageReader, SinkMessageWriter } from '#sdk/rpcTransport';
 	import {
 		backNotification,
 		goHomeNotification,

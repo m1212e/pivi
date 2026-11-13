@@ -3,7 +3,7 @@
 // what it asks for is shown (the preview) before anything is stored, and
 // what's stored is the user's answer, not the image's request.
 import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef';
-import type { PermissionKey, AppManifest } from '#lib/apps/manifest';
+import type { PermissionKey, AppManifest } from '#sdk/manifest';
 import type { AppDeps } from './deps';
 import { pinnedReference, resolveImage } from './registry';
 import { volumeBelongsToApp, volumeName } from './sandbox/spec';
@@ -12,6 +12,16 @@ import type { InstalledApp } from './store';
 
 /** Marks errors whose message the app manager shows the user as is. */
 export class AppError extends Error {}
+
+/**
+ * The tag now points at a different build than the one the user reviewed, so
+ * what they approved (permissions, domains) may not be what would be installed.
+ */
+export class ReviewOutdatedError extends AppError {
+	constructor() {
+		super('The app changed since it was reviewed. Review it again before installing');
+	}
+}
 
 /**
  * The permissions screen the user approves before anything is stored, so an
@@ -31,7 +41,8 @@ export type InstallPreview = {
 // `publicKey` is optional: signature verification is left on by default, but
 // a user who trusts the source another way (or has no key to paste) can skip
 // it, same as `--insecure-skip-verify` elsewhere, at their own risk.
-type InstallRequest = { image: string; publicKey?: string };
+// `digest` is the build the user reviewed, when there was a preview.
+type InstallRequest = { image: string; publicKey?: string; digest?: string };
 
 // Shared by preview and install so both run the same checks on the same input.
 async function inspect(deps: AppDeps, request: InstallRequest) {
@@ -76,6 +87,7 @@ export async function installApp(
 	request: InstallRequest & { granted: readonly PermissionKey[] }
 ): Promise<InstalledApp> {
 	const { ref, signer, resolved } = await inspect(deps, request);
+	if (request.digest && request.digest !== resolved.digest) throw new ReviewOutdatedError();
 	const track = updateTrack(ref);
 	const { manifest } = resolved;
 

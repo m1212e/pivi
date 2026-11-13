@@ -29,6 +29,7 @@ type AppCard = {
 	title: string;
 	subtitle: string;
 	image: string;
+	fallbackImage: string | null;
 	// JSON encoded AppAction (#lib/apps/dashboard) so the schema doesn't
 	// have to mirror the union, the frontend interprets it generically.
 	actionJson: string;
@@ -66,6 +67,7 @@ const AppCardRef = schemaBuilder.objectRef<AppCard>('AppCard').implement({
 		title: t.exposeString('title'),
 		subtitle: t.exposeString('subtitle'),
 		image: t.exposeString('image'),
+		fallbackImage: t.exposeString('fallbackImage', { nullable: true }),
 		actionJson: t.exposeString('actionJson')
 	})
 });
@@ -124,6 +126,7 @@ async function resolveDashboards(): Promise<AppDashboard[]> {
 							title: card.title,
 							subtitle: card.kind === 'resume' ? card.subtitle : card.meta,
 							image: card.image,
+							fallbackImage: card.fallbackImage ?? null,
 							actionJson: JSON.stringify(card.action)
 						}))
 					: null
@@ -184,14 +187,18 @@ schemaBuilder.mutationFields((t) => ({
 			appId: t.arg.string({ required: true }),
 			screenId: t.arg.string({ required: true }),
 			eventId: t.arg.string({ required: true }),
-			value: t.arg.string({ required: false })
+			// A text input's text.
+			value: t.arg.string({ required: false }),
+			// A toggle's new state. Separate from `value` so the app gets a real
+			// boolean, as #sdk/ui's UiEvent promises.
+			checked: t.arg.boolean({ required: false })
 		},
 		resolve: async (_root, args) => {
 			const app = await getApp(args.appId);
 			app.sendUiEvent({
 				screenId: args.screenId,
 				eventId: args.eventId,
-				value: args.value ?? undefined
+				value: args.checked ?? args.value ?? undefined
 			});
 			return true;
 		}

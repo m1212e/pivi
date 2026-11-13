@@ -6,7 +6,7 @@
 //   DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/pivi bun x drizzle-kit push --force
 //   PIVI_DB_TEST=1 DATABASE_URL=… ORIGIN=http://localhost npx vitest run --project server store.db
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import type { AppDeps } from './deps';
 import { FakeRegistry, generateSigningKey, publishAppImage, signImage } from './fixtures';
 import { installApp, setAppPermission, uninstallApp } from './installer';
@@ -22,7 +22,7 @@ const manifest: AppManifest = {
 	id: 'dbtest',
 	name: 'DB test',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: ['network', 'storage'],
 	network: { domains: ['api.example.com'] },

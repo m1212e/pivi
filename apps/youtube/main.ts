@@ -1,5 +1,5 @@
 // Entry point of the YouTube app image: speaks the host protocol (see
-// #lib/apps/host, protocolSchema.ts) over stdin/stdout and
+// sdk/protocol.ts, sdk/protocolSchema.ts) over stdin/stdout and
 // wires the pieces in this folder together — login (auth.ts), browsing: this
 // account's personalized home feed (tvHomeFeed.ts), signed in only, no
 // anonymous fallback — and playback (stream.ts, resolved on demand by
@@ -21,13 +21,13 @@ import {
 	resolveStreamRequest,
 	shutdownNotification,
 	uiEventNotification
-} from '#lib/apps/host';
-import type { HomeCard } from '#lib/apps/dashboard';
-import type { UiNode } from '#lib/apps/ui';
+} from '../../sdk/protocol';
+import type { HomeCard } from '../../sdk/dashboard';
+import type { UiNode } from '../../sdk/ui';
 import { connection } from './connection';
 import { beginSignIn, isSignedIn, type DeviceCodeAuth } from './auth';
 import { fetchTvHomeFeed, fetchTvHomeMore } from './tvHomeFeed';
-import type { PlaylistSummary, VideoSummary } from './youtubeClient';
+import { thumbnailFallback, type PlaylistSummary, type VideoSummary } from './youtubeClient';
 import {
 	fetchChannelVideos,
 	fetchLibraryMore,
@@ -96,10 +96,10 @@ function log(level: 'info' | 'warn' | 'error', message: string) {
 	console.error(`[${level}] ${message}`);
 }
 
-// A `session` action, not `deepLink` — the video id doubles as the session
+// A `session` action: the video id doubles as the session
 // id since it's already exactly what resolveStream (below) needs, and it
 // takes the card straight to the shared player route (see
-// #lib/apps/dashboard's appActionHref) without this app needing to
+// sdk/dashboard.ts's AppAction) without this app needing to
 // know anything about how playback actually happens.
 function videoToCard(video: VideoSummary): HomeCard {
 	return {
@@ -108,6 +108,7 @@ function videoToCard(video: VideoSummary): HomeCard {
 		title: video.title,
 		meta: video.channelTitle,
 		image: video.thumbnailUrl,
+		fallbackImage: thumbnailFallback(video.thumbnailUrl),
 		action: { type: 'session', sessionId: video.id }
 	};
 }
@@ -151,6 +152,7 @@ function videoCard(video: VideoSummary, playlistId?: string): UiNode {
 		title: video.title,
 		meta: video.channelTitle,
 		image: video.thumbnailUrl,
+		fallbackImage: thumbnailFallback(video.thumbnailUrl),
 		badge: video.durationText || undefined,
 		action: { type: 'session', sessionId: video.id, context: playlistId }
 	};
@@ -798,10 +800,9 @@ function main() {
 
 	connection.onNotification(shutdownNotification, () => process.exit(0));
 
-	// The host's streaming proxy calls this on demand (see
-	// src/routes/api/stream/[appId]/[sessionId]) — sessionId is just the
-	// video id for this app, an opaque string as far as the host's
-	// concerned, same as a deepLink target already is.
+	// The host calls this whenever its player needs the stream. sessionId is
+	// just the video id for this app, an opaque string as far as the host is
+	// concerned.
 	connection.onRequest(resolveStreamRequest, ({ sessionId, maxHeight }) =>
 		resolveStream(sessionId, maxHeight)
 	);

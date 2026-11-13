@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import type { AppDeps } from './deps';
 import { FakeRegistry, publishAppImage } from './fixtures';
 import { RegistryClient } from './registry';
@@ -10,7 +10,7 @@ const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: [],
 	entryScreenId: 'main'

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { appAccentGradient } from '#lib/appAccent';
-	import { appIconDataUrl } from '#lib/apps/manifest';
+	import { appIconDataUrl } from '#lib/apps/icon';
 	import type { TvState } from '#lib/pairing/remoteController.svelte';
 
 	let { apps, onSelect }: { apps: TvState['apps']; onSelect: (id: string) => void } = $props();

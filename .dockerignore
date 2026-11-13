@@ -1,0 +1,7 @@
+# App images are built with the repo root as context (scripts/apps.ts), but
+# only ever copy sdk/ and their own directory. Locally installed dependencies
+# must not leak in: each image installs from its own lockfile.
+**/node_modules
+.svelte-kit
+build
+.git

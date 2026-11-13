@@ -23,11 +23,10 @@
 	// `@tailwindcss/typography` is pulled in via a CSS `@plugin` directive
 	// (src/routes/layout.css), not a JS/TS import.
 	//
-	// And `vscode-jsonrpc` / `zod`, which plugins/youtube/package.json lists for
-	// the plugin image's build (see its Dockerfile): they're imported by the
-	// shared protocol code in src/lib that gets bundled into the image, never by
-	// the plugin's own files, so that manifest can't be seen using them. Both are
-	// real dependencies of the app itself too.
+	// And `vscode-jsonrpc` / `zod`, which apps/youtube/package.json lists for
+	// the app image's build (see its Dockerfile): they're imported by sdk/, which
+	// gets bundled into the image, never by the app's own files, so that manifest
+	// can't be seen using them. Both are real dependencies of the host too.
 	//
 	// And the two @inlang plugins, which project.inlang/settings.json loads by
 	// path (`modules`), never by import.

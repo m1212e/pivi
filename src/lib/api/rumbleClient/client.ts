@@ -29,6 +29,7 @@ export type AddressInput = {
 
 export type AppCard = {
 	actionJson: String;
+	fallbackImage: String | null;
 	id: String;
 	image: String;
 	subtitle: String;
@@ -322,6 +323,7 @@ export type ManagedAppUpdate = {
 export type Mutation = {
 	appUiEvent: (p: {
 		appId: String;
+		checked?: Boolean | null | undefined;
 		eventId: String;
 		screenId: String;
 		value?: String | null | undefined;
@@ -444,12 +446,11 @@ export type Subscription = {
 };
 
 export type SuggestedApp = {
-	description: String;
+	description: String | null;
 	icon: String | null;
 	id: String;
 	image: String;
 	name: String;
-	publicKey: String | null;
 };
 
 export type User = {

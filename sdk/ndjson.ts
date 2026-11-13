@@ -1,5 +1,5 @@
-// Wire framing for the host/app protocol, shared by the host (runtime.ts) and
-// the TypeScript SDK (stdioConnection.ts). One JSON message per line instead
+// Wire framing for the host/app protocol, shared by the host runtime and the
+// TypeScript SDK (stdioConnection.ts). One JSON message per line instead
 // of LSP-style Content-Length, so an app in any language can speak it with a
 // plain line reader and println.
 

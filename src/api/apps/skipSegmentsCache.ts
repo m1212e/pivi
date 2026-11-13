@@ -1,4 +1,4 @@
-import type { SkipSegment } from '#lib/apps/host';
+import type { SkipSegment } from '#sdk/protocol';
 import type { AppInstance } from './runtime';
 import { createTtlCache } from './ttlCache';
 
@@ -6,7 +6,7 @@ const cache = createTtlCache<SkipSegment[]>(30 * 60 * 1000);
 
 /**
  * Backs the player's skip segments query (handlers/playback.ts). Asking the app
- * means a network round trip on its side (SponsorBlock for YouTube), and the
+ * usually means a network round trip on its side, and the
  * answer never changes with quality, so one entry per session is enough.
  */
 export async function resolveSkipSegmentsCached(

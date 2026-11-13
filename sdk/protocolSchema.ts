@@ -1,4 +1,4 @@
-// The host/app protocol (host.ts) as a JSON document, so app authors outside
+// The host/app protocol (protocol.ts) as a JSON document, so app authors outside
 // TypeScript have something to implement against. scripts/apps.ts publishes it
 // as app-protocol.schema.json with each release.
 import { z } from 'zod';
@@ -24,10 +24,10 @@ import {
 	resolveStreamRequest,
 	shutdownNotification,
 	uiEventNotification
-} from './host';
+} from './protocol';
 import { featureSchema, type Feature } from './manifest';
 
-// One row per protocol method, so the published document can't drift from host.ts.
+// One row per protocol method, so the published document can't drift from protocol.ts.
 type MethodSpec = {
 	method: string;
 	// Who sends it.

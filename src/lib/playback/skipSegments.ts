@@ -1,7 +1,7 @@
 // Decisions behind the TV player's skip banner, kept free of Svelte so
 // skipController stays thin and this stays testable.
 
-/** A skippable section an app reports for a session, like a SponsorBlock segment for YouTube. */
+/** A skippable section an app reports for a session, like a sponsor segment. */
 export type SkipSegment = { startSeconds: number; endSeconds: number; label: string };
 
 // Lead time so the toggle is reachable before the segment starts.

@@ -1,11 +1,11 @@
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
-import { ensureRal } from '#lib/rpcRal';
-import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
+import { ensureRal } from './rpcRal';
+import { PushMessageReader, SinkMessageWriter } from './rpcTransport';
 import { encodeMessage, LineSplitter } from './ndjson';
 
 /**
- * The app side of the host protocol for TypeScript apps (apps/youtube), so
- * they don't each reimplement the stdio framing. stdout is the channel, so
+ * The app side of the host protocol for TypeScript apps, so they don't each
+ * reimplement the stdio framing. stdout is the channel, so
  * console.log is moved to stderr. Call once at startup, before anything prints.
  */
 export function createStdioConnection(): MessageConnection {

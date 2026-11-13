@@ -1,7 +1,6 @@
-// vscode-jsonrpc only ships stream based readers and writers, but our
-// transports deliver messages through callbacks: the TV's relay socket
-// (RemoteBridge), the phone's decrypted pairing session (remoteController), the
-// app host's IPC channel (api/apps/runtime.ts) and app stdio (stdioConnection).
+// vscode-jsonrpc only ships stream based readers and writers, but most
+// transports deliver messages through callbacks: app stdio (stdioConnection.ts),
+// a sandbox's output stream on the host, a websocket.
 import {
 	AbstractMessageReader,
 	AbstractMessageWriter,

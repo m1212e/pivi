@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import { createAppManagement, type AppsState } from './appManagementService';
 import type { AppDeps } from './apps/deps';
 import {
@@ -16,7 +16,7 @@ const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: ['network', 'storage', 'cache'],
 	network: { domains: ['api.example.com'] },
@@ -127,6 +127,28 @@ describe('installing and managing', () => {
 			id: 'demo',
 			permissions: expect.arrayContaining([{ key: 'storage', granted: true }])
 		});
+	});
+
+	it('refuses to install a build other than the one that was reviewed', async () => {
+		publish();
+		await service.preview(request());
+		// The tag moves to a build asking for more between review and install.
+		const changed = {
+			...manifest,
+			network: { domains: ['api.example.com', 'tracker.example.net'] }
+		};
+		signImage(
+			registry,
+			'acme/demo',
+			publishAppImage(registry, 'acme/demo', '1.0', changed),
+			key.privateKey
+		);
+		await service.install(['network']);
+
+		const state = await service.state();
+		expect(state.error).toMatch(/changed since it was reviewed/);
+		expect(state.apps).toHaveLength(0);
+		expect(state.preview).toBeNull();
 	});
 
 	it('refuses to install without a preview, and forgets the preview afterwards', async () => {

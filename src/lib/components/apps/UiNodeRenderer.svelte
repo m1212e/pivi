@@ -4,8 +4,9 @@
 	// different from the host. Visual details belong in those components.
 	import TextInput from '#lib/components/TextInput.svelte';
 	import { inview } from 'svelte-inview';
-	import type { UiNode } from '#lib/apps/ui';
-	import { appActionHref } from '#lib/apps/dashboard';
+	import type { UiNode } from '#sdk/ui';
+	import type { AppAction } from '#sdk/dashboard';
+	import { appActionHref } from '#lib/apps/actionHref';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import * as m from '#lib/paraglide/messages';
@@ -22,15 +23,31 @@
 	let {
 		node,
 		onEvent,
-		appId,
-		appHref
+		appId
 	}: {
 		node: UiNode;
 		onEvent: (eventId: string, value?: string | boolean) => void;
-		// Only buttons with an `action` need these.
+		// Only nodes with an `action` need it.
 		appId?: string;
-		appHref?: string;
 	} = $props();
+
+	// Where an action navigates. `openOnPhone` has no link, see phoneUrlFor.
+	function hrefFor(action: AppAction | undefined): string | undefined {
+		return action && appId ? appActionHref(appId, action) : undefined;
+	}
+
+	function phoneUrlFor(action: AppAction | undefined): string | undefined {
+		return action?.type === 'openOnPhone' ? action.url : undefined;
+	}
+
+	// What selecting a node does when it isn't a link: open something on the
+	// phone, or tell the app.
+	function selectHandler(action: AppAction | undefined, onSelect: string | undefined) {
+		const phoneUrl = phoneUrlFor(action);
+		if (phoneUrl) return () => openOnPhone(phoneUrl);
+		if (onSelect) return () => onEvent(onSelect);
+		return undefined;
+	}
 
 	// The only feedback when `openOnPhone` is refused, like with no phone
 	// connected. Per instance, so it stays on the button that failed.
@@ -83,17 +100,19 @@
 					if (n.onReachEnd) watchSkeleton(event.detail.node, event.detail.inView, n.onReachEnd);
 				}}
 			>
-				<Self node={child} {onEvent} {appId} {appHref} />
+				<Self node={child} {onEvent} {appId} />
 			</div>
 		{:else}
-			<Self node={child} {onEvent} {appId} {appHref} />
+			<Self node={child} {onEvent} {appId} />
 		{/if}
 	{/each}
 {/snippet}
 
 {#snippet containerBody(n: Extract<UiNode, { type: 'container' }>)}
 	{@const widthStyle = n.width ? `width: ${n.width}` : undefined}
-	{#if n.action && appId && appHref}
+	{@const href = hrefFor(n.action)}
+	{@const onSelect = selectHandler(n.action, n.onSelect)}
+	{#if href}
 		<!-- A card (thumbnail + title + channel, say) acting as one link --
 		     same appActionHref every button/dashboard card already resolves
 		     through, just wrapping the whole container instead of a pill. -->
@@ -105,7 +124,7 @@
 		     global focus outline's own `outline-offset` already give enough
 		     visual breathing room without it. -->
 		<a
-			href={appActionHref(appId, appHref, n.action)}
+			{href}
 			style={widthStyle}
 			class="{containerRowClasses(
 				n
@@ -113,12 +132,12 @@
 		>
 			{@render containerChildren(n)}
 		</a>
-	{:else if n.onSelect}
+	{:else if onSelect}
 		<!-- Same card treatment as the link above, but selecting it sends a UI
-		     event to the app instead of navigating. -->
+		     event to the app (or a link to the phone) instead of navigating. -->
 		<button
 			type="button"
-			onclick={() => n.onSelect && onEvent(n.onSelect)}
+			onclick={onSelect}
 			style={widthStyle}
 			class="{containerRowClasses(
 				n
@@ -185,32 +204,35 @@
 		title={n.title}
 		meta={n.meta}
 		image={n.image}
+		fallbackImage={n.fallbackImage}
 		shape={n.shape}
 		stacked={n.stacked}
 		badge={n.badge}
 		progress={n.progress}
-		href={n.action && appId && appHref ? appActionHref(appId, appHref, n.action) : undefined}
-		onSelect={n.onSelect ? () => n.onSelect && onEvent(n.onSelect) : undefined}
+		href={hrefFor(n.action)}
+		onSelect={selectHandler(n.action, n.onSelect)}
 	/>
 {/snippet}
 
 {#snippet shelfNode(n: Extract<UiNode, { type: 'shelf' }>)}
 	<ContentRow title={n.title} inset={false}>
 		{#each n.children as child, i (i)}
-			<Self node={child} {onEvent} {appId} {appHref} />
+			<Self node={child} {onEvent} {appId} />
 		{/each}
 	</ContentRow>
 {/snippet}
 
 {#snippet heroNode(n: Extract<UiNode, { type: 'hero' }>)}
-	{#if appId && appHref}
+	{@const href = hrefFor(n.action)}
+	{#if href}
 		<HeroBanner
 			title={n.title}
 			description={n.description}
 			image={n.image}
+			fallbackImage={n.fallbackImage}
 			badge={n.badge}
 			source={n.source}
-			href={appActionHref(appId, appHref, n.action)}
+			{href}
 		/>
 	{/if}
 {/snippet}
@@ -308,16 +330,18 @@
 {#snippet listNode(n: Extract<UiNode, { type: 'list' }>)}
 	<div class="flex flex-col gap-3">
 		{#each n.items as item, i (i)}
-			<Self node={item} {onEvent} {appId} {appHref} />
+			<Self node={item} {onEvent} {appId} />
 		{/each}
 	</div>
 {/snippet}
 
 {#snippet anyButtonNode(n: Extract<UiNode, { type: 'button' }>)}
-	{#if n.action?.type === 'openOnPhone'}
-		{@render openOnPhoneButtonNode(n, n.action.url)}
-	{:else if n.action && appId && appHref}
-		{@render buttonLinkNode(n, appActionHref(appId, appHref, n.action))}
+	{@const phoneUrl = phoneUrlFor(n.action)}
+	{@const href = hrefFor(n.action)}
+	{#if phoneUrl}
+		{@render openOnPhoneButtonNode(n, phoneUrl)}
+	{:else if href}
+		{@render buttonLinkNode(n, href)}
 	{:else}
 		{@render buttonNode(n)}
 	{/if}

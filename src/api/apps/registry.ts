@@ -11,8 +11,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { formatImageRef, registryApiHost, type ImageRef } from '#lib/apps/imageRef';
-import { MANIFEST_LABEL, appManifestSchema, type AppManifest } from '#lib/apps/manifest';
-import { SUPPORTED_PROTOCOLS } from '#lib/apps/host';
+import { MANIFEST_LABEL, appManifestSchema, type AppManifest } from '#sdk/manifest';
+import { SUPPORTED_PROTOCOLS } from '#sdk/protocol';
 
 // Caps on what a registry can make the host buffer in memory.
 const MAX_MANIFEST_BYTES = 4 << 20;

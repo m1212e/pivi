@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import { describeApp } from './appState';
 import type { InstalledApp } from './apps/store';
 
@@ -7,7 +7,7 @@ const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: ['network', 'storage'],
 	network: { domains: ['api.example.com'] },

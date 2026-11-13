@@ -6,8 +6,9 @@
 		"strict": true,
 		"paths": {
 			"#lib/*": ["./src/lib/*"],
-			"#api/*": ["./src/api/*"]
+			"#api/*": ["./src/api/*"],
+			"#sdk/*": ["./sdk/*"]
 		}
 	},
-	"include": ["src", "drizzle.config.ts", "apps"]
+	"include": ["src", "drizzle.config.ts", "apps", "sdk"]
 }

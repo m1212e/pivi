@@ -11,7 +11,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
-import type { ResolvedStream, SubtitleTrack } from '#lib/apps/host';
+import type { ResolvedStream, SubtitleTrack } from '../../sdk/protocol';
 
 const BINARY = process.env.PIVI_YTDLP_BINARY ?? 'yt-dlp';
 
@@ -64,7 +64,7 @@ type YtDlpInfo = {
 };
 
 // Only ever picks a `vtt` entry -- the app contract restricts
-// SubtitleTrack to that one format (see host.ts's own comment on why), and
+// SubtitleTrack to that one format (see sdk/protocol.ts's own comment on why), and
 // YouTube reliably offers a vtt variant for every language it lists here, so
 // there's nothing to convert or fall back to.
 function trackFor(
@@ -119,7 +119,7 @@ function extractSubtitleTracks(info: YtDlpInfo): SubtitleTrack[] {
 }
 
 // yt-dlp's own reported extension is the only reliable source for this --
-// see host.ts's containerSchema comment for why the codec string can't be
+// see sdk/protocol.ts's containerSchema comment for why the codec string can't be
 // trusted (vp9 shows up in both containers; av1 shows up as mp4 despite
 // webm supporting it). `m4a` is yt-dlp's extension for an audio-only mp4.
 function containerFrom(ext: string): 'mp4' | 'webm' {

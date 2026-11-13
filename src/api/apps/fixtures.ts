@@ -86,7 +86,7 @@ export class FakeRegistry {
 // --- Publishing test fixtures
 
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
-import { MANIFEST_LABEL, type AppManifest } from '#lib/apps/manifest';
+import { MANIFEST_LABEL, type AppManifest } from '#sdk/manifest';
 
 export function generateSigningKey() {
 	const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });

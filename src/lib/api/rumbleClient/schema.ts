@@ -94,6 +94,11 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'fallbackImage',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
 						name: 'id',
 						type: {
 							kind: 'NON_NULL',
@@ -1989,6 +1994,10 @@ export const schema = {
 								}
 							},
 							{
+								name: 'checked',
+								type: { kind: 'SCALAR', name: 'Boolean', ofType: null, __proto__: null }
+							},
+							{
 								name: 'eventId',
 								type: {
 									kind: 'NON_NULL',
@@ -2995,10 +3004,7 @@ export const schema = {
 				fields: [
 					{
 						name: 'description',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
 						args: []
 					},
 					{
@@ -3028,11 +3034,6 @@ export const schema = {
 							kind: 'NON_NULL',
 							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
 						},
-						args: []
-					},
-					{
-						name: 'publicKey',
-						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
 						args: []
 					}
 				],

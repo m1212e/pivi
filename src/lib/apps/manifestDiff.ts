@@ -1,6 +1,6 @@
 // Lets app updates apply silently only when they ask for nothing new, since the
 // user's approval covered the old manifest's access, not the new one's.
-import { domainsAllow, type PermissionKey, type AppManifest } from './manifest';
+import { domainsAllow, type PermissionKey, type AppManifest } from '#sdk/manifest';
 
 /**
  * Whether an update's domain was already approved, so it isn't shown as new.

@@ -4,7 +4,7 @@
 // See src/api/apps/containerIndex.ts for why this index already exists
 // in these files without us having to build one ourselves.
 import { error, json } from '@sveltejs/kit';
-import { requireTrackName, resolveTrackUrl } from '#api/apps/trackResolution';
+import { requireTrackName, resolveTrack } from '#api/apps/trackResolution';
 import { buildSegmentBaseIndexCached } from '#api/apps/containerIndexCache';
 import type { RequestHandler } from './$types';
 
@@ -19,7 +19,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	const container = requireContainer(url.searchParams.get('container'));
 	const maxHeight = Number(url.searchParams.get('quality')) || undefined;
 
-	const targetUrl = await resolveTrackUrl(appId, sessionId, track, maxHeight);
-	const index = await buildSegmentBaseIndexCached(targetUrl, container);
+	const target = await resolveTrack(appId, sessionId, track, maxHeight);
+	const index = await buildSegmentBaseIndexCached(target.url, container, target.fetch);
 	return json(index);
 };

@@ -136,6 +136,7 @@ stdenv.mkDerivation {
       ../vite.config.ts
       ../drizzle.config.ts
       ../src
+      ../sdk
       ../static
       ../messages
       ../project.inlang

@@ -1,18 +1,15 @@
 <script lang="ts">
-	import { appHref } from '#lib/routes';
 	import * as m from '#lib/paraglide/messages';
-	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
 	import LoadingSpinner from '#lib/components/LoadingSpinner.svelte';
 	import UiNodeRenderer from '#lib/components/apps/UiNodeRenderer.svelte';
-	import type { UiNode } from '#lib/apps/ui';
+	import type { UiNode } from '#sdk/ui';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import { appAuroraStyle } from '#lib/appAccent';
 
 	const appId = page.params.appId!;
-	const APP_HREF = appHref(appId);
 
 	const apps = await client.liveQuery.apps({
 		id: true,
@@ -25,56 +22,38 @@
 	});
 	const app = apps.find((p) => p.id === appId);
 
+	// Which of the app's screens is shown: whatever a `screen` action linked to
+	// (#lib/apps/actionHref), otherwise the one its manifest opens on.
+	const screenId = $derived(page.url.searchParams.get('screen') ?? app?.entryScreenId);
+
 	let screen = $state<UiNode | null>(null);
 
+	// Text and a toggle's state travel as separate arguments, so the app gets
+	// a real boolean back.
+	function eventArgs(value: string | boolean | undefined) {
+		return typeof value === 'boolean' ? { checked: value } : { value };
+	}
+
 	function onEvent(eventId: string, value?: string | boolean) {
-		if (!app) return;
+		if (!screenId) return;
 		client.mutate
-			.appUiEvent({
-				__args: {
-					appId,
-					screenId: app.entryScreenId,
-					eventId,
-					value: typeof value === 'string' ? value : undefined
-				}
-			})
+			.appUiEvent({ __args: { appId, screenId, eventId, ...eventArgs(value) } })
 			.catch((err: unknown) => console.error('appUiEvent failed', err));
 	}
 
-	onMount(() => {
-		if (!app) return;
-
-		// A real push subscription (src/api/handlers/apps.ts +
-		// apps/pubsub.ts), not a polling setInterval — this field isn't backed
-		// by a DB table rumble can push updates for on its own, but the app
-		// host publishes an event on this same pubsub whenever a app's screen
-		// actually changes, so this component hears about it the instant it
-		// happens (and, with the client's default cache-first policy,
-		// otherwise not at all). `.subscribe()` on the object returned by a
-		// liveQuery call fires for every value the underlying query+subscription
-		// observable produces, including the initial one, so there's no
-		// separate one-shot fetch to also do here.
-		//
-		// `.subscribe()` returns an ES Observable Subscription object with an
-		// `.unsubscribe()` method — not a plain unsubscribe function — so the
-		// cleanup below calls that, not the returned value itself.
-		//
-		// Only an app that implements the 'screen' feature has anything to show
-		// here; one without just gets the "no content" state below. A
-		// sign-in (if the app needs one) is part of that same screen content —
-		// a code or a button whose action is `openOnPhone` (see
-		// UiNodeRenderer.svelte) — not something this page knows about.
-		const screenSubscription = app.features.includes('screen')
-			? client.liveQuery
-					.appScreen({ __args: { appId, screenId: app.entryScreenId }, json: true })
-					.subscribe((value) => {
-						screen = value?.json ? (JSON.parse(value.json) as UiNode) : null;
-					})
-			: undefined;
-
-		return () => {
-			if (screenSubscription) stopSubscription(screenSubscription);
-		};
+	// A push subscription (src/api/handlers/apps.ts), re-made whenever the
+	// shown screen changes. `.subscribe()` fires for the initial value too, so
+	// there's no separate fetch. Only an app with the 'screen' feature has
+	// anything to show; a sign-in, if it needs one, is part of that content.
+	$effect(() => {
+		if (!app?.features.includes('screen') || !screenId) return;
+		screen = null;
+		const subscription = client.liveQuery
+			.appScreen({ __args: { appId, screenId }, json: true })
+			.subscribe((value) => {
+				screen = value?.json ? (JSON.parse(value.json) as UiNode) : null;
+			});
+		return () => stopSubscription(subscription);
 	});
 </script>
 
@@ -105,7 +84,7 @@
 	{#if !app}
 		<p class="text-white/50">{m.app_not_found()}</p>
 	{:else if screen}
-		<UiNodeRenderer node={screen} {onEvent} {appId} appHref={APP_HREF} />
+		<UiNodeRenderer node={screen} {onEvent} {appId} />
 	{:else if app.features.includes('screen')}
 		<LoadingSpinner />
 	{:else}

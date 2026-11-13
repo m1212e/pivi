@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { swapToFallback } from '#lib/apps/imageFallback';
+
 	// The one media card, used by the dashboard's VideoRow and by apps through
 	// UiNodeRenderer, so a size or text change is one edit. `onSelect` is for
 	// cards that change the app's screen instead of navigating.
@@ -6,6 +8,7 @@
 		title,
 		meta,
 		image,
+		fallbackImage,
 		shape = 'video',
 		stacked = false,
 		href,
@@ -16,6 +19,8 @@
 		title: string;
 		meta: string;
 		image: string;
+		// Tried once if `image` fails to load.
+		fallbackImage?: string;
 		// 16:9 thumbnails or 2:3 posters.
 		shape?: 'video' | 'poster' | 'avatar';
 		// A pile of cards behind the thumbnail, to tell a playlist from a video.
@@ -42,15 +47,6 @@
 	const classes = $derived(
 		`group flex ${WIDTH[shape]} shrink-0 flex-col gap-2 focus:outline-none ${shape === 'avatar' ? 'items-center text-center' : 'text-left'}`
 	);
-
-	// YouTube's maxresdefault 404s for videos without a high-res source,
-	// mqdefault always exists.
-	function onImageError(event: Event) {
-		const img = event.currentTarget as HTMLImageElement;
-		if (img.src.includes('maxresdefault.jpg')) {
-			img.src = img.src.replace('maxresdefault.jpg', 'mqdefault.jpg');
-		}
-	}
 </script>
 
 {#snippet content()}
@@ -78,7 +74,7 @@
 					src={image}
 					alt=""
 					referrerpolicy="no-referrer"
-					onerror={onImageError}
+					onerror={swapToFallback(fallbackImage)}
 					class="size-full object-cover {shape === 'poster' ? 'object-top' : ''}"
 				/>
 			{:else}

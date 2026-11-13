@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parseImageRef } from '#lib/apps/imageRef';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import { buildSandboxSpec, volumeBelongsToApp, volumeName } from './spec';
 
 const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: [],
 	permissions: ['network', 'storage', 'cache'],
 	network: { domains: ['api.example.com', '*.cdn.example.com'] },

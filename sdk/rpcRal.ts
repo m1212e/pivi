@@ -1,7 +1,7 @@
 // vscode-jsonrpc needs a runtime layer installed before any connection works,
-// normally via its /node or /browser subpath. Vite can't resolve those for code
-// shared by server and browser builds (RemoteBridge, the phone remote, the app
-// host), so this installs one small implementation that works in both.
+// normally via its /node or /browser subpath. Bundlers don't resolve those
+// consistently for code shared by server and browser builds, so this installs
+// one small implementation that works in Node, Bun and the browser alike.
 import { AbstractMessageBuffer, RAL, type Message } from 'vscode-jsonrpc';
 
 // Uint8Array based buffer, so no Node Buffer is needed in the browser.
@@ -35,9 +35,8 @@ class MessageBuffer extends AbstractMessageBuffer {
 let installed = false;
 
 /**
- * Call before createMessageConnection. RemoteBridge, remoteController, the app
- * host and stdioConnection all do, and repeated calls are fine even though
- * RAL.install() itself throws on a second call.
+ * Call before every createMessageConnection. Repeated calls are fine even
+ * though RAL.install() itself throws on a second call.
  */
 export function ensureRal(): void {
 	if (installed) return;

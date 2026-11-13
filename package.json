@@ -65,7 +65,8 @@
 	},
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#api/*": "./src/api/*"
+		"#api/*": "./src/api/*",
+		"#sdk/*": "./sdk/*"
 	},
 	"dependencies": {
 		"@m1212e/rumble": "^0.23.22",

@@ -2,9 +2,9 @@
 // skippable section (sponsor reads, subscribe reminders, channel
 // intros/outros, previews/recaps) this app has no way to detect on its
 // own -- this just hands its data to the generic skip-segment app
-// contract (#lib/apps/host's SkipSegment), so the player never needs to
+// contract (sdk/protocol.ts's SkipSegment), so the player never needs to
 // know SponsorBlock exists.
-import type { SkipSegment } from '#lib/apps/host';
+import type { SkipSegment } from '../../sdk/protocol';
 
 const SPONSORBLOCK_API = 'https://sponsor.ajay.app/api/skipSegments';
 
