@@ -9,6 +9,7 @@
 	// ensureRal() installs what those subpaths would have.
 	import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
 	import { afterNavigate, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { pairingSocketUrl } from '#lib/wsConfig';
 	import type { TvHello } from '#lib/remote/protocol';
 	import { ensureRal } from '#sdk/rpcRal';
@@ -522,7 +523,7 @@
 		onNotification(connection, textEntryModeNotification, textEntryModeParamsSchema, (mode) => {
 			osk.phoneKeyboard = mode.phoneKeyboard;
 		});
-		connection.onNotification(goHomeNotification, () => goto(ROUTES.home));
+		connection.onNotification(goHomeNotification, () => goto(resolve(ROUTES.home)));
 		onNotification(connection, keyNotification, keyParamsSchema, ({ value }) => pressPinKey(value));
 		onNotification(connection, textNotification, textParamsSchema, ({ value }) =>
 			setFocusedText(value)

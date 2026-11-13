@@ -178,7 +178,7 @@ export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /** Builds the handshake transcript both sides sign and derive keys from. */
-export function concatBytes(...chunks: Uint8Array[]): Uint8Array {
+function concatBytes(...chunks: Uint8Array[]): Uint8Array {
 	const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
 	let offset = 0;
 	for (const chunk of chunks) {

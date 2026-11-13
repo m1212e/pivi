@@ -67,7 +67,11 @@
 		// (lucide, qr-code-styling, ...) are bundled by vite and belong in
 		// devDependencies, so both of these checks point the wrong way here.
 		"test-only-dependencies": "off",
-		"dev-dependencies-in-production": "off"
+		"dev-dependencies-in-production": "off",
+		// The hooks run without coverage data, so CRAP is estimated as fully
+		// uncovered and flags any function with five branches. Cyclomatic and
+		// cognitive limits still fail the run.
+		"complexity-crap": "warn"
 	},
 	"ignoreExports": [
 		// SvelteKit routes one handler for both methods by exporting it twice,
