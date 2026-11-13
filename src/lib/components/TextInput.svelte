@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { DOM_EVENTS } from '#lib/domEvents';
 	import { onDestroy } from 'svelte';
-	import { osk } from '#lib/state/osk.svelte';
+	import { osk } from '#lib/state/onscreenkeyboard.svelte';
 	import Button from './Button.svelte';
 	import TextField from './TextField.svelte';
 

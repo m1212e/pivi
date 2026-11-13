@@ -59,7 +59,7 @@
 	import { navigationFlagsFor } from '#lib/navigationFlags';
 	import { planMove } from '#lib/spatialNav';
 	import { isTextualInput, requestTextExit, setInputValue, submitInput } from '#lib/textEntry';
-	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
+	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/onscreenkeyboard.svelte';
 
 	// Lives in the root layout and connects the TV page to the paired phone
 	// through the local relay. It turns the phone's gestures into focus moves,

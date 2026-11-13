@@ -12,7 +12,7 @@
 		type KeyLayers,
 		type DeadKind
 	} from '#lib/keyboard/eurkey';
-	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/osk.svelte';
+	import { dismissKeyboard, keyboardVisible, osk } from '#lib/state/onscreenkeyboard.svelte';
 	import { deleteBackward, insertText, submitInput } from '#lib/textEntry';
 	import {
 		cycleModifier,
