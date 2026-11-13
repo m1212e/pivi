@@ -57,6 +57,9 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # The Pis are arm64 and the host picks its own platform out of the index,
+      # so an amd64-only image is "not published" as far as a TV is concerned.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - if: github.event_name != 'pull_request'
@@ -82,6 +85,7 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: |

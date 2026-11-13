@@ -8,7 +8,9 @@
 # isn't there. The layout mirrors the repo so the app's relative imports of
 # ../../sdk resolve the same way in both, and dependencies are installed at
 # the root from this app's own lockfile so the SDK finds them too.
-FROM oven/bun:1 AS build
+# The bundle is plain JS, so this stage runs natively even when CI builds the
+# arm64 image, instead of running bun under emulation.
+FROM --platform=$BUILDPLATFORM oven/bun:1 AS build
 WORKDIR /build
 COPY apps/youtube/package.json apps/youtube/bun.lock ./
 RUN bun install --frozen-lockfile --production
