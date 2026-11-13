@@ -17,9 +17,11 @@ export type SuggestedApp = {
 };
 
 // Only labels are read, but that's still a registry round trip per app, and
-// the list is fetched each time /apps opens. Failures are cached too, so an
-// unreachable registry doesn't slow down every visit.
-const cache = createTtlCache<SuggestedApp | null>(60 * 60 * 1000);
+// the list is fetched each time /apps opens. A failure is remembered only
+// briefly: the registry is often unreachable right after boot, and that must
+// not hide the suggestions for long.
+const found = createTtlCache<SuggestedApp>(60 * 60 * 1000);
+const failed = createTtlCache<true>(60 * 1000);
 
 function fromManifest(manifest: AppManifest, image: string): SuggestedApp {
 	return {
@@ -32,16 +34,17 @@ function fromManifest(manifest: AppManifest, image: string): SuggestedApp {
 }
 
 async function describe(image: string, registry: RegistryClient): Promise<SuggestedApp | null> {
-	const hit = cache.get(image);
-	if (hit !== undefined) return hit;
+	const hit = found.get(image);
+	if (hit) return hit;
+	if (failed.get(image)) return null;
 	try {
 		const { manifest } = await resolveImage(parseImageRef(image), registry);
 		const app = fromManifest(manifest, image);
-		cache.set(image, app);
+		found.set(image, app);
 		return app;
 	} catch (error) {
 		console.warn(`[apps] suggested app ${image} unavailable:`, String(error));
-		cache.set(image, null);
+		failed.set(image, true);
 		return null;
 	}
 }

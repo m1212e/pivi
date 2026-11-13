@@ -129,6 +129,28 @@ describe('installing and managing', () => {
 		});
 	});
 
+	it('refuses to install a build other than the one that was reviewed', async () => {
+		publish();
+		await service.preview(request());
+		// The tag moves to a build asking for more between review and install.
+		const changed = {
+			...manifest,
+			network: { domains: ['api.example.com', 'tracker.example.net'] }
+		};
+		signImage(
+			registry,
+			'acme/demo',
+			publishAppImage(registry, 'acme/demo', '1.0', changed),
+			key.privateKey
+		);
+		await service.install(['network']);
+
+		const state = await service.state();
+		expect(state.error).toMatch(/changed since it was reviewed/);
+		expect(state.apps).toHaveLength(0);
+		expect(state.preview).toBeNull();
+	});
+
 	it('refuses to install without a preview, and forgets the preview afterwards', async () => {
 		await service.install(['network']);
 		expect((await service.state()).error).toMatch(/Review the app/);

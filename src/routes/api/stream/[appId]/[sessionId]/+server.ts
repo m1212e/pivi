@@ -35,6 +35,16 @@ function containerFor(vcodec: string): 'webm' | 'mp4' {
 	return /^(vp0?9|av0?1)/.test(vcodec) ? 'webm' : 'mp4';
 }
 
+// The inputs are app-supplied URLs, so ffmpeg may only fetch them over plain
+// web protocols. Without this a response that turns out to be a playlist (or
+// a concat list) could make ffmpeg open file:, data: or any other protocol it
+// knows. Applied per input, since it's an input option.
+const INPUT_RESTRICTIONS = ['-protocol_whitelist', 'http,https,tls,tcp'];
+
+function inputArgs(url: string, seekSeconds: number): string[] {
+	return [...INPUT_RESTRICTIONS, '-ss', String(seekSeconds), '-i', url];
+}
+
 function buildFfmpegArgs(
 	videoUrl: string,
 	audioUrl: string | undefined,
@@ -42,11 +52,8 @@ function buildFfmpegArgs(
 	container: 'webm' | 'mp4'
 ): string[] {
 	return [
-		'-ss',
-		String(seekSeconds),
-		'-i',
-		videoUrl,
-		...(audioUrl ? ['-ss', String(seekSeconds), '-i', audioUrl] : []),
+		...inputArgs(videoUrl, seekSeconds),
+		...(audioUrl ? inputArgs(audioUrl, seekSeconds) : []),
 		'-map',
 		'0:v:0',
 		'-map',

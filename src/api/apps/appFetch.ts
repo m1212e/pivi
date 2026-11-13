@@ -4,8 +4,10 @@
 // LAN anyway. So redirects are followed by hand, and every hop is held to the
 // same rules as the URL the app handed over.
 //
-// ffmpeg (routes/api/stream) fetches on its own and follows redirects itself,
-// so this can't cover it. Its inputs are still checked up front by streamCache.ts.
+// ffmpeg (routes/api/stream) fetches on its own and follows HTTP redirects
+// itself, so this can't cover it. Its inputs are checked up front by
+// streamCache.ts and it may only speak http(s), but a redirect from one of the
+// app's own domains is still followed unchecked there.
 import type { AppInstance } from './runtime';
 import { assertPublicHost, UnsafeUrlError } from './urlGuard';
 
