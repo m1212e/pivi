@@ -22,7 +22,7 @@ import {
 	getDeviceCredentials,
 	setDeviceCredentials,
 	type DeviceCredentials
-} from '#lib/state/deviceCredentials';
+} from '#lib/state/phoneDeviceCredentials';
 import {
 	encryptedSchema,
 	relayToPhoneSchema,
