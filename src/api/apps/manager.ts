@@ -21,6 +21,8 @@ import { appPubSub } from './pubsub';
 import { onHostLocaleChanged } from './hostLocale';
 import type { AppProcessControl } from './deps';
 import { createUsageTracker } from './usage';
+import { openUrlNotification } from '#lib/remote/remoteProtocol';
+import { sendToPhones } from '../ws/relay';
 
 const instances = new Map<string, Promise<AppInstance>>();
 // A VM still shutting down. Its sandbox name is the app's, so booting the next
@@ -77,6 +79,8 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 			if (kind === 'dashboard') appPubSub.publish(ANY_DASHBOARD_EVENT);
 		},
 		cpus: spec.cpus,
+		onOpenOnPhone: (url) =>
+			sendToPhones({ jsonrpc: '2.0', method: openUrlNotification.method, params: { url } }),
 		onCrash: (code) => {
 			console.error(`[app:${appId}] exited unexpectedly (${code}); it restarts on next use`);
 			forgetApp(appId);

@@ -24,6 +24,11 @@ export function appHref(appId: string): string {
 	return `${APPS_PREFIX}${encodeURIComponent(appId)}`;
 }
 
+/** The /apps screen with that app's settings open, so its pending update can be reviewed. */
+export function appUpdateHref(appId: string): string {
+	return `${ROUTES.apps}?${new URLSearchParams({ update: appId })}`;
+}
+
 /** An app's page on one of the screens it published, or on its entry screen. */
 export function appScreenHref(appId: string, screenId?: string): string {
 	const base = appHref(appId);

@@ -17,6 +17,14 @@ export function preferredStartHeight(screenHeightPx: number | undefined): number
 	return screenHeightPx && screenHeightPx > 0 ? Math.round(screenHeightPx) : FALLBACK_START_HEIGHT;
 }
 
+/** `preferredStartHeight` for this device's screen, the fallback during SSR. */
+export function screenStartHeight(): number {
+	// Physical pixels, so a 4K TV scaled to 1080 CSS pixels still counts as 2160.
+	return preferredStartHeight(
+		typeof window === 'undefined' ? undefined : window.screen.height * window.devicePixelRatio
+	);
+}
+
 /** Containers the stream resolver reports, needed to build the MSE MIME types. */
 export type Container = 'mp4' | 'webm';
 /** How a tier plays, shown as an icon in the quality picker and on the phone. */

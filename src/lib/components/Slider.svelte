@@ -119,20 +119,16 @@
 	}
 
 	function onPointerDown(event: PointerEvent) {
-		if (disabled) return;
+		// RemoteBridge's select press is a synthetic pointer at 0,0, which would
+		// drag the value to an edge. onClick handles arming for it instead.
+		if (disabled || !event.isTrusted) return;
 		// A first press only arms, so a misaimed click costs nothing.
 		if (!armed) {
 			armed = true;
 			return;
 		}
 		dragging = true;
-		// RemoteBridge dispatches synthetic pointers whose id the browser
-		// doesn't know, which makes this throw.
-		try {
-			el?.setPointerCapture(event.pointerId);
-		} catch {
-			// dragging still works via move events without capture
-		}
+		el?.setPointerCapture(event.pointerId);
 		updateFromPointer(event);
 	}
 

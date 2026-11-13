@@ -67,9 +67,9 @@ body {
 }
 
 /*
- * Home-screen backdrop: three large, heavily blurred colour blobs that drift
- * very slowly (and at unrelated paces) behind the content. Low opacity and
- * long durations keep it a barely-there shimmer rather than visible motion.
+ * Home-screen backdrop: three large, heavily blurred colour blobs that wander
+ * slowly (and at unrelated paces) behind the content. A path of several
+ * waypoints keeps the motion visible but calm, instead of a plain back and forth.
  * Colours come from `--pivi-aurora-1/2/3` (see appAuroraStyle) so a page for
  * a specific running app can tint this with its own brand colours instead of
  * the generic defaults below.
@@ -88,7 +88,7 @@ body {
 	border-radius: 50%;
 	filter: blur(90px);
 	opacity: 0.16;
-	animation: pivi-aurora-drift 26s ease-in-out infinite alternate;
+	animation: pivi-aurora-drift 18s ease-in-out infinite alternate;
 }
 .pivi-aurora span:nth-child(1) {
 	top: -20%;
@@ -99,22 +99,29 @@ body {
 	top: 30%;
 	right: -20%;
 	background: var(--pivi-aurora-2, var(--color-fuchsia-500));
-	animation-duration: 35s;
-	animation-delay: -20s;
+	animation-duration: 23s;
+	animation-delay: -9s;
+	animation-direction: alternate-reverse;
 }
 .pivi-aurora span:nth-child(3) {
 	bottom: -25%;
 	left: 20%;
 	background: var(--pivi-aurora-3, var(--color-cyan-500));
-	animation-duration: 44s;
-	animation-delay: -40s;
+	animation-duration: 29s;
+	animation-delay: -17s;
 }
 @keyframes pivi-aurora-drift {
-	from {
-		transform: translate3d(-18vw, -12vh, 0) scale(0.92);
+	0% {
+		transform: translate3d(-20vw, -14vh, 0) scale(0.9);
 	}
-	to {
-		transform: translate3d(18vw, 14vh, 0) scale(1.28);
+	33% {
+		transform: translate3d(14vw, -8vh, 0) scale(1.15);
+	}
+	66% {
+		transform: translate3d(-6vw, 16vh, 0) scale(1);
+	}
+	100% {
+		transform: translate3d(20vw, 12vh, 0) scale(1.3);
 	}
 }
 @media (prefers-reduced-motion: reduce) {
@@ -326,6 +333,45 @@ html[data-view-transition='zoom-in']::view-transition-new(root) {
 ::view-transition-group(pairing-qr) {
 	animation-duration: 450ms;
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The sidebar highlight of an app screen (see Button.svelte's `nav`). */
+::view-transition-group(nav-indicator) {
+	animation-duration: 320ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * A video card's thumbnail grows into the player and shrinks back into its
+ * card on the way out (see +layout.svelte's launchPlayer). The old side stays
+ * opaque while the new one fades in over it, so the page behind never shows
+ * through mid-morph. `cover` keeps both filling the box while its
+ * aspect ratio changes between card and screen.
+ */
+::view-transition-group(player-video) {
+	animation-duration: 450ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+::view-transition-old(player-video),
+::view-transition-new(player-video) {
+	height: 100%;
+	object-fit: cover;
+	mix-blend-mode: normal;
+}
+::view-transition-old(player-video) {
+	animation: none;
+}
+::view-transition-new(player-video) {
+	animation: 450ms ease-in both pivi-fade-in;
+}
+/* No card to shrink into (scrolled away, or opened from the phone). */
+::view-transition-old(player-video):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both pivi-zoom-out-old;
+}
+@keyframes pivi-fade-in {
+	from {
+		opacity: 0;
+	}
 }
 
 /*

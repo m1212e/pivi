@@ -255,7 +255,11 @@
 			...document.querySelectorAll<HTMLElement>(
 				'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 			)
-		].filter((el) => el.offsetParent !== null || el.checkVisibility());
+		]
+			// Inert controls (behind an open Select) refuse focus, but picking one
+			// would still scroll the page toward it.
+			.filter((el) => !el.closest('[inert]'))
+			.filter((el) => el.offsetParent !== null || el.checkVisibility());
 		// A modal (the pairing prompt) keeps focus to itself, so its buttons are
 		// the only thing a swipe can reach.
 		const modal = document.querySelector('[data-pivi-modal]');

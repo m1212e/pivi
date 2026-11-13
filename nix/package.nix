@@ -33,10 +33,12 @@ let
   # every SD image — enough on its own to push the release asset past GitHub's
   # 2 GiB limit.
   #
-  # This is only correct because the runtime dependencies are declared correctly:
-  # svelte, @sveltejs/kit and drizzle-orm are imported by the built server, and
-  # drizzle-kit is run by pivi-db-push, so all four live in `dependencies` rather
-  # than `devDependencies` where they started.
+  # This is only correct because the runtime dependencies are declared correctly.
+  # adapter-node bundles everything in `devDependencies` into the build, so only
+  # what has to stay outside it lives in `dependencies`: drizzle-kit, drizzle-orm,
+  # pg and nanoid because pivi-db-push loads the schema with them, microsandbox
+  # for its native addon, and @opentelemetry/api because SvelteKit always leaves
+  # it external.
   mkNodeModules =
     {
       name,

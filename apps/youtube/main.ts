@@ -12,6 +12,7 @@
 import {
 	activateNotification,
 	localeNotification,
+	openOnPhoneNotification,
 	PROTOCOL_VERSION,
 	publishDashboardNotification,
 	publishScreenNotification,
@@ -115,8 +116,9 @@ function videoToCard(video: VideoSummary): HomeCard {
 }
 
 // The device-code sign-in prompt, while one is in progress -- a code to
-// read out, and the one button that actually needs the phone (the host's
+// read out, and a button to send the link to the phone again (the host's
 // generic `openOnPhone` action, not anything auth-specific it understands).
+// onSignIn already sends it once on its own.
 function signInPrompt(auth: DeviceCodeAuth): UiNode {
 	return {
 		type: 'container',
@@ -899,6 +901,10 @@ function onBack() {
 
 function onSignIn() {
 	beginSignIn((status) => {
+		// Only once per code, the button stays for sending it again.
+		if (status.status === 'pending' && status.userCode !== signInStatus?.userCode) {
+			connection.sendNotification(openOnPhoneNotification, { url: status.verificationUrl });
+		}
 		signInStatus = status;
 		publishScreen(lastResults);
 	})

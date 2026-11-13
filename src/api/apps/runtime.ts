@@ -31,6 +31,8 @@ import type { AppScreen, UiEvent } from '#sdk/ui';
 import {
 	activateNotification,
 	localeNotification,
+	openOnPhoneNotification,
+	openOnPhoneParamsSchema,
 	publishDashboardNotification,
 	publishScreenNotification,
 	readyNotification,
@@ -52,6 +54,7 @@ import {
 import { dashboardContributionSchema } from '#sdk/dashboard';
 import { appScreenSchema } from '#sdk/ui';
 import { sanitizeDashboard, sanitizeScreen } from './sanitize';
+import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';
 import type { RunningSandbox, SandboxHandlers } from './sandbox/types';
 
 /**
@@ -118,6 +121,8 @@ export type LoadAppOptions = {
 	onCrash?: (code: number | null) => void;
 	// The watchdog killed it. Not followed by onCrash.
 	onForcedStop?: (reason: ForcedStopReason) => void;
+	// Already checked to be https and throttled.
+	onOpenOnPhone?: (url: string) => void;
 	// What the CPU watchdog measures against.
 	cpus?: number;
 	// Overridable so tests don't have to wait out real minutes.
@@ -150,6 +155,8 @@ const MAX_SCREEN_BYTES = 8 << 20;
 // One protocol message from the app. Far below the SDK's own default, since
 // the host reads every running app's output and a screen never gets near it.
 const MAX_MESSAGE_BYTES = 4 << 20;
+// Every link pops up a prompt on the phone, so an app can't keep spamming it.
+const OPEN_ON_PHONE_INTERVAL_MS = 5_000;
 
 function hasFeature(manifest: AppManifest, feature: Feature): boolean {
 	return manifest.features.includes(feature);
@@ -244,7 +251,7 @@ function wireNotifications(
 	published: PublishedState,
 	onReady: (protocol: number) => void
 ) {
-	const { manifest, granted, onUpdate } = options;
+	const { manifest, granted, onUpdate, onOpenOnPhone } = options;
 	const allows = (url: string) => urlAllowed(manifest, granted, url);
 	const drop = (what: string) =>
 		console.warn(`[app:${manifest.id}] ignored ${what}: not declared in its manifest`);
@@ -285,6 +292,19 @@ function wireNotifications(
 		published.screens.set(screen.screenId, screen);
 		published.screenBytes.set(screen.screenId, bytes);
 		onUpdate?.('screen', screen.screenId);
+	});
+
+	let lastOpenOnPhone = -Infinity;
+	connection.onNotification(openOnPhoneNotification, (raw) => {
+		if (!hasFeature(manifest, 'screen')) return drop('a link for the phone');
+		const parsed = openOnPhoneParamsSchema.safeParse(raw);
+		if (!parsed.success || !isPhoneSafeUrl(parsed.data.url)) return;
+		const now = Date.now();
+		if (now - lastOpenOnPhone < OPEN_ON_PHONE_INTERVAL_MS) {
+			return void console.warn(`[app:${manifest.id}] ignored a link for the phone sent too soon`);
+		}
+		lastOpenOnPhone = now;
+		onOpenOnPhone?.(parsed.data.url);
 	});
 }
 

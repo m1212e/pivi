@@ -16,7 +16,10 @@ declare global {
 
 		// interface Error {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			// The app whose tile asked whether to update first, see AppCard.
+			appUpdatePrompt?: string;
+		}
 		// interface Platform {}
 	}
 }

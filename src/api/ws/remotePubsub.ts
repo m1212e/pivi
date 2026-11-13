@@ -5,4 +5,10 @@ import { createPubSub } from 'graphql-yoga';
 
 export const PHONE_CONNECTION_EVENT = 'remote:phoneConnection';
 
-export const remotePubSub = createPubSub<Record<string, []>>();
+// On globalThis since relay.ts's server survives dev HMR and must keep
+// publishing to the same instance the subscriptions listen on.
+declare global {
+	var __piviRemotePubSub: ReturnType<typeof createPubSub<Record<string, []>>> | undefined;
+}
+
+export const remotePubSub = (globalThis.__piviRemotePubSub ??= createPubSub<Record<string, []>>());

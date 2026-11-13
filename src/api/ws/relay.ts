@@ -119,8 +119,13 @@ function deriveDeviceName(userAgent: string | undefined): string {
 	return androidModelFrom(userAgent) ?? 'Phone';
 }
 
-// Module level so every handler and the exported helpers see the same sockets.
-const connections = new Map<WebSocket, ConnState>();
+// On globalThis because the relay server outlives dev HMR (see
+// startPairingRelay). A fresh map per module evaluation would leave its
+// handlers filling an old one while hasConnectedPhone reads an empty one.
+declare global {
+	var __piviRelayConnections: Map<WebSocket, ConnState> | undefined;
+}
+const connections = (globalThis.__piviRelayConnections ??= new Map<WebSocket, ConnState>());
 
 function send(socket: WebSocket, message: object) {
 	if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -157,8 +162,12 @@ export function hasConnectedPhone(): boolean {
 
 type PendingApproval = { name: string; decide: (approved: boolean) => void };
 
-// Pairing requests the TV hasn't answered yet, by request id.
-const pendingApprovals = new Map<string, PendingApproval>();
+// Pairing requests the TV hasn't answered yet, by request id. Survives HMR
+// like `connections`.
+declare global {
+	var __piviPendingApprovals: Map<string, PendingApproval> | undefined;
+}
+const pendingApprovals = (globalThis.__piviPendingApprovals ??= new Map<string, PendingApproval>());
 
 function sendToTvs(method: string, params: unknown) {
 	for (const tv of tvSockets()) send(tv, { jsonrpc: '2.0', method, params });

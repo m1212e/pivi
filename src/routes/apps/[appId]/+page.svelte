@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as m from '#lib/paraglide/messages';
+	import { flushSync, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
@@ -41,6 +42,31 @@
 			.catch((err: unknown) => console.error('appUiEvent failed', err));
 	}
 
+	// Which nav entries are selected, to tell a section switch apart from the
+	// many other pushes (search suggestions, more results) an app sends.
+	function selectedNav(node: UiNode | null): string {
+		if (!node) return '';
+		if (node.type === 'button') {
+			return node.variant === 'nav' && node.selected ? `${node.onSelect ?? node.label};` : '';
+		}
+		return 'children' in node ? node.children.map(selectedNav).join('') : '';
+	}
+
+	// Only a section switch runs as a view transition, which slides the nav
+	// highlight over. Doing it for every push would freeze the page for the
+	// length of the animation each time.
+	function showScreen(next: UiNode | null) {
+		const prev = selectedNav(screen);
+		if (!screen || !('startViewTransition' in document) || prev === selectedNav(next)) {
+			screen = next;
+			return;
+		}
+		// A zoom kind left over from the last page navigation would otherwise
+		// zoom the whole screen here too.
+		delete document.documentElement.dataset.viewTransition;
+		document.startViewTransition(() => flushSync(() => (screen = next)));
+	}
+
 	// A push subscription (src/api/handlers/apps.ts), re-made whenever the
 	// shown screen changes. `.subscribe()` fires for the initial value too, so
 	// there's no separate fetch. Only an app with the 'screen' feature has
@@ -48,11 +74,13 @@
 	$effect(() => {
 		if (!app?.features.includes('screen') || !screenId) return;
 		screen = null;
-		const subscription = client.liveQuery
-			.appScreen({ __args: { appId, screenId }, json: true })
-			.subscribe((value) => {
-				screen = value?.json ? (JSON.parse(value.json) as UiNode) : null;
-			});
+		// The initial value arrives synchronously, and showScreen reads `screen`,
+		// which would make this effect depend on the state it writes.
+		const subscription = untrack(() =>
+			client.liveQuery.appScreen({ __args: { appId, screenId }, json: true }).subscribe((value) => {
+				showScreen(value?.json ? (JSON.parse(value.json) as UiNode) : null);
+			})
+		);
 		return () => stopSubscription(subscription);
 	});
 </script>

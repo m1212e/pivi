@@ -37,8 +37,8 @@
 	const classes = $derived(
 		[
 			variant === 'nav'
-				? `flex w-full items-center gap-4 rounded-xl px-3 py-2.5 text-left text-base ${
-						selected ? 'bg-white/15 font-semibold text-white' : 'text-white/80 hover:bg-white/10'
+				? `relative isolate flex w-full items-center gap-4 rounded-xl px-3 py-2.5 text-left text-base ${
+						selected ? 'font-semibold text-white' : 'text-white/80 hover:bg-white/10'
 					}`
 				: `inline-flex items-center justify-center gap-2 rounded-full font-medium transition ${SIZES[size]} ${
 						variant === 'solid'
@@ -51,12 +51,26 @@
 	);
 </script>
 
+<!-- The highlight is its own element so a view transition can slide it from
+     the old entry to the new one (see the app page and layout.css). Only one
+     entry is ever selected, so the name stays unique. -->
+{#snippet content()}
+	{#if variant === 'nav' && selected}
+		<span
+			class="absolute inset-0 -z-10 rounded-xl bg-white/15"
+			style:view-transition-name="nav-indicator"
+			aria-hidden="true"
+		></span>
+	{/if}
+	{@render children()}
+{/snippet}
+
 {#if href}
 	<a {href} class={classes} aria-current={selected ? 'page' : undefined}>
-		{@render children()}
+		{@render content()}
 	</a>
 {:else}
 	<button type="button" {...rest} class={classes} aria-current={selected ? 'page' : undefined}>
-		{@render children()}
+		{@render content()}
 	</button>
 {/if}

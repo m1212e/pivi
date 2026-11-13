@@ -8,6 +8,8 @@ import {
 	activateNotification,
 	activateParamsSchema,
 	localeNotification,
+	openOnPhoneNotification,
+	openOnPhoneParamsSchema,
 	publishDashboardNotification,
 	pingRequest,
 	publishScreenNotification,
@@ -95,6 +97,15 @@ const METHODS: MethodSpec[] = [
 		feature: 'screen',
 		description: 'A declarative screen. Replaces the last version of the screen with that id.',
 		params: appScreenSchema
+	},
+	{
+		method: openOnPhoneNotification.method,
+		from: 'app',
+		kind: 'notification',
+		feature: 'screen',
+		description:
+			'Ask the paired phone to open an https link, e.g. a sign-in page. The phone asks the user first. Ignored without a connected phone, and when sent more than once every few seconds.',
+		params: openOnPhoneParamsSchema
 	},
 	{
 		method: uiEventNotification.method,

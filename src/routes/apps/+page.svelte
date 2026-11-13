@@ -6,8 +6,10 @@
 	// the other.
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import { client } from '#lib/api/rumbleClient/client';
+	import { freshQuery } from '#lib/api/freshQuery';
 	import { stopSubscription } from '#lib/api/subscription';
 	import AppManagerPanel, { type AppActions } from '#lib/components/AppManagerPanel.svelte';
 	import { appsStateSchema, type AppsState } from '#lib/apps/management';
@@ -77,7 +79,10 @@
 		return parsed.success ? parsed.data : null;
 	}
 
-	const initial = await client.liveQuery.appManagement(FIELDS);
+	// The subscription below only pushes on changes and doesn't update urql's
+	// cached copy of this query, so a cached answer would show the app list from
+	// the last visit, e.g. an app uninstalled since then still installed.
+	const initial = await freshQuery.appManagement(FIELDS);
 	// Not called `state`: a variable of that name makes `$state(...)` parse as a store
 	// dereference of it.
 	let managed = $state<AppsState>((initial && toState(initial)) || EMPTY);
@@ -111,7 +116,15 @@
 	// goes wrong while the work runs arrives through the shared state instead.
 	let refusal = $state<string | null>(null);
 
+	// Set when the home screen's update prompt sent the user here.
+	const updateAppId = page.url.searchParams.get('update');
+
 	onMount(() => {
+		// The tile's dot can come from the registry alone, before anything was
+		// pulled, so there is nothing to approve yet until a check fetches it.
+		if (updateAppId && !managed.apps.find((app) => app.id === updateAppId)?.update) {
+			actions.checkUpdates();
+		}
 		const subscription = client.liveQuery.appManagement(FIELDS).subscribe((value) => {
 			const next = value && toState(value);
 			if (next) managed = next;
@@ -155,5 +168,5 @@
 		</p>
 	{/if}
 
-	<AppManagerPanel apps={managed} {actions} {suggested} />
+	<AppManagerPanel apps={managed} {actions} {suggested} expand={updateAppId} />
 </div>

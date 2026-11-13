@@ -50,8 +50,15 @@
 	let {
 		apps,
 		actions,
-		suggested = []
-	}: { apps: AppsState; actions: AppActions; suggested?: SuggestedApp[] } = $props();
+		suggested = [],
+		expand = null
+	}: {
+		apps: AppsState;
+		actions: AppActions;
+		suggested?: SuggestedApp[];
+		// The app whose settings start open.
+		expand?: string | null;
+	} = $props();
 
 	let image = $state('');
 	let publicKey = $state('');
@@ -62,7 +69,8 @@
 	let chosen = $derived<PermissionKey[]>(apps.preview ? [...apps.preview.permissions] : []);
 	// Only one app's settings show at a time, so several apps don't become a
 	// wall of switches.
-	let expandedAppId = $state<string | null>(null);
+	// svelte-ignore state_referenced_locally
+	let expandedAppId = $state<string | null>(expand);
 
 	// Picking an installed one would just preview-install over it.
 	const visibleSuggested = $derived(

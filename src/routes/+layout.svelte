@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { ROUTES, isPlayPath, isRemotePath, loginHref } from '#lib/routes';
-	import type { Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import { LoaderCircle } from '@lucide/svelte';
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
 	import { onNavigate, afterNavigate } from '$app/navigation';
@@ -23,6 +25,7 @@
 	import { startAmbient, stopAmbient } from '#lib/ambient';
 	import { ambientMusic } from '#lib/state/ambient.svelte';
 	import { applyTvScale, clearTvScale } from '#lib/tvScale';
+	import { warmPlaybackSession } from '#lib/playback/warmup';
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
 	let { children }: { children: Snippet } = $props();
@@ -75,6 +78,26 @@
 			?.style.setProperty('view-transition-name', 'profile-avatar');
 	}
 
+	// The thumbnail a video grows out of on the way into the player, and shrinks
+	// back into on the way out. Only one element may carry the name, so of
+	// several links to the same session (a hero and a shelf card) the focused
+	// one wins, else the first on screen. Returns it so the tag can be removed.
+	function tagPlayerCard(url: URL): HTMLElement | undefined {
+		const target = url.pathname + url.search;
+		const links = [...document.querySelectorAll('a')].filter(
+			(link) => link.pathname + link.search === target
+		);
+		const link = links.find((l) => l === document.activeElement) ?? links.find(isOnScreen);
+		const thumbnail = link?.querySelector<HTMLElement>('[data-focus-ring-target]');
+		thumbnail?.style.setProperty('view-transition-name', 'player-video');
+		return thumbnail ?? undefined;
+	}
+
+	function isOnScreen(element: Element) {
+		const rect = element.getBoundingClientRect();
+		return rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
+	}
+
 	// `null` whenever there's nothing to transition between (a fresh load with
 	// no `from`, or a browser without view transitions at all).
 	function transitionPaths(navigation: Parameters<typeof navigationPaths>[0]) {
@@ -98,34 +121,63 @@
 		if (!isRemotePage && paths && isLoginToHome(paths.from, paths.to)) playSound('home');
 	});
 
+	// Set while a video grows into a black stand-in for the player, which
+	// covers the wait for the app to resolve the session. Growing right on the
+	// tap feels instant, the player itself could only take over after the wait.
+	let launchingPlayer = $state(false);
+	type OnNavigateCallback = Parameters<typeof onNavigate>[0];
+
+	async function launchPlayer(
+		navigation: Parameters<OnNavigateCallback>[0],
+		from: string,
+		to: string
+	) {
+		const card = navigation.to && tagPlayerCard(navigation.to.url);
+		applyViewTransitionKind(from, to);
+		const transition = document.startViewTransition(async () => {
+			// Two elements sharing a name abort the whole transition.
+			card?.style.removeProperty('view-transition-name');
+			launchingPlayer = true;
+			await tick();
+		});
+		const clear = () => (launchingPlayer = false);
+		navigation.complete.then(clear, clear);
+		const params = navigation.to?.params;
+		// The player carries the name too, so it only mounts once the grow is over.
+		await Promise.all([
+			transition.finished,
+			params?.appId && params.sessionId
+				? warmPlaybackSession(params.appId, params.sessionId)
+				: undefined
+		]);
+	}
+
 	onNavigate((navigation) => {
 		const paths = transitionPaths(navigation);
 		if (!paths) return;
 		const { from, to } = paths;
-		// Opening the player can take a real network round trip resolving the
-		// session before its own top-level await settles (see
-		// NavigationSpinner.svelte). A view transition only ever renders its
-		// before/after snapshots, never whatever the live DOM does in between --
-		// so wrapping that wait in one would hide the spinner behind a frozen
-		// copy of the old screen for the whole delay, then swap straight to the
-		// finished player with no zoom at all. Skipping the transition for this
-		// one destination trades away its zoom-in for the spinner actually
-		// being visible while the session resolves.
-		if (isPlayPath(to)) return;
+		// The next video of a playlist swaps in place, nothing to grow from.
+		if (isPlayPath(from) && isPlayPath(to)) return;
+		if (isPlayPath(to)) return launchPlayer(navigation, from, to);
+		const playerUrl = isPlayPath(from) ? navigation.from?.url : undefined;
 		applyViewTransitionKind(from, to);
 		// Tags whichever side is currently the picker -- if it's `from`, this
 		// is the only chance to tag it before its DOM is torn down.
 		tagSharedProfileAvatar(from, to);
 
 		return new Promise((resolveTransition) => {
-			document.startViewTransition(async () => {
+			let playerCard: HTMLElement | undefined;
+			const transition = document.startViewTransition(async () => {
 				resolveTransition();
 				await navigation.complete;
-				// If the picker is `to` instead, its DOM only exists now --
-				// tag it again so the browser can find it as this transition's
+				// If the picker or the card is `to` instead, its DOM only exists
+				// now -- tag it so the browser can find it as this transition's
 				// "new" state right before that snapshot is captured.
 				tagSharedProfileAvatar(from, to);
+				if (playerUrl) playerCard = tagPlayerCard(playerUrl);
 			});
+			// A card left tagged would clash with the next one.
+			transition.finished.finally(() => playerCard?.style.removeProperty('view-transition-name'));
 		});
 	});
 </script>
@@ -141,7 +193,9 @@
 	     (see layout.css for the rest of its sizing, overridden there since
 	     the library has no props for those). -->
 	<Toaster theme="dark" position="top-right" richColors offset="1.5rem" mobileOffset="1rem" />
-	<NavigationSpinner />
+	{#if !launchingPlayer}
+		<NavigationSpinner />
+	{/if}
 	<OnScreenKeyboard />
 	<PairingOverlay hidden={hidePairingOverlay} />
 {/if}
@@ -150,6 +204,17 @@
 {#key isPlayPath(page.url.pathname) ? page.url.pathname : ''}
 	{@render children()}
 {/key}
+{#if launchingPlayer}
+	<div
+		class="fixed inset-0 z-40 flex items-center justify-center bg-black"
+		style:view-transition-name="player-video"
+	>
+		<!-- Held back until the grow is over, so a quick resolve shows no spinner at all. -->
+		<div in:fade={{ delay: 450, duration: 200 }}>
+			<LoaderCircle class="size-12 animate-spin text-white/80" />
+		</div>
+	</div>
+{/if}
 
 <div style="display:none">
 	{#each locales as locale (locale)}

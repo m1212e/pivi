@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { pushState } from '$app/navigation';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import * as m from '#lib/paraglide/messages';
 
@@ -23,10 +24,20 @@
 		secondaryColor?: string | null;
 		hasUpdate?: boolean;
 	} = $props();
+
+	// Asks first instead of opening (AppUpdatePrompt, shown by AppsRow). Kept as
+	// shallow history state so the remote's back button closes the prompt
+	// rather than leaving the home screen.
+	function askFirst(event: MouseEvent) {
+		if (!hasUpdate) return;
+		event.preventDefault();
+		pushState('', { appUpdatePrompt: id });
+	}
 </script>
 
 <a
 	{href}
+	onclick={askFirst}
 	data-pivi-app-id={id}
 	data-pivi-app-name={name}
 	data-pivi-app-icon={icon || undefined}
@@ -46,8 +57,7 @@
 		{#if hasUpdate}
 			<!-- A plain dot, not a count or a "Update available" label spelled
 			     out on the tile itself -- the icon is too small for text, and
-			     the point is just to catch the eye enough to open the app (or
-			     /apps) to see what it is. -->
+			     opening the app asks about it anyway. -->
 			<span
 				title={m.apps_update_badge()}
 				aria-label={m.apps_update_badge()}

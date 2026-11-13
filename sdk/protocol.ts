@@ -38,6 +38,17 @@ export const publishScreenNotification = new NotificationType<z.infer<typeof app
 	'app/publishScreen'
 );
 
+/**
+ * Asks the paired phone to open a link without the user pressing an
+ * `openOnPhone` button first, e.g. as soon as a sign-in code is shown. The
+ * phone still asks before opening it. Must be https, and the host drops
+ * repeats sent too quickly.
+ */
+export const openOnPhoneParamsSchema = z.object({ url: urlSchema });
+export const openOnPhoneNotification = new NotificationType<
+	z.infer<typeof openOnPhoneParamsSchema>
+>('app/openOnPhone');
+
 // The container each track is packaged in. It has to come from whatever
 // resolved the stream, since the codec alone doesn't tell (vp9 comes as both
 // mp4 and webm).

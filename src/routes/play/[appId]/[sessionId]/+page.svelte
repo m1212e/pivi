@@ -17,7 +17,7 @@
 	} from '#lib/playback/preferences';
 	import {
 		normalizeQualities,
-		preferredStartHeight,
+		screenStartHeight,
 		startQuality,
 		toQualityMeta,
 		type QualityOption
@@ -46,10 +46,7 @@
 	const urls = createSessionUrls(appId, sessionId);
 	const storage = browserStorage(browser);
 
-	// Physical pixels, so a 4K TV scaled to 1080 CSS pixels still counts as 2160.
-	const preferredHeight = preferredStartHeight(
-		browser ? window.screen.height * window.devicePixelRatio : undefined
-	);
+	const preferredHeight = screenStartHeight();
 
 	// What differs per quality tier. Codecs depend on the tier, so they are
 	// asked for again on every switch.
@@ -256,7 +253,8 @@
 
 <svelte:head><title>{title || m.playing()}</title></svelte:head>
 
-<div class="fixed inset-0 bg-black" {...bridgeAttributes}>
+<!-- Named so the selected card grows into it, see +layout.svelte. -->
+<div class="fixed inset-0 bg-black" style:view-transition-name="player-video" {...bridgeAttributes}>
 	{#if engine.failed}
 		<ErrorScreen message={m.stream_stopped()} onBack={goBack} />
 	{:else}

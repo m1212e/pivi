@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { ROUTES } from '#lib/routes';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { ROUTES, appHref, appUpdateHref } from '#lib/routes';
 	import { Plus } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 	import ContentRow from '#lib/components/ContentRow.svelte';
 	import AppCard from '#lib/components/AppCard.svelte';
+	import AppUpdatePrompt from '#lib/components/AppUpdatePrompt.svelte';
 	import * as m from '#lib/paraglide/messages';
 
 	// The dashboard's row of installed apps. Separate from VideoRow because its
@@ -23,6 +26,8 @@
 			hasUpdate?: boolean;
 		}[];
 	} = $props();
+
+	const prompted = $derived(items.find((app) => app.id === page.state.appUpdatePrompt));
 </script>
 
 <ContentRow {title}>
@@ -67,3 +72,13 @@
 		{/if}
 	</div>
 </ContentRow>
+
+<!-- Both choices replace the prompt's history entry, so going back from the
+     app or /apps doesn't bring the prompt up again. -->
+{#if prompted}
+	<AppUpdatePrompt
+		name={prompted.name}
+		onUpdate={() => goto(appUpdateHref(prompted.id), { replaceState: true })}
+		onOpen={() => goto(appHref(prompted.id), { replaceState: true })}
+	/>
+{/if}
