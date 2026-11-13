@@ -97,7 +97,7 @@ const exchanges: Exchange[] = [];
 if (!browser) exchanges.push(remoteFunctionsExchange);
 exchanges.push(freshAfterResetExchange, cacheExchange, fetchExchange);
 
-/** The one GraphQL client, shared by the generated rumble client and hand written queries like getPairing so they share a cache. */
+/** The one GraphQL client, shared by the generated rumble client and freshQuery so they share a cache. */
 export const urqlClient = new Client({
 	url: '/api/graphql',
 	exchanges,
