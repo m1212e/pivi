@@ -2,25 +2,29 @@
 // which the shell renders with its own components. Apps only supply data, so
 // every app's cards look and behave like the rest of the home screen.
 import { z } from 'zod';
-import { appThemeSchema } from './theme';
-import { playHref } from '../routes';
 
 /**
  * What activating a card, button or container does. Shared by dashboard cards
- * and Tier 2 screens (ui.ts) so both resolve through appActionHref.
+ * and Tier 2 screens (ui.ts), and turned into navigation by the host alone.
  * `openOnPhone` is the host's whole answer to "do this on another device" (a
- * sign-in, say), so the host never needs a sign-in concept of its own.
+ * sign-in, say), so the host never needs a sign-in concept of its own. Its URL
+ * must be https.
  */
 export const appActionSchema = z.discriminatedUnion('type', [
+	// Opens another screen this app published (ui.ts), by its `screenId`.
 	z.object({ type: z.literal('screen'), screenId: z.string() }),
-	// `context` is opaque to the host. It is handed back to the app when the
-	// player asks what to play after this one (a playlist id, say).
+	// Plays a session in the shared player (`app/resolveStream`). `context` is
+	// opaque to the host. It is handed back to the app when the player asks
+	// what to play after this one (a playlist id, say).
 	z.object({ type: z.literal('session'), sessionId: z.string(), context: z.string().optional() }),
-	z.object({ type: z.literal('deepLink'), target: z.string() }),
 	z.object({ type: z.literal('openOnPhone'), url: z.string() })
 ]);
 
 export type AppAction = z.infer<typeof appActionSchema>;
+
+// Shown when `image` fails to load, for a source whose best image may not
+// exist (a high-res thumbnail only some videos have). Same URL rules as `image`.
+const fallbackImageSchema = z.string().optional();
 
 // Continue watching entry, with progress.
 const resumeCardSchema = z.object({
@@ -29,6 +33,7 @@ const resumeCardSchema = z.object({
 	title: z.string(),
 	subtitle: z.string(),
 	image: z.string(),
+	fallbackImage: fallbackImageSchema,
 	progress: z.number().min(0).max(1),
 	action: appActionSchema
 });
@@ -40,36 +45,21 @@ const suggestionCardSchema = z.object({
 	title: z.string(),
 	meta: z.string(),
 	image: z.string(),
+	fallbackImage: fallbackImageSchema,
 	action: appActionSchema
 });
 
 const homeCardSchema = z.discriminatedUnion('kind', [resumeCardSchema, suggestionCardSchema]);
 
-/** One card an app puts on the home screen, used by app code (apps/youtube) to build its contribution. */
+/** One card an app puts on the home screen. */
 export type HomeCard = z.infer<typeof homeCardSchema>;
 
 /**
- * Validates `plugin/publishDashboard` at the RPC boundary (runtime.ts), since
- * apps are untrusted. The host merges every app's cards into the home rails.
+ * Validates `app/publishDashboard` at the RPC boundary, since apps are
+ * untrusted. The host merges every app's cards into the home rails.
  */
 export const dashboardContributionSchema = z.object({
-	theme: appThemeSchema.optional(),
 	cards: z.array(homeCardSchema)
 });
 
 export type DashboardContribution = z.infer<typeof dashboardContributionSchema>;
-
-/**
- * The one place an app action becomes a link, used by the home screen and
- * UiNodeRenderer so cards and screen buttons navigate the same way. Every
- * `session` goes to the shared player route, whatever app it came from.
- */
-export function appActionHref(appId: string, appHref: string, action: AppAction): string {
-	if (action.type === 'session') {
-		return playHref(appId, action.sessionId, action.context);
-	}
-	if (action.type === 'deepLink') {
-		return `${appHref}?deepLink=${encodeURIComponent(action.target)}`;
-	}
-	return appHref;
-}

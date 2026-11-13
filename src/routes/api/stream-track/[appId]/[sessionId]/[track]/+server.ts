@@ -7,7 +7,7 @@
 // just with this route standing in for direct CORS-friendly access to the
 // underlying CDN. Generic over any app: it only ever touches the generic
 // ResolvedStream shape (src/routes/api/stream is the same way).
-import { requireTrackName, resolveTrackUrl } from '#api/apps/trackResolution';
+import { requireTrackName, resolveTrack } from '#api/apps/trackResolution';
 import type { RequestHandler } from './$types';
 
 function forwardableHeaders(upstream: Response): Headers {
@@ -23,13 +23,13 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 	const { appId, sessionId } = params;
 	const track = requireTrackName(params.track);
 	const maxHeight = Number(url.searchParams.get('quality')) || undefined;
-	const targetUrl = await resolveTrackUrl(appId, sessionId, track, maxHeight);
+	const target = await resolveTrack(appId, sessionId, track, maxHeight);
 
 	// Forwarded verbatim -- both the MSE pump's own range requests and
 	// Shaka's segment/index fetches ask for specific byte windows, not the
 	// whole file at once.
 	const range = request.headers.get('range');
-	const upstream = await fetch(targetUrl, range ? { headers: { range } } : {});
+	const upstream = await target.fetch(range ? { headers: { range } } : {});
 
 	return new Response(upstream.body, {
 		status: upstream.status,

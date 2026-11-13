@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import Button from '#lib/components/Button.svelte';
+	import { swapToFallback } from '#lib/apps/imageFallback';
 
 	// The big featured banner at the top of the dashboard, and an app's own
 	// hero node. HeroBannerSkeleton and HeroBannerEmpty stand in for it while
@@ -12,6 +13,7 @@
 		source,
 		gradient,
 		image,
+		fallbackImage,
 		href
 	}: {
 		title: string;
@@ -21,17 +23,10 @@
 		source?: string;
 		gradient?: string;
 		image?: string;
+		// Tried once if `image` fails to load.
+		fallbackImage?: string;
 		href: string;
 	} = $props();
-
-	// YouTube's maxresdefault 404s for videos without a high-res source.
-	// mqdefault always exists and is still a 16:9 crop without letterbox.
-	function onImageError(event: Event) {
-		const img = event.currentTarget as HTMLImageElement;
-		if (img.src.includes('maxresdefault.jpg')) {
-			img.src = img.src.replace('maxresdefault.jpg', 'mqdefault.jpg');
-		}
-	}
 </script>
 
 <div
@@ -44,7 +39,12 @@
 	<div class="absolute inset-0 mask-b-from-55% mask-b-to-100%">
 		<div class="absolute inset-0 bg-slate-800" style:background={gradient}>
 			{#if image}
-				<img src={image} alt="" onerror={onImageError} class="size-full object-cover object-top" />
+				<img
+					src={image}
+					alt=""
+					onerror={swapToFallback(fallbackImage)}
+					class="size-full object-cover object-top"
+				/>
 			{/if}
 		</div>
 		<div

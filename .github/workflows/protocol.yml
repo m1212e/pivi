@@ -1,7 +1,7 @@
 name: App protocol schema
 
 # Attaches app-protocol.schema.json to the release. It is generated from the zod
-# schemas in src/lib/apps, which is what apps written in other languages
+# schemas in sdk/, which is what apps written in other languages
 # implement against.
 on:
   release:

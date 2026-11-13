@@ -1,7 +1,8 @@
 // The TV plays separate video and audio tracks through Shaka, which needs to
-// know where each file's segment index is. YouTube's adaptive CDN files already
-// carry one from the encoder (an mp4 `sidx` box or a webm `Cues` element), so
-// this only locates its byte range for `<SegmentBase indexRange>` instead of
+// know where each file's segment index is. The protocol requires separate
+// tracks to carry one from the encoder (an mp4 `sidx` box or a webm `Cues`
+// element, see #sdk/protocol's resolvedStreamSchema), so this only locates its
+// byte range for `<SegmentBase indexRange>` instead of
 // building an index from the media itself (see #lib/mse/dualTrackPlayer).
 import { error } from '@sveltejs/kit';
 
@@ -18,10 +19,17 @@ const SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
 
 type RangeResult = { data: Uint8Array } | { status: number };
 
+/** How the index is fetched, so the caller decides which URLs may be reached (appFetch.ts). */
+export type RangeFetcher = (init: RequestInit) => Promise<Response>;
+
 // Never throws, so fetchRange can decide whether another attempt is worth it.
-async function tryFetchRange(url: string, start: number, end: number): Promise<RangeResult> {
+async function tryFetchRange(
+	fetcher: RangeFetcher,
+	start: number,
+	end: number
+): Promise<RangeResult> {
 	try {
-		const res = await fetch(url, { headers: { range: `bytes=${start}-${end}` } });
+		const res = await fetcher({ headers: { range: `bytes=${start}-${end}` } });
 		if (res.ok || res.status === 206) return { data: new Uint8Array(await res.arrayBuffer()) };
 		return { status: res.status };
 	} catch (err) {
@@ -30,12 +38,12 @@ async function tryFetchRange(url: string, start: number, end: number): Promise<R
 	}
 }
 
-async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
+async function fetchRange(fetcher: RangeFetcher, start: number, end: number): Promise<Uint8Array> {
 	// The CDN occasionally drops or rejects a request, so retries avoid
 	// failing the whole playback start on a transient blip.
 	let lastStatus = 0;
 	for (let attempt = 0; attempt < 3; attempt++) {
-		const result = await tryFetchRange(url, start, end);
+		const result = await tryFetchRange(fetcher, start, end);
 		if ('data' in result) return result.data;
 		lastStatus = result.status;
 	}
@@ -208,9 +216,9 @@ function findWebmSegmentIndex(data: Uint8Array): SegmentBaseIndex {
  * unreachable (502).
  */
 export async function buildSegmentBaseIndex(
-	url: string,
+	fetcher: RangeFetcher,
 	container: 'mp4' | 'webm'
 ): Promise<SegmentBaseIndex> {
-	const data = await fetchRange(url, 0, SCAN_WINDOW_BYTES - 1);
+	const data = await fetchRange(fetcher, 0, SCAN_WINDOW_BYTES - 1);
 	return container === 'mp4' ? findMp4SegmentIndex(data) : findWebmSegmentIndex(data);
 }

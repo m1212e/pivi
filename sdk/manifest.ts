@@ -38,7 +38,7 @@ export const featureSchema = z.enum([
 	// There's no dedicated sign-in feature: an app that needs one shows it
 	// as part of its own 'screen' content (a code or link, a button whose
 	// action is `openOnPhone`, see dashboard.ts's AppAction) and handles the
-	// actual login itself. See apps/youtube/auth.ts for the pattern.
+	// actual login itself.
 ]);
 export type Feature = z.infer<typeof featureSchema>;
 
@@ -80,11 +80,10 @@ const hexColorSchema = z
 const MAX_ICON_BYTES = 16 * 1024;
 
 // The icon is shown in the host's own chrome (install preview, the apps list,
-// the home screen, an app's own page header), never inside the app's sandboxed
-// Shadow DOM. So it's rendered as an <img src="data:image/svg+xml,..."> via
-// appIconDataUrl() below, never inserted as markup: a browser won't run script
-// or fetch anything from an SVG loaded that way. This check is defense in
-// depth on top of that, not the thing actually keeping it safe.
+// the home screen, an app's own page header). The host only ever loads it as
+// an image, never inserts it as markup, so a browser won't run script or fetch
+// anything from it. This check is defense in depth on top of that, not the
+// thing actually keeping it safe.
 const appIconSchema = z
 	.string()
 	.max(MAX_ICON_BYTES, 'Icon is too large')
@@ -92,15 +91,6 @@ const appIconSchema = z
 	.refine((svg) => !/<script[\s>]/i.test(svg), 'Icon must not contain <script>')
 	.refine((svg) => !/\son[a-z]+\s*=/i.test(svg), 'Icon must not contain event handler attributes')
 	.refine((svg) => !/javascript:/i.test(svg), 'Icon must not contain javascript: URLs');
-
-/**
- * How every app icon reaches the screen (AppIcon, the apps panel, the phone's
- * app shortcuts), as an <img> source so the SVG can't run script. Percent
- * encoding instead of base64 because it needs no Buffer on the client.
- */
-export function appIconDataUrl(icon: string): string {
-	return `data:image/svg+xml,${encodeURIComponent(icon)}`;
-}
 
 /**
  * Validates a manifest wherever one enters the system: the registry client
@@ -111,7 +101,9 @@ export const appManifestSchema = z
 		id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Lowercase letters, digits and dashes only'),
 		name: z.string(),
 		version: z.string(),
-		// Version of the host<->app protocol (host.ts) this app speaks, so
+		// One line saying what the app is, shown where it's offered for install.
+		description: z.string().max(140).optional(),
+		// Version of the host<->app protocol (protocol.ts) this app speaks, so
 		// the host can refuse one it can't talk to instead of failing oddly.
 		protocol: z.number().int().positive(),
 		features: z.array(featureSchema),

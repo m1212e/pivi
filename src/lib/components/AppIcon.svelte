@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { appAccentGradient } from '#lib/appAccent';
-	import { appIconDataUrl } from '#lib/apps/manifest';
+	import { appIconDataUrl } from '#lib/apps/icon';
 
 	// An app's tile: its own accent gradient with its icon, or its first letter
 	// when it has none. Size comes from `class` (e.g. `size-12`), and anything

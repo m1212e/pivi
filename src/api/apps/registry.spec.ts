@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseImageRef } from '#lib/apps/imageRef';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import { FakeRegistry, publishAppImage } from './fixtures';
 import { pinnedReference, RegistryClient, RegistryError, resolveImage } from './registry';
 
@@ -8,7 +8,7 @@ const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: ['network'],
 	network: { domains: ['example.com'] },

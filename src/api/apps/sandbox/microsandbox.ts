@@ -13,7 +13,7 @@
 //     event, so the end of the stream is treated as an exit too.
 //   - The runtime keeps a unix socket per sandbox under its home directory, whose
 //     path must be short (< 108 bytes), hence PIVI_SANDBOX_HOME.
-import { chunkBytes } from '#lib/apps/ndjson';
+import { chunkBytes } from '#sdk/ndjson';
 import { isLocalRegistry } from '../registry';
 import { SANDBOX_PREFIX } from './spec';
 import type { RunningSandbox, SandboxBackend, SandboxHandlers, SandboxSpec } from './types';

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import { createAppManagement, type AppsState } from './appManagementService';
 import type { AppDeps } from './apps/deps';
 import {
@@ -16,7 +16,7 @@ const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: ['network', 'storage', 'cache'],
 	network: { domains: ['api.example.com'] },

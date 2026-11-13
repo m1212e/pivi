@@ -54,9 +54,15 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 			appPubSub.publish(kind === 'screen' ? `${appId}:screen:${screenId}` : `${appId}:${kind}`);
 			if (kind === 'dashboard') appPubSub.publish(ANY_DASHBOARD_EVENT);
 		},
+		// Forgets everything the dead process produced, so its last dashboard and
+		// resolved streams aren't served as if it were still running, and tells
+		// the home screen so its cards go back to loading until the restart.
 		onCrash: (code) => {
 			console.error(`[app:${appId}] exited unexpectedly (${code}); it restarts on next use`);
 			instances.delete(appId);
+			started.delete(appId);
+			dropStreamCache(appId);
+			appPubSub.publish(ANY_DASHBOARD_EVENT);
 		}
 	});
 }

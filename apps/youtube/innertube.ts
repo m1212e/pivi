@@ -78,8 +78,10 @@ export function setLocale(tag: string) {
 // The *first* successful device-code login only ever emits 'auth', never
 // 'update-credentials' — that event is exclusively for later background token
 // refreshes. Both have to be persisted, or a fresh sign-in is lost on restart.
-function persist({ credentials }: { credentials: OAuth2Tokens }) {
-	storeTokens(credentials).catch(() => {});
+// youtubei.js may report an event without credentials, which leaves the
+// stored ones as they were.
+function persist({ credentials }: { credentials: OAuth2Tokens | undefined }) {
+	if (credentials) storeTokens(credentials).catch(() => {});
 }
 function wirePersistence(client: Innertube) {
 	client.session.on('auth', persist);

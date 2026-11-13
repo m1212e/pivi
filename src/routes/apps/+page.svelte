@@ -11,7 +11,7 @@
 	import { stopSubscription } from '#lib/api/subscription';
 	import AppManagerPanel, { type AppActions } from '#lib/components/AppManagerPanel.svelte';
 	import { appsStateSchema, type AppsState } from '#lib/apps/management';
-	import type { PermissionKey } from '#lib/apps/manifest';
+	import type { PermissionKey } from '#sdk/manifest';
 
 	const FIELDS = {
 		apps: {
@@ -89,10 +89,9 @@
 		{
 			id: string;
 			name: string;
-			description: string;
+			description: string | null;
 			icon: string | null;
 			image: string;
-			publicKey: string | null;
 		}[]
 	>([]);
 	client.query
@@ -101,8 +100,7 @@
 			name: true,
 			description: true,
 			icon: true,
-			image: true,
-			publicKey: true
+			image: true
 		})
 		.then((result) => {
 			suggested = result ?? [];

@@ -125,8 +125,9 @@ function tileToSummary(tile: Tile): VideoSummary | null {
 		// high-res source — sddefault/hqdefault always exist but are a fixed
 		// 4:3 canvas letterboxed (real black bars baked into the jpeg) for
 		// any widescreen video, which a top-anchored crop (the hero banner)
-		// then displays as a solid black band. mqdefault is the fallback:
-		// always generated and genuinely 16:9, just lower-res.
+		// then displays as a solid black band. mqdefault is the fallback
+		// (youtubeClient.ts's thumbnailFallback, which the host switches to on a
+		// load error): always generated and genuinely 16:9, just lower-res.
 		thumbnailUrl: `https://i.ytimg.com/vi/${tile.contentId}/maxresdefault.jpg`
 	};
 	warnIfDurationMissing(tile, summary);

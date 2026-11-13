@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { diffManifests, domainCovered } from './manifestDiff';
-import type { AppManifest } from './manifest';
+import type { AppManifest } from '#sdk/manifest';
 
 const manifest = (overrides: Partial<AppManifest> = {}): AppManifest => ({
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: ['dashboard'],
 	permissions: ['network', 'storage'],
 	network: { domains: ['api.example.com', '*.cdn.example.com'] },
@@ -66,7 +66,7 @@ describe('diffManifests', () => {
 	});
 
 	it('flags a protocol change', () => {
-		expect(diffManifests(manifest(), manifest({ protocol: 2 })).protocolChanged).toBe(true);
+		expect(diffManifests(manifest(), manifest({ protocol: 3 })).protocolChanged).toBe(true);
 	});
 
 	it('treats newly adding network as asking for its domains', () => {

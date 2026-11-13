@@ -3,7 +3,7 @@
 // it's a pure function: a permission that isn't granted simply doesn't appear in
 // the spec, and the backend can't grant what it isn't told about.
 import { createHash } from 'node:crypto';
-import type { PermissionKey, AppManifest } from '#lib/apps/manifest';
+import type { PermissionKey, AppManifest } from '#sdk/manifest';
 import type { ImageRef } from '#lib/apps/imageRef';
 import type { AppImage } from '../image';
 import { pinnedReference } from '../registry';

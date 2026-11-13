@@ -2,7 +2,7 @@
 // (served over GraphQL by handlers/appManagement.ts), so apps can be managed
 // with nothing but the remote. Deps are injected so this can be tested.
 import type { AppsState as SharedAppsState } from '#lib/apps/management';
-import type { PermissionKey } from '#lib/apps/manifest';
+import type { PermissionKey } from '#sdk/manifest';
 import { describeApp } from './appState';
 import type { AppDeps } from './apps/deps';
 import {

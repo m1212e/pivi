@@ -1,4 +1,4 @@
-import type { UiNode } from './ui';
+import type { UiNode } from '#sdk/ui';
 
 type Container = Extract<UiNode, { type: 'container' }>;
 

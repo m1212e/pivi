@@ -2,7 +2,7 @@
 // TV's /apps screen, which parses what it fetches against the same schema so
 // the two sides can't drift apart.
 import { z } from 'zod';
-import { featureSchema, permissionKeySchema } from './manifest';
+import { featureSchema, permissionKeySchema } from '#sdk/manifest';
 
 const appPermissionSchema = z.object({ key: permissionKeySchema, granted: z.boolean() });
 

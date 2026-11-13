@@ -7,6 +7,6 @@ describe('the app protocol document', () => {
 		for (const method of methods) {
 			if (method.feature) expect(features).toContain(method.feature);
 		}
-		expect(methods.map((m) => m.method)).toContain('plugin/ready');
+		expect(methods.map((m) => m.method)).toContain('app/ready');
 	});
 });

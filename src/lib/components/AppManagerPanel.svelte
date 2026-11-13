@@ -14,7 +14,8 @@
 	import { fade, fly, scale, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import type { AppsState } from '#lib/apps/management';
-	import { appIconDataUrl, type PermissionKey } from '#lib/apps/manifest';
+	import type { PermissionKey } from '#sdk/manifest';
+	import { appIconDataUrl } from '#lib/apps/icon';
 	import { appAccentGradient } from '#lib/appAccent';
 	import HoldToConfirmButton from './HoldToConfirmButton.svelte';
 	import TextField from './TextField.svelte';
@@ -41,10 +42,9 @@
 	type SuggestedApp = {
 		id: string;
 		name: string;
-		description: string;
+		description: string | null;
 		icon: string | null;
 		image: string;
-		publicKey: string | null;
 	};
 
 	let {
@@ -275,7 +275,7 @@
 					<button
 						type="button"
 						disabled={apps.busy !== null}
-						onclick={() => actions.preview(entry.image, entry.publicKey ?? undefined)}
+						onclick={() => actions.preview(entry.image)}
 						class="flex w-full items-center gap-3 rounded-2xl bg-white/12 px-4 py-2.5 text-left ring-1 ring-white/25 transition hover:scale-[1.02] hover:bg-white/20 active:scale-[0.98] {buttonBase}"
 					>
 						{#if entry.icon}
@@ -289,7 +289,9 @@
 						{/if}
 						<span class="flex min-w-0 flex-col gap-0.5">
 							<span class="text-white/90">{entry.name}</span>
-							<span class="text-xs font-normal text-white/50">{entry.description}</span>
+							{#if entry.description}
+								<span class="text-xs font-normal text-white/50">{entry.description}</span>
+							{/if}
 						</span>
 					</button>
 				</li>

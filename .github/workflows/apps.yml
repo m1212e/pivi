@@ -6,7 +6,7 @@ name: App images
 # untagged suggested app follows.
 on:
   pull_request:
-    paths: ['apps/**', 'src/lib/apps/**', 'scripts/apps.ts', 'package.json', 'bun.lock']
+    paths: ['apps/**', 'sdk/**', 'scripts/apps.ts', '.dockerignore']
   push:
     branches: [main]
     tags: ['v*']

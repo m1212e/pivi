@@ -1,7 +1,7 @@
-import type { ResolvedStream } from '#lib/apps/host';
+import type { ResolvedStream } from '#sdk/protocol';
 import type { AppInstance } from './runtime';
 import { createTtlCache } from './ttlCache';
-import { assertPublicHost, UnsafeUrlError } from './urlGuard';
+import { assertAppUrl } from './appFetch';
 
 // The host (ffmpeg, the stream proxy) fetches whatever URLs an app returns, so
 // they're checked before anything is cached or handed on: each has to be on a
@@ -14,18 +14,14 @@ async function assertSafeStream(app: AppInstance, stream: ResolvedStream): Promi
 		...(stream.audioUrl ? [stream.audioUrl] : []),
 		...(stream.subtitleTracks ?? []).map((track) => track.url)
 	];
-	for (const url of urls) {
-		if (!app.allowsUrl(url)) {
-			throw new UnsafeUrlError(`${app.manifest.id} returned a URL outside its allowed domains`);
-		}
-		await assertPublicHost(new URL(url).hostname);
-	}
+	for (const url of urls) await assertAppUrl(app, url);
 }
 
 const cache = createTtlCache<ResolvedStream>(5 * 60 * 1000);
 // Resolutions still running. The video and audio tracks and the player page ask
-// for the same stream at once, and every extra yt-dlp in the app's small VM is
-// a chance for the out-of-memory killer to take the whole app down.
+// for the same stream at once, and every extra resolution in the app's small
+// VM (an extractor process, typically) is a chance for the out-of-memory
+// killer to take the whole app down.
 const inFlight = new Map<string, Promise<ResolvedStream>>();
 
 /**
@@ -38,8 +34,8 @@ export function dropStreamCache(appId: string): void {
 
 /**
  * The one way the stream routes and the playback query get a session's stream,
- * so the url checks always apply. Resolving runs yt-dlp inside the app, which
- * is too slow to repeat on every seek.
+ * so the url checks always apply. Resolving is the app's own work and usually
+ * too slow to repeat on every seek.
  */
 export function resolveStreamCached(
 	appId: string,

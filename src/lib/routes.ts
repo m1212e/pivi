@@ -19,6 +19,12 @@ export function appHref(appId: string): string {
 	return `${APPS_PREFIX}${encodeURIComponent(appId)}`;
 }
 
+/** An app's page on one of the screens it published, or on its entry screen. */
+export function appScreenHref(appId: string, screenId?: string): string {
+	const base = appHref(appId);
+	return screenId ? `${base}?${new URLSearchParams({ screen: screenId })}` : base;
+}
+
 export function loginHref(profileId: string): string {
 	return `${LOGIN_PREFIX}/${profileId}`;
 }

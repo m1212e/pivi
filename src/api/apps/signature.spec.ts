@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseImageRef } from '#lib/apps/imageRef';
-import type { AppManifest } from '#lib/apps/manifest';
+import type { AppManifest } from '#sdk/manifest';
 import { FakeRegistry, generateSigningKey, publishAppImage, sha256, signImage } from './fixtures';
 import { RegistryClient } from './registry';
 import { normalizePem, parseAppSigner, SignatureError, verifyImageSignature } from './signature';
@@ -10,7 +10,7 @@ const manifest: AppManifest = {
 	id: 'demo',
 	name: 'Demo',
 	version: '1.0.0',
-	protocol: 1,
+	protocol: 2,
 	features: [],
 	permissions: [],
 	entryScreenId: 'main'

@@ -1,8 +1,9 @@
 {
 	"id": "youtube",
 	"name": "YouTube",
-	"version": "0.1.2",
-	"protocol": 1,
+	"version": "0.2.0",
+	"description": "Browse and watch YouTube on the TV",
+	"protocol": 2,
 	"features": ["dashboard", "screen", "playback", "skipSegments"],
 	"permissions": ["network", "storage", "cache"],
 	"network": {

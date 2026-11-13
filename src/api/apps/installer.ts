@@ -3,7 +3,7 @@
 // what it asks for is shown (the preview) before anything is stored, and
 // what's stored is the user's answer, not the image's request.
 import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef';
-import type { PermissionKey, AppManifest } from '#lib/apps/manifest';
+import type { PermissionKey, AppManifest } from '#sdk/manifest';
 import type { AppDeps } from './deps';
 import { pinnedReference, resolveImage } from './registry';
 import { volumeBelongsToApp, volumeName } from './sandbox/spec';

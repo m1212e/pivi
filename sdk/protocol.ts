@@ -1,6 +1,10 @@
 // The single definition of the host/app JSON-RPC protocol, shared by the host
 // runtime and the TypeScript app SDK so neither side can drift. Apps in other
 // languages get the same methods as JSON Schema (protocolSchema.ts).
+//
+// Everything in sdk/ is the contract between pivi and its apps, and nothing
+// else: it imports only zod, vscode-jsonrpc and itself, never host code, so an
+// app can be built from this directory alone (see apps/youtube/Dockerfile).
 import { NotificationType, NotificationType0, RequestType } from 'vscode-jsonrpc';
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
@@ -8,8 +12,8 @@ import { appScreenSchema, uiEventSchema } from './ui';
 
 // App -> host
 
-/** Sent by apps in `plugin/ready` and declared in their manifest. */
-export const PROTOCOL_VERSION = 1;
+/** Sent by apps in `app/ready` and declared in their manifest. */
+export const PROTOCOL_VERSION = 2;
 /** Checked by the registry at install and the runtime at start, so an incompatible app is refused instead of failing oddly. */
 export const SUPPORTED_PROTOCOLS: readonly number[] = [PROTOCOL_VERSION];
 
@@ -20,27 +24,27 @@ export const SUPPORTED_PROTOCOLS: readonly number[] = [PROTOCOL_VERSION];
  */
 export const readyParamsSchema = z.object({ protocol: z.number().int().positive() });
 export const readyNotification = new NotificationType<z.infer<typeof readyParamsSchema>>(
-	'plugin/ready'
+	'app/ready'
 );
 
 /** How an app fills its part of the home dashboard. Replaces its previous cards. */
 export const publishDashboardNotification = new NotificationType<
 	z.infer<typeof dashboardContributionSchema>
->('plugin/publishDashboard');
+>('app/publishDashboard');
 
 /** How an app shows its own pages (ui.ts). Replaces the screen with the same id. */
 export const publishScreenNotification = new NotificationType<z.infer<typeof appScreenSchema>>(
-	'plugin/publishScreen'
+	'app/publishScreen'
 );
 
 // The container each track is packaged in. It has to come from whatever
-// resolved the stream, since the codec alone doesn't tell (YouTube serves vp9
-// as mp4 or webm).
+// resolved the stream, since the codec alone doesn't tell (vp9 comes as both
+// mp4 and webm).
 const containerSchema = z.enum(['mp4', 'webm']);
 
-// Rides along on ResolvedStream because yt-dlp reports caption URLs with the
-// stream anyway. `url` stays server side and is only fetched through the
-// stream-subtitle proxy. Only vtt, so the host never converts formats.
+// Rides along on ResolvedStream since extractors usually report caption URLs
+// with the stream. `url` stays server side and is only fetched through the
+// host's subtitle proxy. Only vtt, so the host never converts formats.
 const subtitleTrackSchema = z.object({
 	language: z.string(),
 	// Falls back to `language` on the client when absent.
@@ -55,10 +59,15 @@ const subtitleTrackSchema = z.object({
 export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
 
 /**
- * The generic answer to `plugin/resolveStream`, so the shared player and the
+ * The generic answer to `app/resolveStream`, so the shared player and the
  * stream proxy never need to know an app's source. Audio is separate because
  * most sources serve video-only plus audio-only, which the proxy remuxes, and
  * `duration` comes from here because a live remux can't report its own.
+ *
+ * Separate tracks are played through MSE, which needs each file's segment
+ * index: an mp4 must carry a `sidx` box and a webm a `Cues` element within its
+ * first 2 MiB, as DASH-ready adaptive files do. A single `videoUrl` without
+ * `audioUrl` is played as is and has no such requirement.
  */
 export const resolvedStreamSchema = z.object({
 	videoUrl: z.string(),
@@ -91,7 +100,7 @@ export const resolveStreamRequest = new RequestType<
 	z.infer<typeof resolveStreamParamsSchema>,
 	ResolvedStream,
 	void
->('plugin/resolveStream');
+>('app/resolveStream');
 
 const skipSegmentSchema = z.object({
 	startSeconds: z.number(),
@@ -99,8 +108,8 @@ const skipSegmentSchema = z.object({
 	label: z.string()
 });
 /**
- * A stretch the player skips automatically (SponsorBlock for YouTube). Kept
- * source agnostic, the player only needs a range and a label for its banner.
+ * A stretch the player skips automatically (a sponsor segment, an intro).
+ * Kept source agnostic, the player only needs a range and a label for its banner.
  */
 export type SkipSegment = z.infer<typeof skipSegmentSchema>;
 
@@ -111,7 +120,7 @@ export const resolveSkipSegmentsRequest = new RequestType<
 	z.infer<typeof resolveSkipSegmentsParamsSchema>,
 	z.infer<typeof resolveSkipSegmentsResultSchema>,
 	void
->('plugin/resolveSkipSegments');
+>('app/resolveSkipSegments');
 
 // `context` is whatever the app put on the session action. No `sessionId` in
 // the answer means there is nothing after this one.
@@ -125,11 +134,10 @@ export const resolveNextRequest = new RequestType<
 	z.infer<typeof resolveNextParamsSchema>,
 	z.infer<typeof resolveNextResultSchema>,
 	void
->('plugin/resolveNext');
+>('app/resolveNext');
 
 // Outbound network access isn't an RPC: it's the `network` permission, enforced
-// by the sandbox for exactly the manifest's declared domains (see
-// src/api/apps/sandbox). Likewise persistent and disposable state are the
+// by the sandbox for exactly the manifest's declared domains. Likewise persistent and disposable state are the
 // `storage` and `cache` volumes mounted into the container, and logs are just
 // the process's stderr.
 

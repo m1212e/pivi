@@ -11,14 +11,27 @@
 		items
 	}: {
 		title: string;
-		items: { id: string; title: string; meta: string; image: string; href: string }[];
+		items: {
+			id: string;
+			title: string;
+			meta: string;
+			image: string;
+			fallbackImage?: string;
+			href: string;
+		}[];
 	} = $props();
 </script>
 
 <ContentRow {title}>
 	{#each items as item, i (item.id)}
 		<div class="shrink-0" in:fly|global={{ y: 24, duration: 400, delay: i * 70 }}>
-			<MediaCard title={item.title} meta={item.meta} image={item.image} href={item.href} />
+			<MediaCard
+				title={item.title}
+				meta={item.meta}
+				image={item.image}
+				fallbackImage={item.fallbackImage}
+				href={item.href}
+			/>
 		</div>
 	{/each}
 </ContentRow>

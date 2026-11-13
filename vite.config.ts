@@ -85,8 +85,10 @@ export default defineConfig(({ mode }) => ({
 				test: {
 					name: 'server',
 					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+					// sdk/ and apps/ too: the app contract and the apps built on it are
+					// tested with the host's.
+					include: ['{src,sdk,apps}/**/*.{test,spec}.{js,ts}'],
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', '**/node_modules/**']
 				}
 			}
 		]

@@ -1,5 +1,5 @@
 // The app host: talks to one running app over the JSON-RPC protocol in
-// src/lib/apps/host.ts, carried on the stdin/stdout of the sandboxed process
+// sdk/protocol.ts, carried on the stdin/stdout of the sandboxed process
 // (src/api/apps/sandbox). Everything here treats the app as untrusted: its
 // messages are schema-checked, anything it publishes that it didn't declare in
 // its manifest is dropped, and URLs it hands back are held to the domains that
@@ -14,18 +14,19 @@
 // project's Vite setup), and ensureRal() installs the RAL createMessageConnection
 // needs.
 import { getHostLocale } from './hostLocale';
-import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
-import { ensureRal } from '#lib/rpcRal';
-import { PushMessageReader, SinkMessageWriter } from '#lib/rpcTransport';
-import { encodeMessage, LineSplitter } from '#lib/apps/ndjson';
 import {
-	domainsAllow,
-	type Feature,
-	type PermissionKey,
-	type AppManifest
-} from '#lib/apps/manifest';
-import type { DashboardContribution } from '#lib/apps/dashboard';
-import type { AppScreen, UiEvent } from '#lib/apps/ui';
+	CancellationTokenSource,
+	createMessageConnection,
+	type MessageConnection,
+	type RequestParam,
+	type RequestType
+} from 'vscode-jsonrpc';
+import { ensureRal } from '#sdk/rpcRal';
+import { PushMessageReader, SinkMessageWriter } from '#sdk/rpcTransport';
+import { encodeMessage, LineSplitter } from '#sdk/ndjson';
+import { domainsAllow, type Feature, type PermissionKey, type AppManifest } from '#sdk/manifest';
+import type { DashboardContribution } from '#sdk/dashboard';
+import type { AppScreen, UiEvent } from '#sdk/ui';
 import {
 	activateNotification,
 	localeNotification,
@@ -44,9 +45,9 @@ import {
 	uiEventNotification,
 	type ResolvedStream,
 	type SkipSegment
-} from '#lib/apps/host';
-import { dashboardContributionSchema } from '#lib/apps/dashboard';
-import { appScreenSchema } from '#lib/apps/ui';
+} from '#sdk/protocol';
+import { dashboardContributionSchema } from '#sdk/dashboard';
+import { appScreenSchema } from '#sdk/ui';
 import { sanitizeDashboard, sanitizeScreen } from './sanitize';
 import type { RunningSandbox, SandboxHandlers } from './sandbox/types';
 
@@ -98,6 +99,14 @@ const READY_TIMEOUT_MS = 60_000;
 const SHUTDOWN_GRACE_MS = 2_000;
 // Per log line, see createStderrLogger.
 const MAX_LOG_LINE = 2_000;
+// How long a request to the app may take before the host gives up on it, so a
+// hung app can't hang the player or the stream routes waiting on it. Resolving
+// a stream runs the app's own extractor, which is the slow one.
+const RESOLVE_STREAM_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 15_000;
+// Distinct screens an app may keep published, so it can't grow host memory by
+// publishing under ever new ids.
+const MAX_SCREENS = 32;
 
 function hasFeature(manifest: AppManifest, feature: Feature): boolean {
 	return manifest.features.includes(feature);
@@ -119,6 +128,31 @@ function urlAllowed(
 		);
 	} catch {
 		return false;
+	}
+}
+
+// Cancels the request on the app's side too, so it can stop the work.
+async function requestWithTimeout<P, R>(
+	connection: MessageConnection,
+	type: RequestType<P, R, void>,
+	params: P,
+	timeoutMs: number
+): Promise<unknown> {
+	const cancellation = new CancellationTokenSource();
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			cancellation.cancel();
+			reject(new Error(`${type.method} timed out after ${timeoutMs}ms`));
+		}, timeoutMs);
+	});
+	try {
+		// Same cast as #lib/rpc's: `RequestParam<P>` can't resolve against a generic P.
+		const request = connection.sendRequest(type, params as RequestParam<P>, cancellation.token);
+		return await Promise.race([request, timeout]);
+	} finally {
+		clearTimeout(timer);
+		cancellation.dispose();
 	}
 }
 
@@ -174,6 +208,13 @@ function wireNotifications(
 		const parsed = appScreenSchema.safeParse(raw);
 		if (!parsed.success) return;
 		const screen = sanitizeScreen(parsed.data, allows);
+		if (!screen) return void console.warn(`[app:${manifest.id}] ignored an oversized screen`);
+		const isNew = !published.screens.has(screen.screenId);
+		if (isNew && published.screens.size >= MAX_SCREENS) {
+			return void console.warn(
+				`[app:${manifest.id}] ignored a screen past the ${MAX_SCREENS} limit`
+			);
+		}
 		published.screens.set(screen.screenId, screen);
 		onUpdate?.('screen', screen.screenId);
 	});
@@ -186,6 +227,12 @@ function wireNotifications(
  */
 export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	const { manifest, granted } = options;
+	// Checked again here, not just at install: an app installed under an older
+	// host can't even say `ready` in a protocol this one speaks, so it would
+	// otherwise boot a VM only to time out.
+	if (!SUPPORTED_PROTOCOLS.includes(manifest.protocol)) {
+		throw new Error(`${manifest.id} speaks app protocol ${manifest.protocol}; update it`);
+	}
 	const published: PublishedState = { screens: new Map() };
 
 	const reader = new PushMessageReader();
@@ -284,14 +331,24 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		async resolveStream(sessionId, maxHeight) {
 			if (!hasFeature(manifest, 'playback')) throw new Error('This app cannot play media');
 			return resolvedStreamSchema.parse(
-				await connection.sendRequest(resolveStreamRequest, { sessionId, maxHeight })
+				await requestWithTimeout(
+					connection,
+					resolveStreamRequest,
+					{ sessionId, maxHeight },
+					RESOLVE_STREAM_TIMEOUT_MS
+				)
 			);
 		},
 
 		async resolveSkipSegments(sessionId) {
 			if (!hasFeature(manifest, 'skipSegments')) return [];
 			try {
-				const result = await connection.sendRequest(resolveSkipSegmentsRequest, { sessionId });
+				const result = await requestWithTimeout(
+					connection,
+					resolveSkipSegmentsRequest,
+					{ sessionId },
+					REQUEST_TIMEOUT_MS
+				);
 				return resolveSkipSegmentsResultSchema.parse(result).segments;
 			} catch {
 				// A failing or malformed answer is treated as nothing to report.
@@ -302,7 +359,12 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		async resolveNext(sessionId, context) {
 			if (!hasFeature(manifest, 'playback')) return undefined;
 			try {
-				const result = await connection.sendRequest(resolveNextRequest, { sessionId, context });
+				const result = await requestWithTimeout(
+					connection,
+					resolveNextRequest,
+					{ sessionId, context },
+					REQUEST_TIMEOUT_MS
+				);
 				return resolveNextResultSchema.parse(result).sessionId;
 			} catch {
 				// Apps that don't sequence playback just don't answer.

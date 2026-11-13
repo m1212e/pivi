@@ -36,9 +36,40 @@ export default defineConfig(
 			}
 		}
 	},
+	// The app boundary. sdk/ is the whole contract between pivi and its apps, so
+	// it may import nothing of the host's; apps get only sdk/ (their image builds
+	// contain nothing else, see apps/youtube/Dockerfile).
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		files: ['sdk/**'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							// A regex, since a leading `#` is a comment in `group`'s gitignore syntax.
+							regex: '^(#lib|#api|#sdk|\\$lib|\\$app)/|^\\.\\./',
+							message: 'sdk/ is the app contract and must not depend on host code.'
+						}
+					]
+				}
+			]
+		}
+	},
+	{
+		files: ['apps/**'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							regex: '^(#lib|#api|#sdk|\\$lib|\\$app)/|/src/',
+							message: 'Apps may only use the SDK, by relative import of ../../sdk.'
+						}
+					]
+				}
+			]
+		}
 	}
 );

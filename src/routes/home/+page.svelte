@@ -6,7 +6,8 @@
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
-	import { appActionSchema, appActionHref } from '#lib/apps/dashboard';
+	import { appActionSchema } from '#sdk/dashboard';
+	import { appActionHref } from '#lib/apps/actionHref';
 	import HeroBanner from '#lib/components/HeroBanner.svelte';
 	import HeroBannerEmpty from '#lib/components/HeroBannerEmpty.svelte';
 	import HeroBannerSkeleton from '#lib/components/HeroBannerSkeleton.svelte';
@@ -78,7 +79,7 @@
 	type Profile = NonNullable<typeof me>;
 
 	// Real app-sourced data (see src/api/handlers/apps.ts) — proves the
-	// Tier 1 dashboard contract (src/lib/apps/dashboard.ts) actually reaches
+	// Tier 1 dashboard contract (sdk/dashboard.ts) actually reaches
 	// the real UI. Only apps that declare a dashboard show up here at all.
 	// The initial value
 	// comes from this top-level await (so SSR still renders real content, not
@@ -91,6 +92,7 @@
 		title: string;
 		subtitle: string;
 		image: string;
+		fallbackImage: string | null;
 		actionJson: string;
 	};
 	// A card plus which app it came from.
@@ -98,15 +100,21 @@
 	const DASHBOARD_FIELDS = {
 		appId: true,
 		appName: true,
-		cards: { id: true, title: true, subtitle: true, image: true, actionJson: true }
+		cards: {
+			id: true,
+			title: true,
+			subtitle: true,
+			image: true,
+			fallbackImage: true,
+			actionJson: true
+		}
 	} as const;
 
+	// A home card is always a link, so one whose action has none (opening
+	// something on the phone) leads to the app's page instead.
 	function cardHref(card: AppCard): string {
-		return appActionHref(
-			card.appId,
-			appHref(card.appId),
-			appActionSchema.parse(JSON.parse(card.actionJson))
-		);
+		const action = appActionSchema.parse(JSON.parse(card.actionJson));
+		return appActionHref(card.appId, action) ?? appHref(card.appId);
 	}
 
 	// `null` cards means that app hasn't published a dashboard at all yet
@@ -345,6 +353,7 @@
 					title={heroCard.title}
 					description={heroCard.subtitle}
 					image={heroCard.image}
+					fallbackImage={heroCard.fallbackImage ?? undefined}
 					badge={m.featured()}
 					source={heroCard.appName}
 					href={cardHref(heroCard)}
@@ -371,6 +380,7 @@
 							title: c.title,
 							meta: c.subtitle,
 							image: c.image,
+							fallbackImage: c.fallbackImage ?? undefined,
 							href: cardHref(c)
 						}))}
 					/>

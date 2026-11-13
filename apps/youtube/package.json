@@ -2,10 +2,7 @@
 	"name": "pivi-app-youtube",
 	"private": true,
 	"type": "module",
-	"description": "Dependencies of the YouTube app image. Built from the repo root (see Dockerfile), where this file becomes the build's package.json so that `#lib/*` resolves to the shared protocol code in src/lib.",
-	"imports": {
-		"#lib/*": "./src/lib/*"
-	},
+	"description": "Dependencies of the YouTube app image, pinned by this directory's own bun.lock. The protocol comes from the repo's sdk/ directory by relative import (see Dockerfile), which needs zod and vscode-jsonrpc from here.",
 	"dependencies": {
 		"vscode-jsonrpc": "^9.0.2",
 		"youtubei.js": "^18.0.0",

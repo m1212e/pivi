@@ -89,6 +89,17 @@ in
       '';
     };
 
+    suggestedApps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "ghcr.io/m1212e/pivi/pivi-youtube" ];
+      example = [ "ghcr.io/example/pivi-app:1.2.0" ];
+      description = ''
+        App images offered for one-tap install on the TV's apps screen. Only
+        image references: each app's name, icon and description are read from
+        its own manifest in the registry.
+      '';
+    };
+
     stateDir = lib.mkOption {
       type = lib.types.path;
       default = "/var/lib/pivi";
@@ -351,12 +362,13 @@ in
         # bun wants a home directory (pivi-db-push runs under it). ProtectHome
         # makes the real one unreachable, so point it at the state dir.
         HOME = cfg.stateDir;
-        # Plugins run as OCI images in microVMs (src/api/plugins/sandbox); this is
+        # Apps run as OCI images in microVMs (src/api/apps/sandbox); this is
         # where the runtime keeps its state.
         PIVI_SANDBOX_HOME = toString cfg.sandbox.home;
         PIVI_HOST = "127.0.0.1";
         PIVI_PORT = toString cfg.port;
         PIVI_REMOTE_PORT = toString cfg.remote.port;
+        PIVI_SUGGESTED_APPS = lib.concatStringsSep " " cfg.suggestedApps;
       }
       // lib.optionalAttrs cfg.wifi.provisioning {
         # Pinned rather than found on PATH: the unit's PATH is minimal, and a

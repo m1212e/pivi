@@ -81,7 +81,7 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 		direct: t.exposeBoolean('direct'),
 		vcodec: t.exposeString('vcodec'),
 		acodec: t.exposeString('acodec', { nullable: true }),
-		// Not reliably guessable from the codecs (see host.ts's Container),
+		// Not reliably guessable from the codecs (see #sdk/protocol's containerSchema),
 		// so the player gets it from here.
 		videoContainer: t.exposeString('videoContainer'),
 		audioContainer: t.exposeString('audioContainer', { nullable: true }),
@@ -93,8 +93,8 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 	})
 });
 
-// A stretch the player offers to skip, like a SponsorBlock segment in the
-// YouTube app. Mirrors #lib/apps/host's SkipSegment.
+// A stretch the player offers to skip, like a sponsor segment. Mirrors
+// #sdk/protocol's SkipSegment.
 type AppSkipSegment = {
 	startSeconds: number;
 	endSeconds: number;

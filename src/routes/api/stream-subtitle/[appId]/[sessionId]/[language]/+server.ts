@@ -3,13 +3,14 @@
 // relay, a caption file is a few KB at most, so there's no segment index or
 // Range forwarding to do here, just a single proxied fetch. Generic over any
 // app, same as stream-track: it only ever touches the generic
-// ResolvedStream shape (see #lib/apps/host's SubtitleTrack).
+// ResolvedStream shape (see #sdk/protocol's SubtitleTrack).
 import { error } from '@sveltejs/kit';
 import { resolveStreamOrError } from '#api/apps/trackResolution';
+import { fetchAppUrl } from '#api/apps/appFetch';
 import type { RequestHandler } from './$types';
 
-// Two things wrong with an app's own caption file as-is (YouTube's
-// auto-generated ones very much included), both fixed here before it ever
+// Two things in caption files that render badly through a plain <track> on
+// the TV, whatever app supplied them, both normalized here before the file
 // reaches the browser:
 //
 // 1. Horizontal pinning. A cue's `align`/`position` settings can pin its box
@@ -19,12 +20,12 @@ import type { RequestHandler } from './$types';
 //    anchor), so the settings themselves have to go, falling every cue back
 //    to WebVTT's real default (horizontally centered).
 //
-// 2. Overlapping "rolling" cues. YouTube's auto-captions chain consecutive,
-//    time-overlapping cues that repeat and build on each other's text word
-//    by word (e.g. one cue for "what you", the next for "what you got us",
-//    the next for the full sentence, each starting before the last one's
-//    own end) -- a deliberate effect for YouTube's own JS caption renderer,
-//    which swaps text in place rather than stacking cues. Player natively
+// 2. Overlapping "rolling" cues. Auto-generated captions often chain
+//    consecutive, time-overlapping cues that repeat and build on each other's
+//    text word by word (e.g. one cue for "what you", the next for "what you
+//    got us", the next for the full sentence, each starting before the last
+//    one's own end) -- meant for a JS caption renderer that swaps text in
+//    place rather than stacking cues. Player natively
 //    through a plain <track> instead, any moment where two of these are
 //    simultaneously active renders as two full, near-duplicate lines
 //    stacked on screen at once. Capping every cue's end at the very next
@@ -86,14 +87,14 @@ export const GET: RequestHandler = async ({ params }) => {
 	// is: a caption track is identical regardless of resolution, and tying
 	// this URL to the player's current quality would force the browser to
 	// reload (and un-select) it on every quality switch for no reason. Costs
-	// one extra resolveStreamCached entry (a real yt-dlp call, once) the first
+	// one extra resolveStreamCached entry (a real resolution, once) the first
 	// time a session's captions are actually turned on, cached for the same
 	// 5 minutes as every other quality tier's own entry after that.
-	const resolved = await resolveStreamOrError(appId, sessionId, undefined);
-	const track = resolved.subtitleTracks?.find((t) => t.language === language);
+	const { app, stream } = await resolveStreamOrError(appId, sessionId, undefined);
+	const track = stream.subtitleTracks?.find((t) => t.language === language);
 	if (!track) error(404, `No subtitle track for language "${language}"`);
 
-	const upstream = await fetch(track.url);
+	const upstream = await fetchAppUrl(app, track.url);
 	if (!upstream.ok) error(502, `Subtitle source returned ${upstream.status}`);
 
 	const vtt = await upstream.text();

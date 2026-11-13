@@ -6,7 +6,7 @@
 // would actually need a signed-in session.
 //
 // There's no dedicated sign-in protocol on the host side (see
-// #lib/apps/manifest's featureSchema) — this app owns the whole flow and
+// sdk/manifest.ts's featureSchema) — this app owns the whole flow and
 // reports it through the same 'screen' content it already publishes for
 // everything else: `onStatus` below feeds main.ts the device code to show,
 // and the host's generic `openOnPhone` button action (see dashboard.ts)

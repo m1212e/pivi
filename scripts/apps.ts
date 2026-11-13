@@ -14,8 +14,8 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { DEV_REGISTRY } from '../src/lib/apps/devRegistry';
-import { MANIFEST_LABEL, appManifestSchema } from '../src/lib/apps/manifest';
-import { buildProtocolDocument } from '../src/lib/apps/protocolSchema';
+import { MANIFEST_LABEL, appManifestSchema } from '../sdk/manifest';
+import { buildProtocolDocument } from '../sdk/protocolSchema';
 
 const APPS_DIR = 'apps';
 

@@ -1,5 +1,5 @@
 // The generic playback proxy: any app's resolved stream (see
-// #lib/apps/host's resolveStreamRequest) ends up here, remuxed live by
+// #sdk/protocol's resolveStreamRequest) ends up here, remuxed live by
 // ffmpeg into something a plain <video> tag can play. Nothing below is
 // specific to any one app -- it only ever touches the generic
 // ResolvedStream shape, so a second app needing playback is just another
@@ -142,7 +142,7 @@ function createPrebufferedStream(
 	);
 }
 
-// A cap on requested video height (see apps/youtube/stream.ts) -- always
+// A cap on requested video height (#sdk/protocol's `maxHeight`) -- always
 // resolving the true "best" available stream, sometimes 4K/8K, gives ffmpeg
 // far more bitrate to remux and forward in real time than a live pipe can
 // actually sustain, which is what made playback choppy.
@@ -167,7 +167,7 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 
 	// `audioUrl` absent means whatever resolved this session already handed
 	// back one self-contained, directly playable URL -- true of any app,
-	// not just this one (see #lib/apps/host's ResolvedStream). There's
+	// not just this one (see #sdk/protocol's ResolvedStream). There's
 	// nothing to remux in that case, so on the very first request (seeking
 	// past 0 needs the ffmpeg path below -- a plain redirect can't apply a
 	// time offset) just point the browser straight at it: one real network
