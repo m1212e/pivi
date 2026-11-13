@@ -195,7 +195,7 @@ export type DateWhereInputArgument = {
 	notLike?: String | null | undefined;
 };
 
-export type EmailAddress = unknown;
+export type EmailAddress = string;
 
 export type Float = number;
 
@@ -289,7 +289,7 @@ export type JSONWhereInputArgument = {
 	notIn?: JSON[] | undefined;
 };
 
-export type Locale = unknown;
+export type Locale = string;
 
 export type ManagedApp = {
 	autoUpdate: Boolean;
@@ -367,13 +367,13 @@ export type Pairing = {
 	remoteUrl: String | null;
 };
 
-export type PersonName = unknown;
+export type PersonName = string;
 
 export type PhoneConnection = {
 	connected: Boolean;
 };
 
-export type PhoneNumber = unknown;
+export type PhoneNumber = string;
 
 export type Query = {
 	appDashboards: () => AppDashboard[];
@@ -521,7 +521,7 @@ export const client = {
 	 *
 	 * Internally, this does some magic to make the data reactive with Svelte's reactivity system. But it can be used with other frameworks as well.
 	 */
-	liveQuery: makeLiveQuery<Query>({
+	liveQuery: makeLiveQuery<Query, false>({
 		urqlClient,
 		availableSubscriptions: new Set([
 			'appDashboards',
@@ -552,7 +552,7 @@ export const client = {
 	/**
 	 * A one-time fetch of data.
 	 */
-	query: makeQuery<Query>({
+	query: makeQuery<Query, false>({
 		urqlClient,
 		schema
 	})

@@ -32,7 +32,15 @@ export default defineConfig(({ mode }) => ({
 			// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
 			// dependency doesn't load under Vite's SSR module runner.
 			'lib-address': fileURLToPath(new URL('./src/api/lib-address-shim.ts', import.meta.url))
-		}
+		},
+		// graphql-armor (bundled in via @m1212e/rumble) pins its own graphql 16,
+		// which has no `exports` map. Resolved against that copy, its deep import
+		// `graphql/language/parser` is emitted with the file extension appended,
+		// and Node then fails to load it from our graphql 17, whose `exports` map
+		// appends one too (`parser.mjs.mjs`). Resolving every graphql import
+		// against the root copy keeps the specifier as written, and matches what
+		// the server loads at runtime anyway.
+		dedupe: ['graphql']
 	},
 	// clientCreator (see src/api/handlers/register.ts) rewrites the generated
 	// rumble client on every dev-server request that touches the GraphQL

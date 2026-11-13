@@ -63,6 +63,18 @@ export function ensureRal(): void {
 			}
 		},
 		console,
+		// randomUUID only exists in secure contexts, plain http pages need the fallback.
+		crypto: {
+			randomUUID: () =>
+				typeof globalThis.crypto.randomUUID === 'function'
+					? globalThis.crypto.randomUUID()
+					: '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) =>
+							(
+								+c ^
+								(globalThis.crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))
+							).toString(16)
+						)
+		},
 		timer: {
 			setTimeout: (callback, ms, ...args) => {
 				const handle = setTimeout(callback, ms, ...args);
