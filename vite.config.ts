@@ -21,12 +21,11 @@ function allowedHostsFrom(mode: string): string[] {
 // which Vite parses itself without ever exporting non-`VITE_` keys to the
 // process. That's also why this config is a function — `loadEnv` needs the
 // mode, and only the function form receives it.
-export default defineConfig(({ mode }) => ({
-	// Works around a bug in the current @sveltejs/kit "next" prerelease: its
-	// verbose build logger calls Node's `styleText('grey', ...)`, but Node
-	// only recognizes the American spelling 'gray', which crashes `vite build`
-	// (see @sveltejs/kit's `log.minor`, only wired up when logLevel is 'info').
-	logLevel: 'warn',
+export default defineConfig(({ mode, command }) => ({
+	// @sveltejs/kit's verbose build logger calls `styleText('grey', ...)`, which
+	// older Node versions (like the one nixpkgs builds with) reject, crashing
+	// `vite build`. Only the build, since dev needs info level to print its URLs.
+	logLevel: command === 'build' ? 'warn' : 'info',
 	resolve: {
 		alias: {
 			// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
