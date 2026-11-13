@@ -113,9 +113,8 @@ export function createRemoteController() {
 	let tv = $state.raw<TvState>(INITIAL_TV_STATE);
 	let text = $state('');
 	let phoneKeyboard = $state(true);
-	// Set only when the tab openSignInUrl tried was blocked, so the prompt is a
-	// fallback rather than an extra step on the normal path.
-	let pendingSignInUrl = $state<string | null>(null);
+	// A link an app sent, waiting for the user to see where it goes and tap it.
+	let pendingLink = $state<string | null>(null);
 
 	let session: RemoteSession | undefined;
 	let connection: MessageConnection | undefined;
@@ -154,26 +153,6 @@ export function createRemoteController() {
 		else text = mirroredText(state, text, recentlySent, Date.now());
 	}
 
-	// A new tab, not this one: the remote is the TV's only input device, so
-	// navigating it away would strand the TV until the sign-in finished and
-	// the user found their way back. On a remote installed to the home screen
-	// it would also leave the app entirely.
-	function openSignInUrl(url: string) {
-		// Deliberately not the 'noopener' window feature: with it, window.open
-		// returns null whether it succeeded or was blocked, which would make
-		// the check below fire every time. Clearing `opener` on the new window
-		// is the equivalent, and is allowed cross-origin.
-		const opened = window.open(url, '_blank');
-		if (opened) {
-			opened.opener = null;
-			return;
-		}
-		// This arrives over the websocket, so there's no user gesture for the
-		// popup blocker to accept, which is the normal outcome on mobile
-		// Safari. Fall back to a link whose tap *is* one.
-		pendingSignInUrl = url;
-	}
-
 	onMount(() => {
 		let cancelled = false;
 
@@ -198,7 +177,12 @@ export function createRemoteController() {
 		// A real browser tab, not something we render ourselves: Google's login
 		// page refuses to load in an embedded context, and it belongs to a
 		// different origin.
-		onNotification(conn, openUrlNotification, openUrlParamsSchema, ({ url }) => openSignInUrl(url));
+		onNotification(
+			conn,
+			openUrlNotification,
+			openUrlParamsSchema,
+			({ url }) => (pendingLink = url)
+		);
 		conn.listen();
 
 		connectRemoteSession(takePairingTokenFromUrl(), {
@@ -256,12 +240,15 @@ export function createRemoteController() {
 		setPhoneKeyboard(value: boolean) {
 			phoneKeyboard = value;
 		},
-		/** A sign-in link the browser refused to open on its own, for SignInPrompt.svelte. */
-		get pendingSignInUrl() {
-			return pendingSignInUrl;
+		/**
+		 * A link an app wants opened, for LinkPrompt.svelte. Never opened
+		 * without a tap, since the app chose it, not the user.
+		 */
+		get pendingLink() {
+			return pendingLink;
 		},
-		dismissSignIn() {
-			pendingSignInUrl = null;
+		dismissLink() {
+			pendingLink = null;
 		},
 
 		trackpad: {

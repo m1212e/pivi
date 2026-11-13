@@ -8,10 +8,10 @@
 	import { browserStorage } from '#lib/storage';
 	import AppShortcuts from './AppShortcuts.svelte';
 	import KeyboardTab from './KeyboardTab.svelte';
+	import LinkPrompt from './LinkPrompt.svelte';
 	import PlayerTab from './PlayerTab.svelte';
 	import ProfilesTab from './ProfilesTab.svelte';
 	import RemoteHeader from './RemoteHeader.svelte';
-	import SignInPrompt from './SignInPrompt.svelte';
 	import StatusScreen from './StatusScreen.svelte';
 	import TrackpadTab from './TrackpadTab.svelte';
 	import TrackpadToggle from './TrackpadToggle.svelte';
@@ -86,8 +86,8 @@
 			/>
 		{/if}
 
-		{#if remote.pendingSignInUrl}
-			<SignInPrompt url={remote.pendingSignInUrl} onDismiss={remote.dismissSignIn} />
+		{#if remote.pendingLink}
+			<LinkPrompt url={remote.pendingLink} onDismiss={remote.dismissLink} />
 		{/if}
 	{:else}
 		<StatusScreen phase={remote.phase} errorMessage={remote.errorMessage} />
