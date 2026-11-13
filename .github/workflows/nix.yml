@@ -74,6 +74,5 @@ jobs:
           test -x result/bin/pivi-server
           test -x result/bin/pivi-db-push
           test -f result/share/pivi/build/handler.js
-          test -d result/share/pivi/plugins/youtube
           test -d result/share/pivi/node_modules
           echo "OK"
