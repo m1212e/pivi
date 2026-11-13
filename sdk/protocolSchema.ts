@@ -14,6 +14,7 @@ import {
 	PROTOCOL_VERSION,
 	readyNotification,
 	readyParamsSchema,
+	refreshDashboardNotification,
 	resolvedStreamSchema,
 	resolveNextParamsSchema,
 	resolveNextRequest,
@@ -78,6 +79,14 @@ const METHODS: MethodSpec[] = [
 		feature: 'dashboard',
 		description: 'The cards this app contributes to the home dashboard. Replaces the last set.',
 		params: dashboardContributionSchema
+	},
+	{
+		method: refreshDashboardNotification.method,
+		from: 'host',
+		kind: 'notification',
+		feature: 'dashboard',
+		description:
+			'The home screen was opened. Publish the dashboard again with fresh content if it can go stale.'
 	},
 	{
 		method: publishScreenNotification.method,

@@ -164,6 +164,13 @@ export const localeNotification = new NotificationType<z.infer<typeof activatePa
 	'host/locale'
 );
 
+/**
+ * Sent when the home screen is opened, so the cards there aren't whatever the
+ * app published at boot. Answered with a new `app/publishDashboard`. Only sent
+ * to apps declaring the `dashboard` feature, at most twice a minute.
+ */
+export const refreshDashboardNotification = new NotificationType0('host/refreshDashboard');
+
 /** Gives the app a chance to exit cleanly before the host kills it. */
 export const shutdownNotification = new NotificationType0('host/shutdown');
 

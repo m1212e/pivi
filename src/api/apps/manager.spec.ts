@@ -37,16 +37,27 @@ vi.mock('./store', () => {
 });
 
 const dashboard: DashboardContribution = { cards: [] };
-const instances: { dispose: ReturnType<typeof vi.fn> }[] = [];
+type FakeInstance = {
+	dispose: ReturnType<typeof vi.fn>;
+	refreshDashboard: ReturnType<typeof vi.fn>;
+	published?: DashboardContribution;
+	crash: () => void;
+};
+const instances: FakeInstance[] = [];
 vi.mock('./runtime', () => ({
-	loadApp: vi.fn(() => {
-		const instance = {
-			manifest,
-			getDashboard: () => dashboard,
-			dispose: vi.fn(() => Promise.resolve())
+	loadApp: vi.fn((options: { onCrash?: (code: number | null) => void }) => {
+		const instance: FakeInstance = {
+			published: dashboard,
+			dispose: vi.fn(() => Promise.resolve()),
+			refreshDashboard: vi.fn(),
+			crash: () => options.onCrash?.(1)
 		};
 		instances.push(instance);
-		return Promise.resolve(instance as unknown as AppInstance);
+		return Promise.resolve({
+			...instance,
+			manifest,
+			getDashboard: () => instance.published
+		} as unknown as AppInstance);
 	})
 }));
 
@@ -118,6 +129,58 @@ describe('stopping idle apps', () => {
 		for (const listener of profileListeners) listener();
 		await manager.getStartedApps();
 		await settle();
+		expect(instances).toHaveLength(2);
+	});
+});
+
+describe('refreshing the home screen', () => {
+	beforeEach(async () => {
+		await manager.stopAllApps();
+		for (const listener of profileListeners) listener();
+		instances.length = 0;
+	});
+
+	it('asks a running app for fresh cards, at most twice a minute', async () => {
+		await manager.getStartedApps();
+		await settle();
+		await vi.advanceTimersByTimeAsync(30_000);
+
+		await manager.refreshDashboards();
+		await manager.refreshDashboards();
+		expect(instances[0].refreshDashboard).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(30_000);
+		await manager.refreshDashboards();
+		expect(instances[0].refreshDashboard).toHaveBeenCalledTimes(2);
+	});
+
+	it('boots an idle app again, showing its last cards until it publishes', async () => {
+		await manager.getStartedApps();
+		await settle();
+		await vi.advanceTimersByTimeAsync(IDLE_STOP_MS + 60_000);
+
+		await manager.refreshDashboards();
+		await settle();
+		expect(instances).toHaveLength(2);
+		instances[1].published = undefined;
+		expect(await manager.getStartedApps()).toEqual([{ appId: 'demo', dashboard }]);
+
+		const fresh: DashboardContribution = { cards: [] };
+		instances[1].published = fresh;
+		expect((await manager.getStartedApps())[0].dashboard).toBe(fresh);
+	});
+
+	it('leaves a crashed app down until it is opened', async () => {
+		await manager.getStartedApps();
+		await settle();
+		instances[0].crash();
+		await vi.advanceTimersByTimeAsync(60_000);
+
+		await manager.refreshDashboards();
+		await settle();
+		expect(instances).toHaveLength(1);
+
+		await manager.getApp('demo');
 		expect(instances).toHaveLength(2);
 	});
 });

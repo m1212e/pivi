@@ -6,7 +6,8 @@
 // an ffmpeg remux, a touch on every track range request), or the host asked it
 // something or forwarded a UI event within the idle window. Showing its cards on
 // the home screen doesn't count: those stay visible from the last publish
-// after the app is stopped, so the home screen alone never keeps an app awake.
+// after the app is stopped. Opening the home screen boots it once for fresh
+// cards, but leaving the TV on it never keeps an app awake.
 
 /** Ten minutes covers stepping away from an app and coming back to it. */
 export const IDLE_STOP_MS = 10 * 60_000;

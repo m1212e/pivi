@@ -6,7 +6,8 @@
 // An app starts on first use rather than at boot: starting is a VM boot, and
 // most of the time there's no profile active to start one for. It stops again
 // once nothing uses it (usage.ts), and its last dashboard stays on the home
-// screen until it runs again.
+// screen until it runs again. Opening the home screen boots it again for fresh
+// cards (refreshDashboards).
 import { parseImageRef } from '#lib/apps/imageRef';
 import type { DashboardContribution } from '#sdk/dashboard';
 import { getActiveProfileUser, onActiveProfileChanged } from '../activeProfile';
@@ -29,13 +30,21 @@ const stopping = new Map<string, Promise<void>>();
 const started = new Map<string, AppInstance>();
 // Apps that stopped on their own (idle, crashed, killed by the watchdog) with
 // the dashboard they last published. The home screen shows that instead of
-// booting them again, which would undo the idle stop on its next refresh, or
-// restart a crashing app in a loop.
+// booting them again on every dashboard event, which would undo the idle stop.
+// It also stands in while the app boots again, until it publishes new cards.
 const parked = new Map<string, DashboardContribution | undefined>();
+// Apps that crashed or were killed. Only opening the app boots them again, not
+// opening the home screen, so a broken one isn't restarted on every visit.
+const failed = new Set<string>();
+// When each app was last asked for fresh cards, see refreshDashboards.
+const lastRefresh = new Map<string, number>();
 const usage = createUsageTracker();
 
 // How often idle apps are looked for. Coarse, the idle window is minutes long.
 const IDLE_CHECK_MS = 60_000;
+// Going back and forth between the home screen and an app shouldn't hit the
+// app's backend every time.
+const REFRESH_MIN_MS = 30_000;
 
 onHostLocaleChanged((locale) => {
 	for (const app of started.values()) app.setLocale(locale);
@@ -86,7 +95,8 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 // Forgets the dead process and its resolved streams, keeping its last
 // dashboard parked, and tells the home screen. It restarts on next real use.
 function forgetApp(appId: string): void {
-	parked.set(appId, started.get(appId)?.getDashboard());
+	park(appId);
+	failed.add(appId);
 	instances.delete(appId);
 	started.delete(appId);
 	dropStreamCache(appId);
@@ -100,7 +110,13 @@ function forgetApp(appId: string): void {
  */
 export function getApp(appId: string): Promise<AppInstance> {
 	usage.touch(appId);
+	failed.delete(appId);
 	return ensureApp(appId);
+}
+
+// Keeps the cards of a parked app that never got to publish new ones.
+function park(appId: string): void {
+	parked.set(appId, started.get(appId)?.getDashboard() ?? parked.get(appId));
 }
 
 /**
@@ -117,8 +133,9 @@ function ensureApp(appId: string): Promise<AppInstance> {
 	const existing = instances.get(appId);
 	if (existing) return existing;
 
-	parked.delete(appId);
 	usage.touch(appId);
+	// Booting publishes fresh cards anyway.
+	lastRefresh.set(appId, Date.now());
 	const instance = (async () => {
 		await stopping.get(appId);
 		const row = await dbAppStore.find(appId);
@@ -154,19 +171,50 @@ export async function getStartedApps(): Promise<
 	const rows = (await dbAppStore.list()).filter((row) => row.enabled);
 	return rows.map((row) => {
 		const appId = row.appId;
-		if (parked.has(appId)) return { appId, dashboard: parked.get(appId) ?? { cards: [] } };
+		const last = parked.get(appId);
+		if (instances.has(appId)) {
+			return { appId, dashboard: started.get(appId)?.getDashboard() ?? last };
+		}
+		if (parked.has(appId)) return { appId, dashboard: last ?? { cards: [] } };
 		void ensureApp(appId).catch((error) =>
 			console.error(`[apps] ${appId} failed to start:`, error)
 		);
-		return { appId, dashboard: started.get(appId)?.getDashboard() };
+		return { appId, dashboard: undefined };
 	});
+}
+
+/**
+ * Call when the home screen opens, so it shows fresh cards rather than the ones
+ * published at boot. Running apps are asked to publish again and apps stopped
+ * for being idle are booted, their last cards staying up until the new ones
+ * arrive. Each app is asked at most once per REFRESH_MIN_MS.
+ */
+export async function refreshDashboards(): Promise<void> {
+	if (!(await getActiveProfileUser())) return;
+
+	const now = Date.now();
+	for (const row of await dbAppStore.list()) {
+		const appId = row.appId;
+		if (!row.enabled || !row.approvedManifest.features.includes('dashboard')) continue;
+		if (failed.has(appId) || now - (lastRefresh.get(appId) ?? 0) < REFRESH_MIN_MS) continue;
+
+		const app = started.get(appId);
+		if (app) {
+			lastRefresh.set(appId, now);
+			app.refreshDashboard();
+		} else if (!instances.has(appId)) {
+			void ensureApp(appId).catch((error) =>
+				console.error(`[apps] ${appId} failed to start:`, error)
+			);
+		}
+	}
 }
 
 // Parks every running app nobody used for the idle window.
 function stopIdleApps(): void {
 	for (const appId of usage.idle(started.keys())) {
 		console.log(`[app:${appId}] idle, stopping it until it is used again`);
-		parked.set(appId, started.get(appId)?.getDashboard());
+		park(appId);
 		void stopApp(appId);
 	}
 }
@@ -206,9 +254,12 @@ export const processControl: AppProcessControl = {
 	// A disabled, uninstalled or updated app's old dashboard must not linger.
 	async stop(appId) {
 		parked.delete(appId);
+		failed.delete(appId);
 		await stopApp(appId);
 	},
 	async restart(appId) {
+		parked.delete(appId);
+		failed.delete(appId);
 		await stopApp(appId);
 		await ensureApp(appId);
 	}
@@ -223,5 +274,7 @@ export const processControl: AppProcessControl = {
 onActiveProfileChanged(() => {
 	// Parked dashboards belong to the previous profile too.
 	parked.clear();
+	failed.clear();
+	lastRefresh.clear();
 	for (const appId of [...instances.keys()]) void stopApp(appId);
 });

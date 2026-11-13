@@ -16,6 +16,7 @@ import {
 	publishDashboardNotification,
 	publishScreenNotification,
 	readyNotification,
+	refreshDashboardNotification,
 	resolveNextRequest,
 	resolveSkipSegmentsRequest,
 	resolveStreamRequest,
@@ -768,15 +769,20 @@ async function refresh() {
 	playlistVideos.clear();
 	channelLatest.clear();
 	failed.clear();
-	await loadHomeFeed();
+	await refreshHome();
+	if (currentSection !== 'home') void loadSection(currentSection);
+}
 
+// The home feed is what the dashboard shows, so it's all a dashboard refresh
+// reloads. The library tabs stay cached.
+async function refreshHome() {
+	await loadHomeFeed();
 	connection.sendNotification(publishDashboardNotification, {
 		// The dashboard shelf only wants the top of the feed, however far the
 		// screen's infinite scroll has loaded.
 		cards: lastResults.slice(0, DASHBOARD_CARDS).map(videoToCard)
 	});
 	publishScreen(lastResults);
-	if (currentSection !== 'home') void loadSection(currentSection);
 }
 
 function main() {
@@ -796,6 +802,10 @@ function main() {
 	connection.onNotification(localeNotification, ({ locale }) => {
 		setLocale(locale);
 		if (activated) void refresh();
+	});
+
+	connection.onNotification(refreshDashboardNotification, () => {
+		if (activated) void refreshHome();
 	});
 
 	connection.onNotification(shutdownNotification, () => process.exit(0));

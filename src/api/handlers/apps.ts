@@ -11,7 +11,7 @@ import {
 	forcedStopPubSub,
 	type AppForcedStop
 } from '../apps/events';
-import { getApp, getStartedApps, holdApp } from '../apps/manager';
+import { getApp, getStartedApps, holdApp, refreshDashboards } from '../apps/manager';
 import { dbAppStore } from '../apps/store';
 import { appPubSub } from '../apps/pubsub';
 import { hasAvailableUpdate } from '../apps/updateAvailability';
@@ -187,7 +187,11 @@ schemaBuilder.subscriptionFields((t) => ({
 	}),
 	appDashboards: t.field({
 		type: [AppDashboardRef],
-		subscribe: () => appPubSub.subscribe(ANY_DASHBOARD_EVENT),
+		// Subscribing is the home screen opening, the moment its cards should be fresh.
+		subscribe: () => {
+			void refreshDashboards();
+			return appPubSub.subscribe(ANY_DASHBOARD_EVENT);
+		},
 		resolve: resolveDashboards
 	}),
 	appScreen: t.field({

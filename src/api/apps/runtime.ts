@@ -35,6 +35,7 @@ import {
 	publishScreenNotification,
 	readyNotification,
 	readyParamsSchema,
+	refreshDashboardNotification,
 	resolvedStreamSchema,
 	resolveNextRequest,
 	resolveNextResultSchema,
@@ -64,6 +65,8 @@ export type AppInstance = {
 	getScreen(screenId: string): AppScreen | undefined;
 	sendUiEvent(event: UiEvent): void;
 	setLocale(locale: string): void;
+	// Asks for new dashboard cards, which arrive as a normal dashboard update.
+	refreshDashboard(): void;
 	resolveStream(sessionId: string, maxHeight?: number): Promise<ResolvedStream>;
 	resolveSkipSegments(sessionId: string): Promise<SkipSegment[]>;
 	resolveNext(sessionId: string, context: string): Promise<string | undefined>;
@@ -476,6 +479,12 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 
 		setLocale(locale) {
 			connection.sendNotification(localeNotification, { locale });
+		},
+
+		refreshDashboard() {
+			if (hasFeature(manifest, 'dashboard')) {
+				connection.sendNotification(refreshDashboardNotification);
+			}
 		},
 
 		sendUiEvent(event) {
