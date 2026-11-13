@@ -70,6 +70,12 @@
 		"dev-dependencies-in-production": "off"
 	},
 	"ignoreExports": [
+		// SvelteKit routes one handler for both methods by exporting it twice,
+		// which reads as a duplicate export but is the route's whole API.
+		{
+			"file": "src/routes/api/graphql/+server.ts",
+			"exports": ["GET", "POST"]
+		},
 		{
 			"file": "src/api/appManagementService.ts",
 			"exports": ["*"]
