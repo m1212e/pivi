@@ -4,6 +4,8 @@
 	import { browser } from '$app/env';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import type { Path } from '$app/types';
+	import { resolve } from '$app/paths';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { createControlsVisibility } from '#lib/playback/controlsVisibility.svelte';
 	import { createDiagnostics } from '#lib/playback/diagnostics.svelte';
@@ -245,7 +247,7 @@
 		if (!context) return goBack();
 		const nextId = await nextSessionId(context);
 		if (nextId) {
-			return goto(nextSessionHref(appId, nextId, context), { replaceState: true });
+			return goto(resolve(nextSessionHref(appId, nextId, context) as Path), { replaceState: true });
 		}
 		goBack();
 	}

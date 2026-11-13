@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import type { Path } from '$app/types';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { ROUTES, appHref, appUpdateHref } from '#lib/routes';
 	import { Plus } from '@lucide/svelte';
@@ -52,7 +54,7 @@
 		in:fly|global={{ y: 24, duration: 400, delay: items.length * 70 }}
 	>
 		<a
-			href={ROUTES.apps}
+			href={resolve(ROUTES.apps)}
 			class="group flex w-28 shrink-0 flex-col items-center gap-2 focus:outline-none sm:w-32"
 		>
 			<span
@@ -78,7 +80,7 @@
 {#if prompted}
 	<AppUpdatePrompt
 		name={prompted.name}
-		onUpdate={() => goto(appUpdateHref(prompted.id), { replaceState: true })}
-		onOpen={() => goto(appHref(prompted.id), { replaceState: true })}
+		onUpdate={() => goto(resolve(appUpdateHref(prompted.id) as Path), { replaceState: true })}
+		onOpen={() => goto(resolve(appHref(prompted.id) as Path), { replaceState: true })}
 	/>
 {/if}

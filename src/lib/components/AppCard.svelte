@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { pushState } from '$app/navigation';
+	import type { Path } from '$app/types';
+	import { resolve } from '$app/paths';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import * as m from '#lib/paraglide/messages';
 
@@ -36,7 +38,7 @@
 </script>
 
 <a
-	{href}
+	href={resolve(href as Path)}
 	onclick={askFirst}
 	data-pivi-app-id={id}
 	data-pivi-app-name={name}

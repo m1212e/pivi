@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { Path } from '$app/types';
+	import { resolve } from '$app/paths';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 
 	// The one pill button. `solid` is the primary action, `soft` a quieter
@@ -66,7 +68,7 @@
 {/snippet}
 
 {#if href}
-	<a {href} class={classes} aria-current={selected ? 'page' : undefined}>
+	<a href={resolve(href as Path)} class={classes} aria-current={selected ? 'page' : undefined}>
 		{@render content()}
 	</a>
 {:else}
