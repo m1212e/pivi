@@ -40,4 +40,10 @@ jobs:
           DATABASE_URL: postgres://pivi@localhost:5432/pivi
           ORIGIN: ''
 
+      # The same gate as the pre-push hook (lefthook.yml): fail on findings a change
+      # introduces, not on everything already in the repository. A pull request is
+      # compared with its base on its own; a push to main with what main was before.
       - uses: fallow-rs/fallow@v3
+        with:
+          command: audit
+          changed-since: ${{ github.event_name == 'push' && github.event.before || '' }}
