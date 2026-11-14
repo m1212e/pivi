@@ -23,6 +23,31 @@ type RangeResult = { data: Uint8Array } | { status: number };
 /** How the index is fetched, so the caller decides which URLs may be reached (appFetch.ts). */
 export type RangeFetcher = (init: AppFetchInit) => Promise<Response>;
 
+// Reads at most `limit` bytes and drops the rest, so a 200 for a huge file
+// can't be buffered whole.
+async function readUpTo(res: Response, limit: number): Promise<Uint8Array> {
+	if (!res.body) return new Uint8Array();
+	const reader = res.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	while (total < limit) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+		total += value.length;
+	}
+	await reader.cancel().catch(() => {});
+	const out = new Uint8Array(Math.min(total, limit));
+	let offset = 0;
+	for (const chunk of chunks) {
+		const part = chunk.subarray(0, Math.min(chunk.length, out.length - offset));
+		out.set(part, offset);
+		offset += part.length;
+		if (offset >= out.length) break;
+	}
+	return out;
+}
+
 // Never throws, so fetchRange can decide whether another attempt is worth it.
 async function tryFetchRange(
 	fetcher: RangeFetcher,
@@ -31,7 +56,11 @@ async function tryFetchRange(
 ): Promise<RangeResult> {
 	try {
 		const res = await fetcher({ headers: { range: `bytes=${start}-${end}` } });
-		if (res.ok || res.status === 206) return { data: new Uint8Array(await res.arrayBuffer()) };
+		// A server that ignores Range answers 200 with the whole file, which
+		// is only usable (and only read) up to the window that was asked for.
+		if (res.status === 206 || (res.status === 200 && start === 0)) {
+			return { data: await readUpTo(res, end - start + 1) };
+		}
 		return { status: res.status };
 	} catch (err) {
 		console.warn('[containerIndex] range fetch threw', err);

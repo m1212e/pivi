@@ -1,5 +1,6 @@
 // Everything the install/update logic reaches outside itself for, gathered so a
 // test can hand in fakes and the real wiring lives in one place.
+import { publicFetch } from './publicFetch';
 import { processControl } from './manager';
 import { RegistryClient } from './registry';
 import { verifyImageSignature } from './signature';
@@ -36,7 +37,7 @@ export type AppDeps = {
 /** The real wiring, used by app management, the home screen tiles and lifecycle.ts. */
 export const defaultAppDeps: AppDeps = {
 	store: dbAppStore,
-	registry: new RegistryClient(),
+	registry: new RegistryClient(fetch, publicFetch),
 	backend: microsandboxBackend,
 	verify: verifyImageSignature,
 	control: processControl

@@ -173,6 +173,9 @@ const MAX_SCREENS = 32;
 const MAX_SCREEN_BYTES = 8 << 20;
 // One protocol message from the app. Far below the SDK's own default, since
 // the host reads every running app's output and a screen never gets near it.
+// Far above anything a real app sends (a screen update is a handful per second).
+const MAX_MESSAGES_PER_SECOND = 5000;
+
 const MAX_MESSAGE_BYTES = 4 << 20;
 // Every link pops up a prompt on the phone, so an app can't keep spamming it.
 const OPEN_ON_PHONE_INTERVAL_MS = 5_000;
@@ -385,10 +388,28 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	const logStderr = createStderrLogger(manifest.id);
 	const splitter = new LineSplitter(MAX_MESSAGE_BYTES);
 
+	// A stream of tiny valid messages stays under the size cap but still makes
+	// the host parse and dispatch without end, so a runaway rate stops the app.
+	let windowStart = Date.now();
+	let windowCount = 0;
+	const overRate = () => {
+		const now = Date.now();
+		if (now - windowStart >= 1000) {
+			windowStart = now;
+			windowCount = 0;
+		}
+		return ++windowCount > MAX_MESSAGES_PER_SECOND;
+	};
+
 	const sandbox: RunningSandbox = await options.start({
 		onStdout(chunk) {
 			try {
 				for (const line of splitter.push(chunk)) {
+					if (overRate()) {
+						console.error(`[app:${manifest.id}] sending too many messages; stopping it`);
+						void sandbox.stop();
+						return;
+					}
 					try {
 						reader.push(JSON.parse(line));
 					} catch {

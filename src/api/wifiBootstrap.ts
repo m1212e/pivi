@@ -4,10 +4,11 @@
 // (NetworkSetup.svelte) and the joined phone then drives the /wifi screen.
 import { getNetworkState, isAvailable, startHotspot, type NetworkState } from './wifi';
 
-// A wired device, a radio already on a network or one still serving the AP
-// from a previous boot ('hotspot') needs no new AP.
+// A wired device or a radio already on a network needs no AP. One still serving
+// the AP from a previous boot ('hotspot') does need it brought up again, since
+// the passphrase is new each boot and the old profile still holds the old one.
 function needsProvisioning(network: Pick<NetworkState, 'mode' | 'online' | 'ethernet'>): boolean {
-	return !network.ethernet && !network.online && network.mode === 'disconnected';
+	return !network.ethernet && !network.online && network.mode !== 'client';
 }
 
 /** Started once from handlers/register.ts so a fresh device can be set up from a phone. */

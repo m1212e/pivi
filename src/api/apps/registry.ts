@@ -112,18 +112,32 @@ export class RegistryClient {
 	// refetch, so no expiry handling: a stale one just earns a fresh challenge.
 	private readonly tokens = new Map<string, string>();
 
-	constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+	// `remoteFetch` is used for any registry that isn't on this machine, and is
+	// where the SSRF guard goes (see publicFetch.ts). It defaults to fetchImpl
+	// so tests can fake a registry with one function.
+	constructor(
+		private readonly fetchImpl: typeof fetch = fetch,
+		private readonly remoteFetch: typeof fetch = fetchImpl
+	) {}
+
+	private fetchFor(registry: string): typeof fetch {
+		return isLocalRegistry(registry) ? this.fetchImpl : this.remoteFetch;
+	}
 
 	private url(ref: ImageRef, path: string): string {
 		return `${schemeFor(ref.registry)}://${registryApiHost(ref.registry)}/v2/${ref.repository}/${path}`;
 	}
 
-	private async authorize(challenge: Challenge, cacheKey: string): Promise<string> {
+	private async authorize(
+		challenge: Challenge,
+		cacheKey: string,
+		registry: string
+	): Promise<string> {
 		const url = new URL(challenge.realm);
 		if (challenge.service) url.searchParams.set('service', challenge.service);
 		if (challenge.scope) url.searchParams.set('scope', challenge.scope);
 
-		const response = await this.fetchImpl(url).catch(() => unreachable(url.host));
+		const response = await this.fetchFor(registry)(url).catch(() => unreachable(url.host));
 		if (!response.ok) throw new RegistryError(`Registry denied access (${response.status})`);
 		const body = z
 			.object({ token: z.string().optional(), access_token: z.string().optional() })
@@ -139,7 +153,7 @@ export class RegistryClient {
 		const url = this.url(ref, path);
 		const cacheKey = `${ref.registry}/${ref.repository}`;
 		const send = (token?: string) =>
-			this.fetchImpl(url, {
+			this.fetchFor(ref.registry)(url, {
 				headers: {
 					...(accept ? { Accept: accept } : {}),
 					...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -151,7 +165,7 @@ export class RegistryClient {
 		if (response.status === 401) {
 			const challenge = parseBearerChallenge(response.headers.get('www-authenticate'));
 			if (!challenge) throw new RegistryError(`${ref.registry} requires authentication`);
-			response = await send(await this.authorize(challenge, cacheKey)).catch(() =>
+			response = await send(await this.authorize(challenge, cacheKey, ref.registry)).catch(() =>
 				unreachable(ref.registry)
 			);
 		}

@@ -8,6 +8,7 @@
 // goes over D-Bus first (wifiDbus.ts) so the password stays out of argv, with
 // nmcli as the fallback.
 import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 import { connectViaDbus } from './wifiDbus';
 
@@ -27,11 +28,20 @@ const WIFI_INTERFACE = process.env.PIVI_WIFI_INTERFACE || undefined;
 const HOTSPOT_CONNECTION = 'pivi-hotspot';
 
 const HOTSPOT_SSID = process.env.PIVI_HOTSPOT_SSID || 'pivi-setup';
-// WPA2 requires 8 characters minimum. Deliberately not a secret, it is shown
-// on the TV screen, and its only job is to keep the AP from being open (an
-// open AP makes some phones refuse to auto-join, and invites neighbours onto
-// the provisioning portal).
-const HOTSPOT_PASSWORD = process.env.PIVI_HOTSPOT_PASSWORD || 'pivi-setup';
+// Random per boot unless one is configured, so there is no well-known default
+// that opens every unconfigured device's setup network. It is shown on the TV
+// screen and encoded in the QR code next to it, so nobody has to type it. WPA2
+// requires 8 characters minimum; the alphabet leaves out look-alikes (0/O, 1/l).
+const PASSPHRASE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+
+function randomPassphrase(length = 10): string {
+	return Array.from(
+		randomBytes(length),
+		(byte) => PASSPHRASE_ALPHABET[byte % PASSPHRASE_ALPHABET.length]
+	).join('');
+}
+
+const HOTSPOT_PASSWORD = process.env.PIVI_HOTSPOT_PASSWORD || randomPassphrase();
 
 /** Lets the /wifi screen show which networks need a password. */
 export type WifiSecurity = 'open' | 'wep' | 'wpa' | 'enterprise';

@@ -52,6 +52,7 @@ import {
 	textNotification,
 	textParamsSchema
 } from './remoteProtocol';
+import { createReconnector } from './reconnect';
 import { connectRemoteSession, type RemoteSession } from './session';
 
 /** The TV's last pushed screen state, also typed into the remote page's tab components. */
@@ -198,33 +199,58 @@ export function createRemoteController() {
 		);
 		conn.listen();
 
-		connectRemoteSession(takePairingTokenFromUrl(), {
-			// Every message on this channel is a real JSON-RPC frame the TV's connection produced.
-			onMessage: (message) => reader.push(message as unknown as Message),
-			onClose: () => (connected = false),
-			onAwaitingApproval: () => {
-				if (!cancelled) phase = 'awaiting-approval';
-			}
-		})
-			.then((result) => {
-				if (cancelled) return;
-				if (!result) {
-					phase = 'not-paired';
-					return;
+		// The phone is the side that has to come back after a drop (Wi-Fi
+		// blip, screen lock): the TV can't dial a phone. The pairing token is
+		// single use and already consumed, so later attempts go with the stored
+		// device credentials.
+		let everConnected = false;
+		const reconnector = createReconnector(() => attempt(null));
+
+		function attempt(token: string | null) {
+			connectRemoteSession(token, {
+				// Every message on this channel is a real JSON-RPC frame the TV's connection produced.
+				onMessage: (message) => reader.push(message as unknown as Message),
+				onClose: () => {
+					connected = false;
+					session = undefined;
+					if (!cancelled && everConnected) reconnector.lost();
+				},
+				onAwaitingApproval: () => {
+					if (!cancelled) phase = 'awaiting-approval';
 				}
-				session = result;
-				connected = true;
-				phase = 'ready';
-				conn.sendNotification(requestStateNotification);
 			})
-			.catch((err: unknown) => {
-				if (cancelled) return;
-				errorMessage = err instanceof Error ? err.message : String(err);
-				phase = 'error';
-			});
+				.then((result) => {
+					if (cancelled) {
+						result?.close();
+						return;
+					}
+					if (!result) {
+						phase = 'not-paired';
+						return;
+					}
+					session = result;
+					connected = true;
+					everConnected = true;
+					reconnector.connected();
+					phase = 'ready';
+					conn.sendNotification(requestStateNotification);
+				})
+				.catch((err: unknown) => {
+					if (cancelled) return;
+					if (everConnected) {
+						reconnector.lost();
+						return;
+					}
+					errorMessage = err instanceof Error ? err.message : String(err);
+					phase = 'error';
+				});
+		}
+
+		attempt(takePairingTokenFromUrl());
 
 		return () => {
 			cancelled = true;
+			reconnector.stop();
 			conn.dispose();
 			session?.close();
 		};

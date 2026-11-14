@@ -207,11 +207,13 @@ in
         };
 
         password = lib.mkOption {
-          type = lib.types.str;
-          default = "pivi-setup";
+          type = lib.types.nullOr lib.types.str;
+          default = null;
           description = ''
             Passphrase for the setup access point (WPA2, so at least 8
-            characters).
+            characters). Left unset, a random one is generated on every boot,
+            so there is no well-known default; it is shown on the television
+            either way.
 
             Not a secret, and deliberately not read from a file: it is printed
             on the television and encoded into the QR code next to it. Its only
@@ -374,6 +376,8 @@ in
         # found would be a miserable thing to debug on a television.
         PIVI_NMCLI = "${lib.getExe' pkgs.networkmanager "nmcli"}";
         PIVI_HOTSPOT_SSID = cfg.wifi.hotspot.ssid;
+      }
+      // lib.optionalAttrs (cfg.wifi.provisioning && cfg.wifi.hotspot.password != null) {
         PIVI_HOTSPOT_PASSWORD = cfg.wifi.hotspot.password;
       }
       // lib.optionalAttrs (cfg.wifi.provisioning && cfg.wifi.interface != null) {

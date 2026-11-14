@@ -177,7 +177,21 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 	 * Starts playback from scratch on whatever stream `meta` describes. Also
 	 * used for quality switches, which are a fresh setup on a different stream.
 	 */
-	async function setupPlayback(meta: QualityMeta, resumeSeconds: number) {
+	// Setups run one at a time. Two overlapping ones (a quality switch during
+	// startup) would each create a Shaka player and leave two on one <video>.
+	let setupQueue: Promise<void> = Promise.resolve();
+
+	function setupPlayback(meta: QualityMeta, resumeSeconds: number): Promise<void> {
+		setupQueue = setupQueue
+			.then(() => runSetup(meta, resumeSeconds))
+			.catch((err: unknown) => {
+				console.error('playback setup failed', err);
+				failed = true;
+			});
+		return setupQueue;
+	}
+
+	async function runSetup(meta: QualityMeta, resumeSeconds: number) {
 		const el = getVideo();
 		if (!el) return;
 		// The playlist already lists every tier, a switch stays on the same player.
