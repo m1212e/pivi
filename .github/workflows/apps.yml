@@ -48,7 +48,7 @@ jobs:
       # label comes from the same schema check the local build uses.
       - id: manifest
         run: |
-          manifest=$(bun scripts/apps.ts manifest apps/${{ matrix.app }})
+          manifest=$(bun --conditions pivi-source scripts/apps.ts manifest apps/${{ matrix.app }})
           echo "id=$(jq -r .id <<<"$manifest")" >> "$GITHUB_OUTPUT"
           echo "version=$(jq -r .version <<<"$manifest")" >> "$GITHUB_OUTPUT"
           {

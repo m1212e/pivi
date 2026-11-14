@@ -3,7 +3,11 @@
 //   bun run app:build <app dir> <image tag>   build one app image
 //   bun run apps:build-all [registry] [--no-push]
 //                                             build and push every app under apps/
-//   bun scripts/apps.ts manifest <app dir>    print the validated manifest label (CI)
+//   bun --conditions pivi-source scripts/apps.ts manifest <app dir>
+//                                             print the validated manifest label (CI)
+//
+// `--conditions pivi-source` reads @pivi/sdk from its TypeScript sources, so the SDK
+// doesn't have to be built first (the package.json scripts pass it).
 //   bun run apps:protocol [output path]       write the protocol JSON Schema
 //
 // A plain `docker build` can't attach the manifest, and the host refuses an image

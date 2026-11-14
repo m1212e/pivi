@@ -22,7 +22,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Both dependency trees on both systems, before the package that needs them.
+  # They are fixed-output derivations with one hash per system (see
+  # nix/package.nix), so a lockfile change invalidates all four. Building each
+  # tree separately on a native runner per system, instead of letting the
+  # package fail on the first mismatch, means one run prints every hash that
+  # needs updating: copy the `got:` values into nix/package.nix.
+  hashes:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Check the dependency hashes
+        run: |
+          status=0
+          for tree in nodeModules prodNodeModules; do
+            nix build ".#pivi.$tree" --no-link --print-build-logs || status=1
+          done
+          exit $status
+
   nix:
+    needs: hashes
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -41,19 +69,6 @@ jobs:
       # misspelled option or a malformed attribute fails here.
       - name: Evaluate the flake
         run: nix flake check --no-build --print-build-logs
-
-      # Both dependency trees, before the package that needs them. They are
-      # fixed-output derivations, so a lockfile change invalidates their hashes —
-      # and building them separately (rather than letting the package fail on the
-      # first mismatch) means one run reports every hash that needs updating
-      # instead of one per push.
-      - name: Check the dependency hashes
-        run: |
-          status=0
-          for tree in nodeModules prodNodeModules; do
-            nix build ".#pivi.$tree" --no-link --print-build-logs || status=1
-          done
-          exit $status
 
       # The real thing, natively: dependencies, svelte-kit build, wrappers.
       #
