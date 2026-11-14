@@ -147,6 +147,8 @@ stdenv.mkDerivation {
       ../tsconfig.json
       ../vite.config.ts
       ../drizzle.config.ts
+      # The generated migrations, which pivi-db-migrate applies (installed below).
+      ../drizzle
       ../src
       ../packages
       ../static
