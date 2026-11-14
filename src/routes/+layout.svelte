@@ -2,6 +2,8 @@
 	import { ROUTES, isPlayPath, isRemotePath, loginHref } from '#lib/routes';
 	import { tick, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import LaunchBackdrop from '#lib/components/LaunchBackdrop.svelte';
+	import { launchBackdrop } from '#lib/state/launchBackdrop.svelte';
 	import { LoaderCircle } from '@lucide/svelte';
 	import type { Path } from '$app/types';
 	import { resolve } from '$app/paths';
@@ -133,6 +135,7 @@
 		to: string
 	) {
 		const card = navigation.to && tagPlayerCard(navigation.to.url);
+		launchBackdrop.url = card?.querySelector('img')?.currentSrc || null;
 		applyViewTransitionKind(from, to);
 		const transition = document.startViewTransition(async () => {
 			// Two elements sharing a name abort the whole transition.
@@ -209,8 +212,9 @@
 		class="fixed inset-0 z-40 flex items-center justify-center bg-black"
 		style:view-transition-name="player-video"
 	>
+		<LaunchBackdrop />
 		<!-- Held back until the grow is over, so a quick resolve shows no spinner at all. -->
-		<div in:fade={{ delay: 450, duration: 200 }}>
+		<div class="relative" in:fade={{ delay: 450, duration: 200 }}>
 			<LoaderCircle class="size-12 animate-spin text-white/80" />
 		</div>
 	</div>

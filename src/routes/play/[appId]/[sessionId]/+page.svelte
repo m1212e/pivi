@@ -37,6 +37,9 @@
 	import { toSubtitleTracks } from '#lib/playback/subtitles';
 	import { createSessionUrls, nextSessionHref } from '#lib/playback/urls';
 	import { browserStorage } from '#lib/storage';
+	import LaunchBackdrop from '#lib/components/LaunchBackdrop.svelte';
+	import { launchBackdrop } from '#lib/state/launchBackdrop.svelte';
+	import { onDestroy } from 'svelte';
 	import BottomOverlay from './BottomOverlay.svelte';
 	import ChatPanel from './ChatPanel.svelte';
 	import type { ChatMode } from '#lib/playback/chatMode';
@@ -321,6 +324,13 @@
 		}
 		goBack();
 	}
+
+	// The softened thumbnail stays up until the video has something to show.
+	let firstFrame = $state(false);
+	$effect(() => {
+		if (!engine.buffering) firstFrame = true;
+	});
+	onDestroy(() => (launchBackdrop.url = null));
 </script>
 
 <svelte:head><title>{title || m.playing()}</title></svelte:head>
@@ -338,6 +348,9 @@
 		{#if engine.failed}
 			<ErrorScreen message={m.stream_stopped()} onBack={goBack} />
 		{:else}
+			{#if !firstFrame}
+				<LaunchBackdrop />
+			{/if}
 			<!-- No src here, setupPlayback sets it since the mode isn't known until it tries. -->
 			<video
 				bind:this={videoEl}
