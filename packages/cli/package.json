@@ -1,6 +1,6 @@
 {
 	"name": "@pivi/cli",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Build, test and ship pivi apps: scaffold a project, run it against a fake host, validate it.",
 	"license": "Apache-2.0",
 	"repository": {

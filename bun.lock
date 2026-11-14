@@ -74,7 +74,7 @@
     },
     "packages/cli": {
       "name": "@pivi/cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "pivi-app": "./dist/cli.mjs",
       },

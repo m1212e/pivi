@@ -5,9 +5,9 @@
 # version bump in the package's package.json.
 #
 # Packages are packed with `bun pm pack`, which turns `workspace:*` into the real
-# version, and the tarball is published with npm, which signs it with provenance
-# in CI. Each release is tagged `<name>-v<version>` (sdk-v0.1.0) with a GitHub
-# release.
+# version, and the tarball is published with npm, which authenticates through
+# trusted publishing (OIDC) and signs it with provenance in CI. Each release is
+# tagged `<name>-v<version>` (sdk-v0.1.0) with a GitHub release.
 #
 #   DRY_RUN=1 scripts/release-packages.sh   show what would happen, publish nothing
 set -euo pipefail

@@ -9,7 +9,8 @@ name: Packages
 #
 # Bump the SDK's major (minor while it is 0.x) whenever PROTOCOL_VERSION changes,
 # and the CLI's @pivi/sdk peer range with it (packages/cli/src/peer.spec.ts fails
-# until you do). Publishing needs an NPM_TOKEN secret with publish rights for @pivi.
+# until you do). Publishing uses npm trusted publishing (OIDC): both packages trust this
+# repository's packages.yml on npmjs.com, so no token is stored anywhere.
 on:
   pull_request:
     paths:
@@ -44,7 +45,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write # tags and GitHub releases
-      id-token: write # npm provenance
+      id-token: write # npm trusted publishing and provenance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,12 +53,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@^11.5.1
       - run: bun install --frozen-lockfile
       - name: Publish changed packages
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
