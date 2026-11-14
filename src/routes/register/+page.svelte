@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import type { Path } from '$app/types';
 	import Button from '#lib/components/Button.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import PinPad from '#lib/components/PinPad.svelte';
@@ -38,7 +40,7 @@
 			// The previous profile's cached query results must not leak into the
 			// new one; urql's cache can't be cleared outright (see client.ts).
 			resetClientState();
-			await goto(ROUTES.home);
+			await goto(resolve(ROUTES.home as Path));
 		} catch (err) {
 			message = graphQLErrorMessage(err, m.could_not_create_profile());
 			pin = '';
@@ -61,7 +63,7 @@
 	class="relative flex min-h-screen flex-col items-center justify-center gap-8 bg-linear-to-br from-slate-950 via-indigo-950 to-slate-950 px-8 py-16 text-white"
 >
 	<a
-		href="/"
+		href={resolve('/')}
 		onclick={(event) => {
 			if (step === 'pin') {
 				event.preventDefault();

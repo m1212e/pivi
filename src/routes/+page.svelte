@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import type { Path } from '$app/types';
 	import { ROUTES, loginHref } from '#lib/routes';
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
@@ -82,7 +84,7 @@
 		{#each profiles as profile (profile.id)}
 			{@const label = profile.username}
 			<a
-				href={loginHref(profile.id)}
+				href={resolve(loginHref(profile.id) as Path)}
 				data-pivi-profile-id={profile.id}
 				data-pivi-profile-username={label}
 				data-pivi-profile-image={profile.image ?? ''}
@@ -109,7 +111,7 @@
 		{/each}
 
 		<a
-			href={ROUTES.register}
+			href={resolve(ROUTES.register as Path)}
 			class="group flex w-32 flex-col items-center gap-3 focus:outline-none sm:w-36"
 		>
 			<span
