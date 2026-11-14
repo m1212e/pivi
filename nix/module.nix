@@ -91,7 +91,10 @@ in
 
     suggestedApps = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "ghcr.io/m1212e/pivi/pivi-youtube" ];
+      default = [
+        "ghcr.io/m1212e/pivi/pivi-youtube"
+        "ghcr.io/m1212e/pivi/pivi-twitch"
+      ];
       example = [ "ghcr.io/example/pivi-app:1.2.0" ];
       description = ''
         App images offered for one-tap install on the TV's apps screen. Only
