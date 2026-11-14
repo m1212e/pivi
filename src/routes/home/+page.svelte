@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { ROUTES, appHref } from '#lib/routes';
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
@@ -331,7 +332,7 @@
 				{/if}
 			</button>
 			<a
-				href={ROUTES.wifi}
+				href={resolve(ROUTES.wifi)}
 				aria-label={m.wifi_open_setup()}
 				title={m.wifi_open_setup()}
 				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"

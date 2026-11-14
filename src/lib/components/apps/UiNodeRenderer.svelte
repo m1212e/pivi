@@ -2,6 +2,8 @@
 	// Draws an app's screen on /apps/[appId] from the UiNode tree it sends, using
 	// the shell's own components. Apps only send structure, so they can't look
 	// different from the host. Visual details belong in those components.
+	import type { Path } from '$app/types';
+	import { resolve } from '$app/paths';
 	import TextInput from '#lib/components/TextInput.svelte';
 	import { inview } from 'svelte-inview';
 	import type { UiNode } from '#sdk/ui';
@@ -125,7 +127,7 @@
 		     global focus outline's own `outline-offset` already give enough
 		     visual breathing room without it. -->
 		<a
-			{href}
+			href={resolve(href as Path)}
 			style={widthStyle}
 			class="{containerRowClasses(
 				n
