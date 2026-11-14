@@ -36,7 +36,7 @@ let
   # This is only correct because the runtime dependencies are declared correctly.
   # adapter-node bundles everything in `devDependencies` into the build, so only
   # what has to stay outside it lives in `dependencies`: drizzle-kit, drizzle-orm,
-  # pg and nanoid because pivi-db-push loads the schema with them, microsandbox
+  # pg and nanoid because pivi-db-migrate loads the schema with them, microsandbox
   # for its native addon, and @opentelemetry/api because SvelteKit always leaves
   # it external.
   mkNodeModules =
@@ -224,13 +224,14 @@ stdenv.mkDerivation {
     #   - node_modules must sit at share/pivi/: the adapter-node output is not
     #     a self-contained bundle, and resolves its imports by walking up from
     #     build/.
-    #   - src/ + drizzle.config.ts + tsconfig.json are what `pivi-db-push`
-    #     needs (the schema is pushed from src/api/db/schema.ts; the repo has
-    #     no migration files).
+    #   - src/ + drizzle/ + drizzle.config.ts + tsconfig.json are what
+    #     `pivi-db-migrate` needs (the generated migrations in drizzle/, plus
+    #     the schema that drizzle.config.ts points at).
     #
     # Plugins are not part of this package: each is an OCI image the user
     # installs at runtime (see docs/plugins.md), run in a microVM.
     cp -R build deploy src $out/share/pivi/
+    cp -R drizzle $out/share/pivi/
     cp package.json drizzle.config.ts tsconfig.json $out/share/pivi/
 
     # The runtime tree, not the one the build just used.
@@ -249,8 +250,8 @@ stdenv.mkDerivation {
     # would fall back to fetching the package from the network when resolution
     # misses, which a packaged install must never do. Run under bun rather than
     # node because drizzle.config.ts is TypeScript.
-    makeWrapper ${bun}/bin/bun $out/bin/pivi-db-push \
-      --add-flags "$out/share/pivi/node_modules/drizzle-kit/bin.cjs push --force" \
+    makeWrapper ${bun}/bin/bun $out/bin/pivi-db-migrate \
+      --add-flags "$out/share/pivi/node_modules/drizzle-kit/bin.cjs migrate" \
       --chdir $out/share/pivi
 
     runHook postInstall

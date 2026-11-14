@@ -12,45 +12,25 @@ import { lookup as lookupCallback, type LookupAddress } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
-import { BlockList, isIP, type LookupFunction } from 'node:net';
+import ipaddr from 'ipaddr.js';
+import { isIP, type LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
 
-// Loopback, private, link-local, CGNAT, documentation and multicast ranges.
-const nonPublic = new BlockList();
-for (const [network, prefix] of [
-	['0.0.0.0', 8],
-	['10.0.0.0', 8],
-	['100.64.0.0', 10],
-	['127.0.0.0', 8],
-	['169.254.0.0', 16],
-	['172.16.0.0', 12],
-	['192.0.0.0', 24],
-	['192.0.2.0', 24],
-	['192.168.0.0', 16],
-	['198.18.0.0', 15],
-	['198.51.100.0', 24],
-	['203.0.113.0', 24],
-	['224.0.0.0', 4],
-	['240.0.0.0', 4]
-] as const) {
-	nonPublic.addSubnet(network, prefix, 'ipv4');
-}
-for (const [network, prefix] of [
-	['::', 128],
-	['::1', 128],
-	['fc00::', 7],
-	['fe80::', 10],
-	['ff00::', 8],
-	['2001:db8::', 32]
-] as const) {
-	nonPublic.addSubnet(network, prefix, 'ipv6');
-}
-
-// An IPv4 address written into an IPv6 one (::ffff:10.0.0.1, or the NAT64 form)
-// is judged as the IPv4 address it carries.
-function embeddedIpv4(address: string): string | undefined {
-	const match = address.toLowerCase().match(/^(?:::ffff:|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/);
-	return match?.[1];
+// An address is public only when ipaddr.js classes it as plain unicast. That
+// leaves out loopback, private, link-local, CGNAT, documentation, benchmarking,
+// multicast, reserved, 6to4, Teredo and the other special-purpose ranges.
+function isPublicParsed(parsed: ipaddr.IPv4 | ipaddr.IPv6): boolean {
+	if (parsed.kind() === 'ipv6') {
+		const v6 = parsed as ipaddr.IPv6;
+		// NAT64 (64:ff9b::/96) carries an IPv4 address, which is what decides it.
+		if (v6.range() === 'rfc6052') {
+			const [, , , , , , high, low] = v6.parts;
+			return isPublicParsed(
+				ipaddr.IPv4.parse(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`)
+			);
+		}
+	}
+	return parsed.range() === 'unicast';
 }
 
 /**
@@ -58,11 +38,13 @@ function embeddedIpv4(address: string): string | undefined {
  * Non-IP input returns false, so it fails closed.
  */
 export function isPublicAddress(address: string): boolean {
-	const family = isIP(address);
-	if (family === 0) return false;
-	const embedded = family === 6 ? embeddedIpv4(address) : undefined;
-	if (embedded) return isPublicAddress(embedded);
-	return !nonPublic.check(address, family === 4 ? 'ipv4' : 'ipv6');
+	if (isIP(address) === 0) return false;
+	try {
+		// `process` turns an IPv4-mapped IPv6 address into the IPv4 it carries.
+		return isPublicParsed(ipaddr.process(address));
+	} catch {
+		return false;
+	}
 }
 
 /** Thrown by streamCache.ts when an app hands back a URL the host must not fetch. */

@@ -62,7 +62,7 @@
 		"unused-dependencies": "warn",
 		// `dependencies` is exactly what the nix runtime tree installs (see
 		// nix/package.nix's mkNodeModules), so it must hold what the built server
-		// loads unbundled -- drizzle-kit included, which pivi-db-push runs even
+		// loads unbundled -- drizzle-kit included, which pivi-db-migrate runs even
 		// though only drizzle.config.ts and specs import it. Client-only packages
 		// (lucide, qr-code-styling, ...) are bundled by vite and belong in
 		// devDependencies, so both of these checks point the wrong way here.

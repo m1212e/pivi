@@ -72,7 +72,8 @@ jobs:
         run: |
           set -euo pipefail
           test -x result/bin/pivi-server
-          test -x result/bin/pivi-db-push
+          test -x result/bin/pivi-db-migrate
           test -f result/share/pivi/build/handler.js
           test -d result/share/pivi/node_modules
+          test -f result/share/pivi/drizzle/*_init/migration.sql
           echo "OK"

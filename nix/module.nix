@@ -156,16 +156,11 @@ in
         type = lib.types.bool;
         default = true;
         description = ''
-          Push the Drizzle schema to the database before each start
-          (`drizzle-kit push --force`).
-
-          On by default because the repo ships no migration files — the schema
-          is push-based — so without this a fresh install has no tables at
-          all. `--force` means a schema change that Drizzle considers
-          destructive is applied without asking, which is tolerable for an
-          appliance holding pairing tokens and resume positions, and is not
-          what you want once there is data worth keeping. Turn it off and push
-          by hand (`pivi-db-push`) at that point.
+          Apply the generated Drizzle migrations (`drizzle-kit migrate`)
+          before each start. On by default so a fresh install gets its tables
+          and an upgrade gets its schema changes. Already applied migrations
+          are skipped, and nothing is dropped unless a migration says so. Turn
+          it off to run `pivi-db-migrate` by hand.
         '';
       };
     };
@@ -362,7 +357,7 @@ in
       environment = {
         DATABASE_URL = databaseUrl;
         NODE_ENV = "production";
-        # bun wants a home directory (pivi-db-push runs under it). ProtectHome
+        # bun wants a home directory (pivi-db-migrate runs under it). ProtectHome
         # makes the real one unreachable, so point it at the state dir.
         HOME = cfg.stateDir;
         # Apps run as OCI images in microVMs (src/api/apps/sandbox); this is
@@ -391,7 +386,7 @@ in
       // lib.optionalAttrs (cfg.remote.address != null) { PIVI_REMOTE_HOST = cfg.remote.address; };
 
       serviceConfig = {
-        ExecStartPre = lib.optional cfg.database.autoPush "${cfg.package}/bin/pivi-db-push";
+        ExecStartPre = lib.optional cfg.database.autoPush "${cfg.package}/bin/pivi-db-migrate";
         ExecStart = "${cfg.package}/bin/pivi-server";
         User = "pivi";
         Group = "pivi";

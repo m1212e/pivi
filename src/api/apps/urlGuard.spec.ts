@@ -83,3 +83,16 @@ describe('fetchPublic', () => {
 		await expect(fetchPublic('ftp://example.com/')).rejects.toBeInstanceOf(UnsafeUrlError);
 	});
 });
+
+describe('isPublicAddress special ranges', () => {
+	it('rejects NAT64, 6to4, Teredo and benchmarking addresses', () => {
+		expect(isPublicAddress('64:ff9b::7f00:1')).toBe(false);
+		expect(isPublicAddress('64:ff9b::808:808')).toBe(true);
+		expect(isPublicAddress('2002:7f00:1::')).toBe(false);
+		expect(isPublicAddress('2001::1')).toBe(false);
+		expect(isPublicAddress('2001:2::1')).toBe(false);
+		expect(isPublicAddress('::ffff:127.0.0.1')).toBe(false);
+		expect(isPublicAddress('8.8.8.8')).toBe(true);
+		expect(isPublicAddress('2606:4700:4700::1111')).toBe(true);
+	});
+});

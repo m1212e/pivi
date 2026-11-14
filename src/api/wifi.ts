@@ -3,11 +3,13 @@
 // query (handlers/network.ts) and the boot time AP (wifiBootstrap.ts).
 //
 // NetworkManager rather than wpa_supplicant because it also handles the AP,
-// its DHCP and DNS, and persisting credentials. The CLI rather than D-Bus
-// because every action here is coarse and nmcli's terse output is a stable
-// contract that needs no extra dependency.
+// its DHCP and DNS, and persisting credentials. The CLI for scanning and
+// status, since nmcli's terse output is a stable contract. Joining a network
+// goes over D-Bus first (wifiDbus.ts) so the password stays out of argv, with
+// nmcli as the fallback.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { connectViaDbus } from './wifiDbus';
 
 const run = promisify(execFile);
 
@@ -265,6 +267,14 @@ export async function connectToNetwork(
 	await stopHotspot();
 
 	try {
+		try {
+			await connectViaDbus(ssid, password, hidden, WIFI_INTERFACE);
+			return { ok: true };
+		} catch (error) {
+			// Not every machine runs NetworkManager's D-Bus API the way this
+			// expects, and nmcli's errors are better worded, so retry with it.
+			console.warn('wifi: D-Bus join failed, retrying with nmcli', error);
+		}
 		await nmcli(
 			'device',
 			'wifi',
