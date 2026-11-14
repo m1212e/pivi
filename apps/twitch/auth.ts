@@ -8,12 +8,13 @@
 // restarts. Nothing else about the account is stored, everything personal is
 // asked of Twitch when it's shown.
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { storagePath } from '@pivi/sdk/storage';
 
 /** The Twitch Android TV app's client id. GQL requests with its tokens must send it too. */
 export const TV_CLIENT_ID = 'ue6666qo983tsx6so1t0vnawi233wa';
 
 const ID_BASE = 'https://id.twitch.tv/oauth2';
-const FILE = '/storage/twitch-auth.json';
+const FILE = storagePath('twitch-auth.json');
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 // Refreshed this long before it runs out, so a request never races the expiry.
 const EXPIRY_MARGIN_MS = 5 * 60_000;

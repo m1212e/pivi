@@ -15,6 +15,7 @@ export default defineConfig({
 		limits: 'src/limits.ts',
 		schema: 'src/schema.ts',
 		rpc: 'src/rpc.ts',
+		storage: 'src/storage.ts',
 		app: 'src/app.ts'
 	},
 	format: 'esm',

@@ -1,7 +1,8 @@
 // The last searches, kept per profile in the storage volume.
 import { readFile, writeFile } from 'node:fs/promises';
+import { storagePath } from '@pivi/sdk/storage';
 
-const FILE = '/storage/recent-searches.json';
+const FILE = storagePath('recent-searches.json');
 const LIMIT = 10;
 
 let recent: string[] = [];

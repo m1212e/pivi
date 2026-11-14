@@ -11,7 +11,7 @@ name: SDK package
 # says `"private": true`.
 on:
   pull_request:
-    paths: ['packages/sdk/**', '.github/workflows/sdk.yml']
+    paths: ['packages/**', '.github/workflows/sdk.yml']
   push:
     tags: ['sdk-v*']
 
@@ -26,6 +26,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run sdk:check
+      - run: bun run cli:check
       - run: bunx vitest --run --project server packages/sdk
 
   publish:

@@ -28,6 +28,9 @@ in an app project, `packages/sdk/` in the pivi repository.
 
 ## Workflow
 
+Start a project with `pivi-app init` (`npx @pivi/cli init my-app`): it scaffolds the manifest,
+`main.ts`, `service.ts`, a Dockerfile, tests and CI.
+
 1. **Understand the service first.** Before writing any pivi code, work out how to get from a
    video id to a playable URL, and how a person signs in (if they must). Prove it with plain
    `fetch` or `curl`. Most of the effort of an app is here, not in pivi.
@@ -72,6 +75,9 @@ handler without its feature is dead code, and a feature without its handler is a
 - `id`: lowercase letters, digits and dashes. `protocol` must equal the SDK's `PROTOCOL_VERSION`.
 - **Permissions** are `network`, `storage` (persistent `/storage`, per profile) and `cache`
   (disposable `/cache`). The user approves them at install, and the sandbox enforces them.
+  Never write `'/storage'` by hand: use `storagePath('file.json')` and `cachePath(...)` from
+  `@pivi/sdk/storage` (plus `readJson`, `writeJson`, `removeFile`, `hasStorage`, `hasCache`). They
+  resolve to the volumes in pivi and to local folders under `pivi-app dev` and in tests.
 - `network.domains` is required exactly when `network` is requested. Entries are hostnames or
   `*.suffix`, never IPs, ports, paths or overly broad wildcards like `*.com`.
 - **List every host you touch**: the API, the CDN the video comes from, each host an HLS
@@ -156,8 +162,9 @@ container, let the person enter it on their phone, and poll the service for the 
 the user first; it is rate limited, so send it once).
 
 - Never embed a client secret. Use the service's public device or TV client id where one exists.
-- Store tokens in `/storage` (permission `storage`): they then persist per profile across
-  restarts. Without that permission the session is gone after a restart.
+- Store tokens with `writeJson(storagePath('auth.json'), tokens)` (permission `storage`): they
+  then persist per profile across restarts. `writeJson` writes atomically with mode 0600. Without
+  the permission the session is gone after a restart, and `hasStorage()` is false.
 - Refresh shortly before expiry and once on a 401. Share one in-flight refresh promise so
   concurrent callers don't reuse a rotated refresh token. Clear the session only on a definitive
   refusal (400, 401, `invalid_grant`), never on a network error.
@@ -166,26 +173,44 @@ the user first; it is rate limited, so send it once).
 
 ## Testing
 
-Until the pivi dev tooling exists, test in three layers:
+The `pivi-app` CLI (`@pivi/cli`, a dev dependency of apps made with `pivi-app init`) runs the app
+against a fake pivi host, so most problems show up before the TV does:
 
-1. **Pure logic** (parsing, URL building, playlist handling) with plain unit tests
-   (`bun test` or vitest). Fixture real responses.
-2. **The manifest**: `appManifestSchema.parse(manifestJson)`.
-3. **The protocol**: run the app as the host does and speak newline-delimited JSON-RPC to it:
+- `pivi-app validate`: static checks of the manifest and the code: invalid manifest, features
+  without code (and code without the feature), hosts spelled out in the source that
+  `network.domains` does not allow, writes to stdout, a missing Dockerfile.
+- `pivi-app dev`: starts the app, speaks the protocol to it and validates **every message in both
+  directions** with the SDK schemas, the way the host does. It then gives you a prompt (`help` lists
+  the commands): `status`, `dashboard`, `screen <id>`, `event <screen> <event> [value]`,
+  `stream <sessionId>`, `domains`, `problems`, `logs`.
+  - `stream <id>` resolves a stream, checks it against the schema and probes it: https, allowed
+    domains, a reachable URL, the segment index for separate tracks, the hosts an HLS playlist
+    references.
+  - **Network is enforced like the sandbox**: the app's traffic goes through a local proxy that lets
+    through only `network.domains`, over https. `domains` lists every host the app contacted and
+    which were blocked, `problems` everything the host would reject or drop. This catches the
+    classic "blank cards, nothing plays" cause, a host missing from the manifest.
+  - `pivi-app dev --exec "stream abc" --exec domains` runs commands once and exits non-zero when
+    anything is wrong, which is what an agent or CI should use. `--watch` restarts on changes.
+  - `/storage` and `/cache` do not exist locally: `PIVI_STORAGE_DIR` and `PIVI_CACHE_DIR` point at
+    `.pivi-dev/`, but only for permissions the manifest requests, as in the sandbox. Storage
+    survives restarts, so a sign-in stays signed in while you iterate.
+- Plain unit tests (`bun test`) for pure logic (parsing, URL building, playlist handling), with
+  recorded responses as fixtures, and a test that `appManifestSchema.parse`s the manifest.
 
-   ```sh
-   printf '%s\n' \
-     '{"jsonrpc":"2.0","method":"host/activate","params":{"locale":"en-US"}}' \
-     '{"jsonrpc":"2.0","id":1,"method":"app/resolveStream","params":{"sessionId":"abc"}}' \
-     | bun run main.ts
-   ```
+Run `pivi-app dev` and read `problems` and `domains` after every change that touches the network
+or what the app publishes. A new project from `pivi-app init` has all of this set up.
 
-   Expect `app/ready` first, then publishes and the response. Validate what comes out with the
-   exported schemas (`dashboardContributionSchema`, `appScreenSchema`, `resolvedStreamSchema`).
-   `packages/sdk/test/demoApp.ts` and `src/app.spec.ts` show the pattern in a test.
+Without the CLI, run the app as the host does and speak newline-delimited JSON-RPC to it:
 
-Mind that locally nothing enforces your `network.domains`: a request to a host you forgot only
-fails inside pivi. Check the list against the hosts your logs actually contact.
+```sh
+printf '%s\n' \
+  '{"jsonrpc":"2.0","method":"host/activate","params":{"locale":"en-US"}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"app/resolveStream","params":{"sessionId":"abc"}}' \
+  | bun run main.ts
+```
+
+`packages/sdk/test/demoApp.ts` and `src/app.spec.ts` show the pattern in a test.
 
 ## Packaging
 

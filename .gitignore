@@ -33,3 +33,6 @@ project.inlang/cache/
 # Built by tsdown, see packages/sdk
 /packages/*/dist
 /packages/*/schema
+
+# Local /storage and /cache of `pivi-app dev`
+.pivi-dev

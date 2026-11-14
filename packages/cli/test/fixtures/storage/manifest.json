@@ -1,0 +1,8 @@
+{
+	"id": "storage",
+	"name": "Storage",
+	"version": "0.0.1",
+	"protocol": 2,
+	"features": ["dashboard"],
+	"permissions": ["storage"]
+}

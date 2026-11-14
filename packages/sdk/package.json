@@ -12,8 +12,7 @@
 		"skills",
 		".claude-plugin",
 		"README.md",
-		"LICENSE",
-		"NOTICE"
+		"LICENSE"
 	],
 	"scripts": {
 		"build": "tsdown && bun run schema && bun run skill",
@@ -69,6 +68,10 @@
 			"pivi-source": "./src/schema.ts",
 			"default": "./dist/schema.js"
 		},
+		"./storage": {
+			"pivi-source": "./src/storage.ts",
+			"default": "./dist/storage.js"
+		},
 		"./ui": {
 			"pivi-source": "./src/ui.ts",
 			"default": "./dist/ui.js"
@@ -86,6 +89,7 @@
 			"./protocol": "./dist/protocol.js",
 			"./rpc": "./dist/rpc.js",
 			"./schema": "./dist/schema.js",
+			"./storage": "./dist/storage.js",
 			"./ui": "./dist/ui.js",
 			"./package.json": "./package.json"
 		}

@@ -19,6 +19,8 @@
 		"apps:protocol": "bun scripts/apps.ts protocol",
 		"sdk:build": "bun run --cwd packages/sdk build",
 		"sdk:check": "bun run --cwd packages/sdk build && bun run --cwd packages/sdk lint:package",
+		"cli:build": "bun run --cwd packages/cli build",
+		"cli:check": "bun run --cwd packages/cli build && bun run --cwd packages/cli lint:package",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"db:start": "docker compose up",

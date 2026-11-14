@@ -20,4 +20,5 @@ jobs:
       - run: bun run check
       - run: bun run lint
       - run: bun run sdk:check
+      - run: bun run cli:check
       - run: bunx vitest --run --project server

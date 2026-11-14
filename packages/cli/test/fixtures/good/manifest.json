@@ -1,0 +1,9 @@
+{
+	"id": "good",
+	"name": "Good",
+	"version": "0.0.1",
+	"protocol": 2,
+	"features": ["dashboard", "screen"],
+	"permissions": [],
+	"entryScreenId": "main"
+}

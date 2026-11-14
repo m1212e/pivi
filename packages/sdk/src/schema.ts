@@ -41,7 +41,7 @@ import {
 import { featureSchema, type Feature } from './manifest';
 
 // One row per protocol method, so the published document can't drift from protocol.ts.
-type MethodSpec = {
+export type MethodSpec = {
 	method: string;
 	// Who sends it.
 	from: 'app' | 'host';
@@ -197,6 +197,9 @@ const METHODS: MethodSpec[] = [
 		params: chatMessagesParamsSchema
 	}
 ];
+
+/** Every protocol method with its direction, feature gate and zod schemas, for tooling that speaks the protocol (the pivi CLI). */
+export const protocolMethods: readonly MethodSpec[] = METHODS;
 
 // Input side of each schema, since that is what the sender has to produce.
 // Unrepresentable zod types become `any` instead of failing the release build.

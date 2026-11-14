@@ -1,0 +1,9 @@
+{
+	"id": "bad",
+	"name": "Bad",
+	"version": "0.0.1",
+	"protocol": 2,
+	"features": ["dashboard", "playback"],
+	"permissions": ["network"],
+	"network": { "domains": ["allowed.example.com"] }
+}

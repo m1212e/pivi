@@ -1,0 +1,53 @@
+{
+	"name": "@pivi/cli",
+	"version": "0.1.0",
+	"description": "Build, test and ship pivi apps: scaffold a project, run it against a fake host, validate it.",
+	"license": "Apache-2.0",
+	"type": "module",
+	"bin": {
+		"pivi-app": "./dist/cli.mjs"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "tsdown",
+		"start": "bun --conditions pivi-source src/cli.ts",
+		"lint:package": "publint && attw --pack . --profile esm-only"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"dependencies": {
+		"@clack/prompts": "^0.11.0"
+	},
+	"peerDependencies": {
+		"@pivi/sdk": "^0.1"
+	},
+	"devDependencies": {
+		"@pivi/sdk": "workspace:*",
+		"@arethetypeswrong/cli": "^0.18.5",
+		"publint": "^0.3.25",
+		"tsdown": "^0.23.7"
+	},
+	"exports": {
+		".": {
+			"pivi-source": "./src/index.ts",
+			"default": "./dist/index.mjs"
+		},
+		"./cli": {
+			"pivi-source": "./src/cli.ts",
+			"default": "./dist/cli.mjs"
+		},
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"exports": {
+			".": "./dist/index.mjs",
+			"./cli": "./dist/cli.mjs",
+			"./package.json": "./package.json"
+		}
+	}
+}

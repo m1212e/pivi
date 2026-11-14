@@ -69,18 +69,19 @@ complete, real example.
 
 ## Entry points
 
-| Import                | What it is                                                                  | Runs in    |
-| --------------------- | --------------------------------------------------------------------------- | ---------- |
-| `@pivi/sdk`           | Everything below that is browser-safe, re-exported                          | anywhere   |
-| `@pivi/sdk/manifest`  | `appManifestSchema`, permissions, features, `MANIFEST_LABEL`                | anywhere   |
-| `@pivi/sdk/protocol`  | Every host/app message, `PROTOCOL_VERSION`, `ResolvedStream`                | anywhere   |
-| `@pivi/sdk/dashboard` | Home cards and actions (tier 1)                                             | anywhere   |
-| `@pivi/sdk/ui`        | Declarative screens (tier 2)                                                | anywhere   |
-| `@pivi/sdk/icons`     | The host's icon names                                                       | anywhere   |
-| `@pivi/sdk/limits`    | Size caps applied to everything an app sends                                | anywhere   |
-| `@pivi/sdk/app`       | `defineApp`, `createStdioConnection`                                        | Node / Bun |
-| `@pivi/sdk/schema`    | `buildProtocolDocument()`, the protocol as JSON Schema                      | tooling    |
-| `@pivi/sdk/rpc`       | NDJSON framing and the JSON-RPC reader/writer, for hosts and test harnesses | anywhere   |
+| Import                | What it is                                                                               | Runs in    |
+| --------------------- | ---------------------------------------------------------------------------------------- | ---------- |
+| `@pivi/sdk`           | Everything below that is browser-safe, re-exported                                       | anywhere   |
+| `@pivi/sdk/manifest`  | `appManifestSchema`, permissions, features, `MANIFEST_LABEL`                             | anywhere   |
+| `@pivi/sdk/protocol`  | Every host/app message, `PROTOCOL_VERSION`, `ResolvedStream`                             | anywhere   |
+| `@pivi/sdk/dashboard` | Home cards and actions (tier 1)                                                          | anywhere   |
+| `@pivi/sdk/ui`        | Declarative screens (tier 2)                                                             | anywhere   |
+| `@pivi/sdk/icons`     | The host's icon names                                                                    | anywhere   |
+| `@pivi/sdk/limits`    | Size caps applied to everything an app sends                                             | anywhere   |
+| `@pivi/sdk/storage`   | `storagePath`, `cachePath`, `readJson`, `writeJson`: the `/storage` and `/cache` volumes | Node / Bun |
+| `@pivi/sdk/app`       | `defineApp`, `createStdioConnection`                                                     | Node / Bun |
+| `@pivi/sdk/schema`    | `buildProtocolDocument()`, the protocol as JSON Schema                                   | tooling    |
+| `@pivi/sdk/rpc`       | NDJSON framing and the JSON-RPC reader/writer, for hosts and test harnesses              | anywhere   |
 
 The protocol as a JSON Schema document is also shipped as
 `schema/protocol.schema.json`, for apps in other languages and for tools that
@@ -112,7 +113,9 @@ specification.
   reachable. HLS playlists and segments count too: every host they reference
   must be listed.
 - **State.** `/storage` is persistent per app and profile (permission
-  `storage`), `/cache` may be wiped at any time (permission `cache`).
+  `storage`), `/cache` may be wiped at any time (permission `cache`). Build paths
+  with `storagePath()` and `cachePath()` from `@pivi/sdk/storage`: they follow
+  `PIVI_STORAGE_DIR` and `PIVI_CACHE_DIR`, which `pivi-app dev` sets.
 - **Don't publish before `onActivate`.** Anything sent earlier is dropped.
 
 ## Developing in the pivi repository
@@ -124,4 +127,4 @@ export condition, so the host, the apps and the tests need no build step.
 
 ## License
 
-Apache-2.0, see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+Apache-2.0, see [LICENSE](./LICENSE).

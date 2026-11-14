@@ -9,7 +9,7 @@
 // lists, and fetching a release from GitHub on first play isn't one of them.
 // PIVI_YTDLP_BINARY overrides where it's found.
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { cachePath, hasCache } from '@pivi/sdk/storage';
 import { promisify } from 'node:util';
 import type { ResolvedStream, SubtitleTrack } from '@pivi/sdk/protocol';
 
@@ -17,7 +17,7 @@ const BINARY = process.env.PIVI_YTDLP_BINARY ?? 'yt-dlp';
 
 // yt-dlp keeps a cache (extractor state, signature solvers). It goes in the
 // app's disposable cache volume when it has one, and nowhere otherwise.
-const CACHE_ARGS = existsSync('/cache') ? ['--cache-dir', '/cache/yt-dlp'] : ['--no-cache-dir'];
+const CACHE_ARGS = hasCache() ? ['--cache-dir', cachePath('yt-dlp')] : ['--no-cache-dir'];
 
 const execFileAsync = promisify(execFile);
 

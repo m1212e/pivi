@@ -13,13 +13,14 @@
 import { Innertube, UniversalCache } from 'youtubei.js';
 import type { OAuth2Tokens } from 'youtubei.js';
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { storagePath } from '@pivi/sdk/storage';
 
 // The signed-in session's tokens, in this app's own persistent volume (the
 // `storage` permission mounts it at /storage, one per profile — so each pivi
 // profile keeps its own YouTube login). Without the permission there's simply
 // no volume: browsing signed out still works, a login just doesn't survive a
 // restart.
-const TOKEN_FILE = '/storage/oauth-tokens.json';
+const TOKEN_FILE = storagePath('oauth-tokens.json');
 
 async function getStoredTokens(): Promise<OAuth2Tokens | null> {
 	try {
