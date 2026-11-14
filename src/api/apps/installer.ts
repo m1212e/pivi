@@ -2,6 +2,7 @@
 // checked against a key the user supplied unless they chose to skip that.
 // what it asks for is shown (the preview) before anything is stored, and
 // what's stored is the user's answer, not the image's request.
+import { withAppLock } from './appLock';
 import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef';
 import type { PermissionKey, AppManifest } from '#sdk/manifest';
 import type { AppDeps } from './deps';
@@ -93,6 +94,16 @@ export async function installApp(
 ): Promise<InstalledApp> {
 	const { ref, signer, resolved } = await inspect(deps, request);
 	if (request.digest && request.digest !== resolved.digest) throw new ReviewOutdatedError();
+	return withAppLock(resolved.manifest.id, () => insertApp(deps, request, ref, signer, resolved));
+}
+
+async function insertApp(
+	deps: AppDeps,
+	request: InstallRequest & { granted: readonly PermissionKey[] },
+	ref: Awaited<ReturnType<typeof inspect>>['ref'],
+	signer: Awaited<ReturnType<typeof inspect>>['signer'],
+	resolved: Awaited<ReturnType<typeof inspect>>['resolved']
+): Promise<InstalledApp> {
 	const track = updateTrack(ref);
 	const { manifest } = resolved;
 
@@ -141,7 +152,11 @@ async function requireInstalled(deps: AppDeps, appId: string): Promise<Installed
  * The app manager's uninstall. Stops the app before removing the row, then
  * frees its volumes and pulled images, which would otherwise fill the TV's disk.
  */
-export async function uninstallApp(deps: AppDeps, appId: string): Promise<void> {
+export function uninstallApp(deps: AppDeps, appId: string): Promise<void> {
+	return withAppLock(appId, () => doUninstall(deps, appId));
+}
+
+async function doUninstall(deps: AppDeps, appId: string): Promise<void> {
 	const row = await requireInstalled(deps, appId);
 	await deps.control.stop(appId);
 	await deps.store.remove(appId);
@@ -162,7 +177,11 @@ export async function uninstallApp(deps: AppDeps, appId: string): Promise<void> 
  * Lets the user hide an app without losing its data. Disabling stops it right
  * away, enabling needs no start as apps boot on use.
  */
-export async function setAppEnabled(deps: AppDeps, appId: string, enabled: boolean): Promise<void> {
+export function setAppEnabled(deps: AppDeps, appId: string, enabled: boolean): Promise<void> {
+	return withAppLock(appId, () => doSetEnabled(deps, appId, enabled));
+}
+
+async function doSetEnabled(deps: AppDeps, appId: string, enabled: boolean): Promise<void> {
 	await requireInstalled(deps, appId);
 	await deps.store.update(appId, { enabled });
 	if (!enabled) await deps.control.stop(appId);
@@ -172,11 +191,11 @@ export async function setAppEnabled(deps: AppDeps, appId: string, enabled: boole
  * The app manager's auto-update toggle. When off, updater.ts parks every new
  * version for approval.
  */
-export async function setAppAutoUpdate(
-	deps: AppDeps,
-	appId: string,
-	autoUpdate: boolean
-): Promise<void> {
+export function setAppAutoUpdate(deps: AppDeps, appId: string, autoUpdate: boolean): Promise<void> {
+	return withAppLock(appId, () => doSetAutoUpdate(deps, appId, autoUpdate));
+}
+
+async function doSetAutoUpdate(deps: AppDeps, appId: string, autoUpdate: boolean): Promise<void> {
 	await requireInstalled(deps, appId);
 	await deps.store.update(appId, { autoUpdate });
 }
@@ -185,7 +204,16 @@ export async function setAppAutoUpdate(
  * The app manager's per-permission toggles. Takes effect by stopping the app,
  * since what it may do is fixed when its sandbox is built.
  */
-export async function setAppPermission(
+export function setAppPermission(
+	deps: AppDeps,
+	appId: string,
+	permission: PermissionKey,
+	granted: boolean
+): Promise<void> {
+	return withAppLock(appId, () => doSetPermission(deps, appId, permission, granted));
+}
+
+async function doSetPermission(
 	deps: AppDeps,
 	appId: string,
 	permission: PermissionKey,

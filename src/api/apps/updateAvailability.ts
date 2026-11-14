@@ -3,6 +3,7 @@ import type { AppDeps } from './deps';
 import { availabilityCache } from './availabilityCache';
 import { announceAppListChanged } from './events';
 import { resolveImage } from './registry';
+import { isDowngrade } from './versions';
 import { checkForUpdateOnce } from './updater';
 import type { InstalledApp } from './store';
 
@@ -30,7 +31,10 @@ export async function hasAvailableUpdate(deps: AppDeps, row: InstalledApp): Prom
 	try {
 		const ref = parseImageRef(row.imageRef);
 		const resolved = await resolveImage(ref, deps.registry);
-		hasUpdate = resolved.digest !== row.imageDigest && resolved.digest !== row.ignoredDigest;
+		hasUpdate =
+			resolved.digest !== row.imageDigest &&
+			resolved.digest !== row.ignoredDigest &&
+			!isDowngrade(row.version, resolved.manifest.version);
 	} catch {
 		// Transient network/registry failure, see `hasUpdate`'s fallback above.
 	}

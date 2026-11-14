@@ -8,6 +8,8 @@
 // and the old version keeps running meanwhile.
 import { parseImageRef } from '#lib/apps/imageRef';
 import { diffManifests } from '#lib/apps/manifestDiff';
+import { withAppLock } from './appLock';
+import { isDowngrade } from './versions';
 import { availabilityCache } from './availabilityCache';
 import type { AppDeps } from './deps';
 import type { AppImage } from './image';
@@ -90,7 +92,7 @@ async function applyImage(
  */
 export async function checkForUpdate(deps: AppDeps, appId: string): Promise<UpdateOutcome> {
 	try {
-		return await runCheck(deps, appId);
+		return await withAppLock(appId, () => runCheck(deps, appId));
 	} finally {
 		availabilityCache.forget(appId);
 	}
@@ -184,6 +186,11 @@ async function checkRow(deps: AppDeps, row: InstalledApp): Promise<UpdateOutcome
 	const known = knownOutcome(row, resolved.digest);
 	if (known) return known;
 
+	// A validly signed but older build is a rollback, which is how a known
+	// vulnerable release would be put back. Never offered, even with a valid
+	// signature. Unparsable versions fall through to the digest comparison.
+	if (isDowngrade(row.version, resolved.manifest.version)) return 'ignored';
+
 	await vetCandidate(deps, row, ref, resolved);
 	await deps.backend.prepare(pinnedReference(ref, resolved.digest));
 	return applyOrPark(deps, row, resolved);
@@ -240,7 +247,11 @@ export async function checkAllForUpdates(deps: AppDeps): Promise<Record<string, 
  * The app manager's approve button for a parked update, which is the user's
  * consent to whatever the new version asks for in addition.
  */
-export async function approvePendingUpdate(deps: AppDeps, appId: string): Promise<void> {
+export function approvePendingUpdate(deps: AppDeps, appId: string): Promise<void> {
+	return withAppLock(appId, () => doApprove(deps, appId));
+}
+
+async function doApprove(deps: AppDeps, appId: string): Promise<void> {
 	const row = await deps.store.find(appId);
 	if (!row?.pendingUpdate) throw new AppError('There is no update waiting for approval');
 	await applyImage(deps, row, row.pendingUpdate.image, row.pendingUpdate.manifest);
@@ -251,7 +262,11 @@ export async function approvePendingUpdate(deps: AppDeps, appId: string): Promis
  * The app manager's reject button. Remembers the digest so the same version
  * isn't parked again at the next check.
  */
-export async function rejectPendingUpdate(deps: AppDeps, appId: string): Promise<void> {
+export function rejectPendingUpdate(deps: AppDeps, appId: string): Promise<void> {
+	return withAppLock(appId, () => doReject(deps, appId));
+}
+
+async function doReject(deps: AppDeps, appId: string): Promise<void> {
 	const row = await deps.store.find(appId);
 	if (!row?.pendingUpdate) return;
 	await deps.store.update(appId, {
