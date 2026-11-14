@@ -4,6 +4,7 @@ import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as p from '@clack/prompts';
 import {
+	CI_PLATFORMS,
 	FEATURES,
 	ID_PATTERN,
 	generateProject,
@@ -25,7 +26,8 @@ Scaffolds a new pivi app. Without --yes it asks for what you did not pass.
   --features <list>      comma separated: ${FEATURES.join(', ')}
   --domains <list>       comma separated hosts the app contacts (*.example.com allowed)
   --storage              the app keeps data across restarts (adds the storage permission)
-  --ci <github|none>     CI workflow to generate (default github)
+  --ci <github|gitlab|gitea|none>
+                         CI to generate (default github), gitea also covers Forgejo
   --agent <claude|agents|none>
                          files for AI coding agents (default claude)
   --sdk <spec>           how package.json depends on @pivi/sdk (default: the range this CLI supports)
@@ -165,7 +167,13 @@ async function askTooling(partial: Draft) {
 		await p.select({
 			message: 'CI to generate',
 			options: [
-				{ value: 'github', label: 'GitHub Actions', hint: 'builds and pushes to ghcr.io' },
+				{ value: 'github', label: 'GitHub Actions', hint: 'publishes to ghcr.io' },
+				{ value: 'gitlab', label: 'GitLab CI', hint: "publishes to the project's registry" },
+				{
+					value: 'gitea',
+					label: 'Gitea / Forgejo Actions',
+					hint: "publishes to the instance's registry"
+				},
 				{ value: 'none', label: 'none' }
 			]
 		})
@@ -191,8 +199,8 @@ function finalize(partial: Draft): InitOptions | string {
 		return error instanceof Error ? error.message : String(error);
 	}
 	if (options.description.length > 140) return 'The description is at most 140 characters.';
-	if (options.ci !== 'github' && options.ci !== 'none') {
-		return `Unknown --ci "${options.ci}". Supported: github, none.`;
+	if (!CI_PLATFORMS.includes(options.ci)) {
+		return `Unknown --ci "${options.ci}". Supported: ${CI_PLATFORMS.join(', ')}.`;
 	}
 	return options;
 }

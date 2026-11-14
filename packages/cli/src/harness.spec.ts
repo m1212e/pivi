@@ -15,8 +15,8 @@ afterEach(async () => {
 async function run(name: string) {
 	harness = new Harness({
 		dir: fixture(name),
-		// Read the SDK's sources, so the tests need no build.
-		runtime: ['bun', 'run', '--conditions', 'pivi-source']
+		// Bundle against the SDK's sources, so the tests need no SDK build.
+		conditions: ['pivi-source']
 	});
 	await harness.start();
 	await harness.settle(800);

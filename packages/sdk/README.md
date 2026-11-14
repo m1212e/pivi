@@ -69,19 +69,19 @@ complete, real example.
 
 ## Entry points
 
-| Import                | What it is                                                                               | Runs in    |
-| --------------------- | ---------------------------------------------------------------------------------------- | ---------- |
-| `@pivi/sdk`           | Everything below that is browser-safe, re-exported                                       | anywhere   |
-| `@pivi/sdk/manifest`  | `appManifestSchema`, permissions, features, `MANIFEST_LABEL`                             | anywhere   |
-| `@pivi/sdk/protocol`  | Every host/app message, `PROTOCOL_VERSION`, `ResolvedStream`                             | anywhere   |
-| `@pivi/sdk/dashboard` | Home cards and actions (tier 1)                                                          | anywhere   |
-| `@pivi/sdk/ui`        | Declarative screens (tier 2)                                                             | anywhere   |
-| `@pivi/sdk/icons`     | The host's icon names                                                                    | anywhere   |
-| `@pivi/sdk/limits`    | Size caps applied to everything an app sends                                             | anywhere   |
-| `@pivi/sdk/storage`   | `storagePath`, `cachePath`, `readJson`, `writeJson`: the `/storage` and `/cache` volumes | Node / Bun |
-| `@pivi/sdk/app`       | `defineApp`, `createStdioConnection`                                                     | Node / Bun |
-| `@pivi/sdk/schema`    | `buildProtocolDocument()`, the protocol as JSON Schema                                   | tooling    |
-| `@pivi/sdk/rpc`       | NDJSON framing and the JSON-RPC reader/writer, for hosts and test harnesses              | anywhere   |
+| Import                | What it is                                                                               | Runs in  |
+| --------------------- | ---------------------------------------------------------------------------------------- | -------- |
+| `@pivi/sdk`           | Everything below that is browser-safe, re-exported                                       | anywhere |
+| `@pivi/sdk/manifest`  | `appManifestSchema`, permissions, features, `MANIFEST_LABEL`                             | anywhere |
+| `@pivi/sdk/protocol`  | Every host/app message, `PROTOCOL_VERSION`, `ResolvedStream`                             | anywhere |
+| `@pivi/sdk/dashboard` | Home cards and actions (tier 1)                                                          | anywhere |
+| `@pivi/sdk/ui`        | Declarative screens (tier 2)                                                             | anywhere |
+| `@pivi/sdk/icons`     | The host's icon names                                                                    | anywhere |
+| `@pivi/sdk/limits`    | Size caps applied to everything an app sends                                             | anywhere |
+| `@pivi/sdk/storage`   | `storagePath`, `cachePath`, `readJson`, `writeJson`: the `/storage` and `/cache` volumes | Node     |
+| `@pivi/sdk/app`       | `defineApp`, `createStdioConnection`                                                     | Node     |
+| `@pivi/sdk/schema`    | `buildProtocolDocument()`, the protocol as JSON Schema                                   | tooling  |
+| `@pivi/sdk/rpc`       | NDJSON framing and the JSON-RPC reader/writer, for hosts and test harnesses              | anywhere |
 
 The protocol as a JSON Schema document is also shipped as
 `schema/protocol.schema.json`, for apps in other languages and for tools that

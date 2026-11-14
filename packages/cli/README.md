@@ -8,16 +8,16 @@ cd my-app
 bun run dev                   # run against a fake pivi host
 ```
 
-Apps run on Bun (that is what the images use), so `dev` needs `bun` on your PATH. The CLI itself
-runs on Node 20 or newer.
+Apps are bundled with tsdown into one file and run on Node: `node:26-alpine` in the image, and
+your local `node` under `pivi-app dev`, so what you test is what pivi runs. The CLI runs on Node 20
+or newer (Node 24 or newer for `dev`, whose network check relies on `NODE_USE_ENV_PROXY`).
 
 ## Commands
 
 ### `pivi-app init [dir]`
 
 Scaffolds an app: `manifest.json`, `main.ts` (built on `defineApp` from `@pivi/sdk`),
-`service.ts`, a test, `Dockerfile`, `.dockerignore`, `tsconfig.json`, and optionally a CI workflow
-and files for AI coding agents (`AGENTS.md`, `CLAUDE.md` with the pivi plugin enabled).
+`service.ts`, a test, `tsconfig.json`, and optionally a CI workflow and files for AI coding agents (`AGENTS.md`, `CLAUDE.md` with the pivi plugin enabled).
 
 Anything not passed as a flag is asked for, unless `--yes` (or no terminal) takes the defaults:
 
@@ -28,14 +28,16 @@ pivi-app init demo --yes \
   --storage --ci github --agent claude
 ```
 
-Features: `dashboard`, `screen`, `playback`, `skipSegments`, `chat`. CI: `github` (builds multi-arch
-and pushes to ghcr.io) or `none`. Agent files: `claude`, `agents` or `none`.
+Features: `dashboard`, `screen`, `playback`, `skipSegments`, `chat`. CI: `github` (publishes to
+ghcr.io), `gitlab` (to the project's registry), `gitea` (Gitea and Forgejo, to the instance's
+registry) or `none`. Each CI checks the app and runs `pivi-app publish` on a version tag. Agent
+files: `claude`, `agents` or `none`.
 
 ### `pivi-app validate [dir]`
 
 Static checks without running the app: the manifest against the schema the host uses, features
 declared without code and code without a declared feature, hosts in the source that
-`network.domains` does not allow, hand-written `/storage` paths, writes to stdout, a missing Dockerfile. Exits non-zero on
+`network.domains` does not allow, hand-written `/storage` paths, writes to stdout. Exits non-zero on
 errors (`--strict`: on warnings too, `--json` for machines).
 
 ### `pivi-app dev [dir]`
@@ -62,6 +64,33 @@ network rule off, `--entry`, `--locale`.
 `/storage` and `/cache` do not exist on your machine, so `PIVI_STORAGE_DIR` and `PIVI_CACHE_DIR`
 point into `.pivi-dev/`, for the permissions the manifest requests. `storagePath()` and
 `cachePath()` from `@pivi/sdk/storage` follow them.
+
+### `pivi-app publish [dir] <registry/repository[:tag]>`
+
+Builds the image and pushes it to any OCI registry, with no Docker involved: the app and the SDK
+are bundled into one file (`/app/main.mjs`) with tsdown and added as one layer on top of
+`node:26-alpine`, for
+linux/amd64 and linux/arm64. The manifest becomes the `dev.pivi.manifest` label the host reads.
+
+```sh
+pivi-app publish ghcr.io/me/my-app          # tags <manifest version> and latest
+pivi-app publish localhost:5000/my-app:dev --tag latest
+```
+
+- Credentials: `PIVI_REGISTRY_USERNAME` and `PIVI_REGISTRY_PASSWORD` (for the registry published
+  to only), or the `auths` of the docker config (`docker login`). Credential helpers are not
+  supported. Registries on localhost are spoken to over http.
+- Base layers are mounted when the target registry already has the base, copied otherwise, and
+  cached in `~/.cache/pivi/blobs`. Blobs the registry already holds are not uploaded again.
+- The build is reproducible: the same app gives the same digest.
+- The app is validated first, so an image the host would refuse is never pushed.
+- `--base <ref>`, `--platform linux/amd64,linux/arm64`, `--conditions <name>` (for bundling inside
+  a monorepo), `--tag <tag>` (repeatable).
+
+### `pivi-app build [dir]`
+
+The same image, written as an OCI image layout to `.pivi-dev/image` (or `--out <dir>`) instead of
+pushed, for inspecting it or handing it to tools like skopeo or oras.
 
 ### `pivi-app manifest [dir]`
 

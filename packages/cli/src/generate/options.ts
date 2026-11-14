@@ -24,7 +24,8 @@ function defaultSpecs() {
 	return { sdk: pkg.peerDependencies['@pivi/sdk']!, cli: `^${pkg.version}` };
 }
 
-export type CiPlatform = 'github' | 'none';
+export type CiPlatform = 'github' | 'gitlab' | 'gitea' | 'none';
+export const CI_PLATFORMS: CiPlatform[] = ['github', 'gitlab', 'gitea', 'none'];
 export type AgentFiles = 'claude' | 'agents' | 'none';
 
 export type InitOptions = {

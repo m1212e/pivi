@@ -1,4 +1,5 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
+import { parse as parseYaml } from 'yaml';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appManifestSchema } from '@pivi/sdk/manifest';
@@ -43,6 +44,34 @@ describe('init', () => {
 		const own = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 		expect(pkg.dependencies['@pivi/sdk']).toBe(own.peerDependencies['@pivi/sdk']);
 		expect(pkg.devDependencies['@pivi/cli']).toBe(`^${own.version}`);
+	});
+
+	it.each([
+		[
+			'github',
+			'.github/workflows/publish.yml',
+			/PIVI_REGISTRY_PASSWORD: \$\{\{ secrets\.GITHUB_TOKEN \}\}/
+		],
+		['gitlab', '.gitlab-ci.yml', /PIVI_REGISTRY_PASSWORD: \$CI_REGISTRY_PASSWORD/],
+		[
+			'gitea',
+			'.gitea/workflows/publish.yml',
+			/PIVI_REGISTRY_PASSWORD: \$\{\{ secrets\.REGISTRY_TOKEN \}\}/
+		]
+	] as const)('generates %s CI that publishes with pivi-app on a tag', (ci, path, credentials) => {
+		const files = generateProject(normalizeOptions({ id: 'demo', ci }));
+		const workflow = files[path]!;
+		expect(workflow).toMatch(/bun run publish -- /);
+		expect(workflow).toMatch(credentials);
+		expect(workflow).not.toMatch(/docker/);
+		// Valid YAML, which the CI would otherwise only tell after a push.
+		expect(() => parseYaml(workflow)).not.toThrow();
+		const others = [
+			'.github/workflows/publish.yml',
+			'.gitlab-ci.yml',
+			'.gitea/workflows/publish.yml'
+		];
+		for (const other of others.filter((o) => o !== path)) expect(files[other]).toBeUndefined();
 	});
 
 	it('only generates what was asked for', () => {

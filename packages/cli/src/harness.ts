@@ -11,6 +11,7 @@ import { domainsAllow, type AppManifest } from '@pivi/sdk/manifest';
 import { PROTOCOL_VERSION, SUPPORTED_PROTOCOLS } from '@pivi/sdk/protocol';
 import { protocolMethods, type MethodSpec } from '@pivi/sdk/schema';
 import type { UiNode } from '@pivi/sdk/ui';
+import { bundleTo } from './bundle';
 import { readManifest } from './project';
 import { startProxy, type Proxy } from './proxy';
 
@@ -19,8 +20,13 @@ export type HarnessOptions = {
 	dir: string;
 	/** The entry file, relative to `dir`. */
 	entry?: string;
-	/** The command that runs a file. The images run bun. */
+	/**
+	 * A command to run the entry's source with instead (e.g. `bun run`). By default the
+	 * app is bundled with tsdown and the bundle runs on node, exactly as in the image.
+	 */
 	runtime?: string[];
+	/** Extra export conditions for bundling, e.g. `pivi-source` inside the pivi repository. */
+	conditions?: string[];
 	locale?: string;
 	/** Refuse connections outside the manifest, as the sandbox does. */
 	enforceNetwork?: boolean;
@@ -94,24 +100,40 @@ export class Harness {
 			!!this.manifest.network &&
 			domainsAllow(this.manifest.network.domains, host));
 
-	async start() {
-		this.proxy ??= await startProxy(this.allowsHost);
-		// Like the sandbox, which mounts a volume only for a granted permission: without it the
-		// app is pointed at a directory that does not exist, so hasStorage() and hasCache() tell
-		// the truth. Nothing is deleted, the dev data survives toggling a permission.
-		const { permissions } = this.manifest;
+	/** Like the sandbox, which mounts a volume only for a granted permission. */
+	private volumes() {
+		// Without the permission the app is pointed at a directory that does not exist, so
+		// hasStorage() and hasCache() tell the truth. Nothing is deleted, the dev data
+		// survives toggling a permission.
 		const volume = (granted: boolean, dir: string) => {
 			if (!granted) return join(this.dir, '.pivi-dev', 'not-granted', basename(dir));
 			mkdirSync(dir, { recursive: true });
 			return dir;
 		};
-		const storageEnv = volume(permissions.includes('storage'), this.storageDir);
-		const cacheEnv = volume(permissions.includes('cache'), this.cacheDir);
+		const { permissions } = this.manifest;
+		return {
+			PIVI_STORAGE_DIR: volume(permissions.includes('storage'), this.storageDir),
+			PIVI_CACHE_DIR: volume(permissions.includes('cache'), this.cacheDir)
+		};
+	}
+
+	/** The process to start: the bundle on node, or the source with a custom runtime. */
+	private async command(): Promise<string[]> {
+		const entry = this.options.entry ?? 'main.ts';
+		if (this.options.runtime) return [...this.options.runtime, join(this.dir, entry)];
+		const bundle = await bundleTo(this.dir, join(this.dir, '.pivi-dev', 'build'), {
+			entry,
+			conditions: this.options.conditions
+		});
+		return [process.execPath.includes('node') ? process.execPath : 'node', bundle];
+	}
+
+	async start() {
+		this.proxy ??= await startProxy(this.allowsHost);
 		this.activated = false;
 		const proxyUrl = `http://127.0.0.1:${this.proxy.port}`;
-		const [command, ...args] = this.options.runtime ?? ['bun', 'run'];
-		const entry = join(this.dir, this.options.entry ?? 'main.ts');
-		const child = spawn(command, [...args, entry], {
+		const [command, ...args] = await this.command();
+		const child = spawn(command!, args, {
 			cwd: this.dir,
 			stdio: ['pipe', 'pipe', 'pipe'],
 			env: {
@@ -122,8 +144,9 @@ export class Harness {
 				https_proxy: proxyUrl,
 				NO_PROXY: '',
 				no_proxy: '',
-				PIVI_STORAGE_DIR: storageEnv,
-				PIVI_CACHE_DIR: cacheEnv
+				// Node's fetch only honours the proxy variables when asked to.
+				NODE_USE_ENV_PROXY: '1',
+				...this.volumes()
 			}
 		});
 		this.child = child;

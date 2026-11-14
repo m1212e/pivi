@@ -164,29 +164,12 @@ test('the manifest is valid', () => {
 });
 `;
 
-const dockerfile = `# Build with: bun run image
-# Stage 1 bundles the app and the SDK into one file, so nothing has to be installed where it runs.
-FROM --platform=$BUILDPLATFORM oven/bun:1 AS build
-WORKDIR /build
-COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile --production
-COPY . .
-RUN bun build ./main.ts --target=bun --outfile=/out/main.js
-
-FROM oven/bun:1
-WORKDIR /app
-COPY --from=build /out/main.js ./main.js
-ENTRYPOINT ["bun", "run", "/app/main.js"]
-`;
-
 export function projectFiles(o: InitOptions): Record<string, string> {
 	const files: Record<string, string> = {
 		'manifest.json': manifestFile(o),
 		'main.ts': mainFile(o),
 		'service.ts': serviceFile(o),
 		'manifest.spec.ts': manifestSpec,
-		Dockerfile: dockerfile,
-		'.dockerignore': 'node_modules\n.pivi-dev\n.git\n',
 		'.gitignore': 'node_modules\n.pivi-dev\ndist\n',
 		'package.json': json({
 			name: `pivi-app-${o.id}`,
@@ -199,7 +182,8 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 				validate: 'pivi-app validate',
 				test: 'bun test',
 				typecheck: 'tsc --noEmit',
-				image: `docker build --label "dev.pivi.manifest=$(pivi-app manifest)" -t pivi-${o.id}:latest .`
+				image: 'pivi-app build',
+				publish: 'pivi-app publish'
 			},
 			dependencies: { '@pivi/sdk': o.sdkSpec, 'vscode-jsonrpc': '^10.0.0', zod: '^4.6.7' },
 			devDependencies: { '@pivi/cli': o.cliSpec, '@types/bun': 'latest', typescript: '^7.0.2' }

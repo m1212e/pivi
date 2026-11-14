@@ -29,7 +29,7 @@ in an app project, `packages/sdk/` in the pivi repository.
 ## Workflow
 
 Start a project with `pivi-app init` (`npx @pivi/cli init my-app`): it scaffolds the manifest,
-`main.ts`, `service.ts`, a Dockerfile, tests and CI.
+`main.ts`, `service.ts`, tests and CI.
 
 1. **Understand the service first.** Before writing any pivi code, work out how to get from a
    video id to a playable URL, and how a person signs in (if they must). Prove it with plain
@@ -38,7 +38,7 @@ Start a project with `pivi-app init` (`npx @pivi/cli init my-app`): it scaffolds
 3. **Write `main.ts`** with `defineApp`. Keep service logic in separate modules with no
    protocol code in them, so it can be unit tested.
 4. **Test it** (see Testing) before packaging.
-5. **Package** it as an image and install it in pivi.
+5. **Publish** it with `pivi-app publish <registry>/<repository>` and install it in pivi.
 
 ## Features: declare what you implement
 
@@ -86,7 +86,7 @@ handler without its feature is dead code, and a feature without its handler is a
   must be `https`. A missing domain looks like a silent failure: a blank card, a stream that
   never starts.
 - Validate the manifest in a test with `appManifestSchema.parse(...)`, the host refuses an
-  image whose manifest doesn't validate.
+  image whose manifest doesn't validate (`pivi-app validate` and `publish` check it too).
 
 ## `main.ts`
 
@@ -178,9 +178,10 @@ against a fake pivi host, so most problems show up before the TV does:
 
 - `pivi-app validate`: static checks of the manifest and the code: invalid manifest, features
   without code (and code without the feature), hosts spelled out in the source that
-  `network.domains` does not allow, writes to stdout, a missing Dockerfile.
-- `pivi-app dev`: starts the app, speaks the protocol to it and validates **every message in both
-  directions** with the SDK schemas, the way the host does. It then gives you a prompt (`help` lists
+  `network.domains` does not allow, writes to stdout, a missing `.dockerignore` next to a Dockerfile.
+- `pivi-app dev`: bundles the app exactly as the image does and runs it on Node, speaks the
+  protocol to it and validates **every message in both directions** with the SDK schemas, the way
+  the host does. It then gives you a prompt (`help` lists
   the commands): `status`, `dashboard`, `screen <id>`, `event <screen> <event> [value]`,
   `stream <sessionId>`, `domains`, `problems`, `logs`.
   - `stream <id>` resolves a stream, checks it against the schema and probes it: https, allowed
@@ -214,38 +215,38 @@ printf '%s\n' \
 
 ## Packaging
 
-Bundle the app and the SDK into one file so nothing has to be installed where it runs:
-
-(Add a `.dockerignore` with `node_modules`, so local installs do not leak into the image.)
-
-```dockerfile
-FROM oven/bun:1 AS build
-WORKDIR /build
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
-COPY . .
-RUN bun build ./main.ts --target=bun --outfile=/out/main.js
-
-FROM oven/bun:1
-WORKDIR /app
-COPY --from=build /out/main.js ./main.js
-ENTRYPOINT ["bun", "run", "/app/main.js"]
-```
-
-The manifest travels as an image **label**, `dev.pivi.manifest`, holding the manifest JSON on one
-line, which pivi reads before pulling anything so the user can approve its permissions:
+`pivi-app` builds the image itself, no Docker needed: it bundles `main.ts`, the SDK and every
+dependency into one file with tsdown (`/app/main.mjs`), and puts it as one layer on top of
+`node:26-alpine` for linux/amd64 and linux/arm64 (pivi runs on Raspberry Pis). **The app runs on
+Node**, so use Node APIs, not Bun's (`validate` warns about `Bun.*`). Node trusts the sandbox's
+TLS interception on its own (microsandbox sets `NODE_EXTRA_CA_CERTS`). The manifest goes into the image's `dev.pivi.manifest`
+label, which pivi reads before pulling anything so the user can approve the permissions.
 
 ```sh
-docker build \
-  --label "dev.pivi.manifest=$(jq -c . manifest.json)" \
-  -t registry.example.com/pivi-demo:0.1.0 .
-docker push registry.example.com/pivi-demo:0.1.0
+pivi-app publish ghcr.io/me/my-app        # tags <manifest version> and latest
+pivi-app publish registry.example.com/me/my-app:dev --tag latest
+pivi-app build                            # only build, as an OCI layout in .pivi-dev/image
 ```
 
-Build for `linux/amd64` and `linux/arm64` (pivi runs on Raspberry Pis) and push a manifest
-list. Install it in pivi on the **Apps** page by entering the image reference. The app is then
-pinned by digest. Updating means pushing a new version, and a signed app (cosign key-based
+- Any OCI registry works (ghcr.io, GitLab, Gitea/Forgejo, Docker Hub, a self-hosted registry).
+  Credentials: `PIVI_REGISTRY_USERNAME` and `PIVI_REGISTRY_PASSWORD`, or `docker login`.
+- The build validates the app first and refuses one the host would refuse. The same input gives
+  the same digest, so publishing an unchanged app uploads nothing.
+- `--base` picks another base image, `--platform` other platforms.
+- Projects from `pivi-app init` have `bun run image` and `bun run publish -- <ref>`, and their CI
+  (GitHub, GitLab or Gitea/Forgejo) publishes on a version tag.
+
+Install the app in pivi on the **Apps** page by entering the printed reference. It is then
+pinned by digest. Updating means publishing a new version. A signed app (cosign key-based
 signatures) can only be updated by the same signer.
+
+An app that needs more than Node in its image (a system package, a binary like yt-dlp) needs its
+own Dockerfile instead. Build that with the manifest as the label:
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --label "dev.pivi.manifest=$(pivi-app manifest)" -t registry.example.com/me/my-app:1.0.0 --push .
+```
 
 ## Pitfalls
 

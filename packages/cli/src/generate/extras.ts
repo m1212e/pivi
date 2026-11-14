@@ -27,10 +27,15 @@ The comments in \`node_modules/@pivi/sdk/src/*.ts\` are the specification of eve
   \`stream <id>\`, \`domains\`, \`problems\`. \`bun run dev -- --exec "stream abc" --exec domains\`
   runs commands once and exits non-zero when the host would reject something.
 - \`bun run validate\`: static checks. \`bun test\`, \`bun run typecheck\`.
-- \`bun run image\`: build the container image.
+- \`bun run image\`: build the container image as an OCI layout in \`.pivi-dev/image\` (no Docker).
+- \`bun run publish -- <registry>/<repository>\`: build and push to any OCI registry, tagged with the
+  manifest version and \`latest\`. Credentials: \`PIVI_REGISTRY_USERNAME\` and
+  \`PIVI_REGISTRY_PASSWORD\`, or \`docker login\`.
 
 ## Rules
 
+- The app runs on Node 26 in pivi (bundled into one file with tsdown), and \`bun run dev\` runs that
+  same bundle on Node. Use Node APIs, not Bun's. Bun is only the package manager and test runner.
 - Never write to stdout: it is the protocol channel. Use \`app.log\` or \`console.error\`.
 - Declare a feature for every handler you add, and add every contacted host to \`network.domains\`.
 - Run \`bun run dev\` and check \`problems\` and \`domains\` after every change that touches the network
@@ -58,21 +63,33 @@ bun install
 bun run dev        # run against a fake pivi host, type "help" for commands
 bun run validate   # static checks
 bun test
-bun run image      # build the container image
+bun run image      # build the image (an OCI layout in .pivi-dev/image), no Docker needed
 \`\`\`
 
 Edit \`manifest.json\` to declare what the app is and which hosts it may contact, \`service.ts\` for
 the code that talks to ${o.name}, and \`main.ts\` to connect it to pivi.
 
-To install the app, push its image to a registry and enter the image reference on pivi's Apps page.
+To install the app, publish it to any OCI registry and enter the printed reference on pivi's Apps
+page:
+
+\`\`\`sh
+bun run publish -- ghcr.io/<you>/${o.id}
+\`\`\`
+
+The image is your \`main.ts\`, bundled with tsdown into one file, on \`node:26-alpine\`, for
+linux/amd64 and linux/arm64. The app runs on Node there (and in \`bun run dev\`): don't use Bun APIs.
 `;
 }
+
+// Every CI file only checks the app and calls `pivi-app publish` on a version tag: the
+// build needs no Docker, so the same step runs on every platform's default runner.
 
 function githubWorkflow() {
 	return `name: Publish
 
-# Checks the app on every push and pull request, and publishes the image to ghcr.io when a
-# version tag (v*) is pushed. Install it in pivi with the reference ghcr.io/<owner>/<repo>:<version>.
+# Checks the app on every push and pull request. A version tag (v*) publishes the image to
+# ghcr.io, tagged with the manifest version and latest. Install it in pivi with the printed
+# reference, ghcr.io/<owner>/<repo>:<version>.
 on:
   push:
     branches: [main]
@@ -84,7 +101,7 @@ permissions:
   packages: write
 
 jobs:
-  image:
+  app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -93,41 +110,74 @@ jobs:
       - run: bun run validate
       - run: bun run typecheck
       - run: bun test
+      - name: Publish
+        if: github.ref_type == 'tag'
+        env:
+          PIVI_REGISTRY_USERNAME: \${{ github.actor }}
+          PIVI_REGISTRY_PASSWORD: \${{ secrets.GITHUB_TOKEN }}
+        # Registry paths are lowercase, GitHub owner names need not be.
+        run: bun run publish -- "ghcr.io/\${GITHUB_REPOSITORY,,}"
+`;
+}
 
-      # The host reads the manifest from this label before it pulls or runs anything.
-      - id: manifest
-        run: |
-          echo "label=dev.pivi.manifest=$(bunx pivi-app manifest)" >> "$GITHUB_OUTPUT"
-          echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
+const gitlabCi = `# Checks the app on every pipeline. A tag publishes the image to this project's container
+# registry, tagged with the manifest version and latest. Install it in pivi with the printed
+# reference, $CI_REGISTRY_IMAGE:<version>.
+default:
+  image: oven/bun:1
 
-      # Raspberry Pis are arm64 and the host picks its own platform out of the image index.
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-      - if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: \${{ github.actor }}
-          password: \${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/\${{ github.repository }}
-          tags: |
-            type=raw,value=\${{ steps.manifest.outputs.version }},enable=\${{ github.ref_type == 'tag' }}
-            type=raw,value=latest,enable=\${{ github.ref_type == 'tag' }}
-            type=ref,event=branch
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: \${{ github.event_name != 'pull_request' }}
-          tags: \${{ steps.meta.outputs.tags }}
-          labels: |
-            \${{ steps.meta.outputs.labels }}
-            \${{ steps.manifest.outputs.label }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+stages: [check, publish]
+
+check:
+  stage: check
+  script:
+    - bun install
+    - bun run validate
+    - bun run typecheck
+    - bun test
+
+publish:
+  stage: publish
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    PIVI_REGISTRY_USERNAME: $CI_REGISTRY_USER
+    PIVI_REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+  script:
+    - bun install
+    - bun run publish -- "$CI_REGISTRY_IMAGE"
+`;
+
+function giteaWorkflow() {
+	return `name: Publish
+
+# Gitea and Forgejo Actions. Checks the app on every push and pull request. A version tag (v*)
+# publishes the image to this instance's container registry, tagged with the manifest version
+# and latest. Needs a REGISTRY_TOKEN secret: an access token with package write access.
+# runs-on must match a label of your runner.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run validate
+      - run: bun run typecheck
+      - run: bun test
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          PIVI_REGISTRY_USERNAME: \${{ github.actor }}
+          PIVI_REGISTRY_PASSWORD: \${{ secrets.REGISTRY_TOKEN }}
+          SERVER_URL: \${{ github.server_url }}
+        run: bun run publish -- "\${SERVER_URL#*://}/\${GITHUB_REPOSITORY,,}"
 `;
 }
 
@@ -139,5 +189,7 @@ export function extraFiles(o: InitOptions): Record<string, string> {
 		files['.claude/settings.json'] = claudeSettings;
 	}
 	if (o.ci === 'github') files['.github/workflows/publish.yml'] = githubWorkflow();
+	if (o.ci === 'gitlab') files['.gitlab-ci.yml'] = gitlabCi;
+	if (o.ci === 'gitea') files['.gitea/workflows/publish.yml'] = giteaWorkflow();
 	return files;
 }

@@ -40,7 +40,7 @@ const IMPLEMENTS: Record<string, RegExp> = {
 const error = (message: string): Finding => ({ level: 'error', message });
 const warning = (message: string): Finding => ({ level: 'warning', message });
 
-/** The files a buildable app needs. */
+/** The protocol and the files a buildable app needs. */
 function checkFiles(root: string, entry: string, manifest: AppManifest): Finding[] {
 	const findings: Finding[] = [];
 	if (!SUPPORTED_PROTOCOLS.includes(manifest.protocol)) {
@@ -51,17 +51,20 @@ function checkFiles(root: string, entry: string, manifest: AppManifest): Finding
 		);
 	}
 	if (!existsSync(join(root, entry))) findings.push(error(`entry file ${entry} not found`));
-	if (!existsSync(join(root, 'Dockerfile'))) {
-		findings.push(warning('no Dockerfile: the app cannot be built into an image'));
-	}
-	// The build context may be a parent directory (a monorepo), so look upwards a little.
-	const ignoreFiles = [root, resolve(root, '..'), resolve(root, '../..')]
-		.map((d) => join(d, '.dockerignore'))
-		.filter((f) => existsSync(f));
-	if (!ignoreFiles.some((f) => /node_modules/.test(readFileSync(f, 'utf8')))) {
-		findings.push(
-			warning('.dockerignore should list node_modules so local installs do not leak into the image')
-		);
+	// A Dockerfile is optional (pivi-app build needs none), but one that copies the
+	// project into its build should not take local installs along.
+	if (existsSync(join(root, 'Dockerfile'))) {
+		// The build context may be a parent directory (a monorepo), so look upwards a little.
+		const ignoreFiles = [root, resolve(root, '..'), resolve(root, '../..')]
+			.map((d) => join(d, '.dockerignore'))
+			.filter((f) => existsSync(f));
+		if (!ignoreFiles.some((f) => /node_modules/.test(readFileSync(f, 'utf8')))) {
+			findings.push(
+				warning(
+					'.dockerignore should list node_modules so local installs do not leak into the image'
+				)
+			);
+		}
 	}
 	return findings;
 }
@@ -87,10 +90,13 @@ function checkFeatures(manifest: AppManifest, source: string): Finding[] {
 /** Habits that break in the sandbox. */
 function checkHabits(source: string): Finding[] {
 	const findings: Finding[] = [];
-	if (/process\.stdout\.write|Bun\.stdout/.test(source)) {
+	if (/process\.stdout\.write/.test(source)) {
 		findings.push(
 			warning('writing to stdout corrupts the protocol channel, log to stderr instead')
 		);
+	}
+	if (/\bBun\.[a-zA-Z]|from ['"]bun(:[a-z]+)?['"]/.test(source)) {
+		findings.push(warning('Bun APIs are used, but the image runs the app on Node: use Node APIs'));
 	}
 	if (/['"`]\/(storage|cache)(\/|['"`])/.test(source)) {
 		findings.push(

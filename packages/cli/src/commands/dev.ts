@@ -10,6 +10,7 @@ export type DevOptions = {
 	enforce?: boolean;
 	locale?: string;
 	runtime?: string[];
+	conditions?: string[];
 };
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -21,6 +22,7 @@ function createHarness(dir: string, options: DevOptions): Harness | undefined {
 			entry: options.entry,
 			locale: options.locale,
 			runtime: options.runtime,
+			conditions: options.conditions,
 			enforceNetwork: options.enforce,
 			onEvent: (line) => console.log(line)
 		});
