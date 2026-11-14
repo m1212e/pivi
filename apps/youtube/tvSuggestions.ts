@@ -38,7 +38,7 @@ export async function fetchSuggestions(innertube: Innertube, query: string): Pro
 		headers.Authorization = `Bearer ${oauth.oauth2_tokens.access_token}`;
 	}
 
-	const response = await fetch(url, { headers });
+	const response = await fetch(url, { headers, signal: AbortSignal.timeout(8_000) });
 	if (!response.ok) throw new Error(`suggestions answered ${response.status}`);
 	return parseSuggestions(await readBody(response));
 }

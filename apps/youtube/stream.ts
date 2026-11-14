@@ -55,25 +55,38 @@ function runYtDlp(args: string[]): Promise<string> {
 // separate video-only + audio-only pair (the common case for anything above
 // 360p); otherwise the format it picked already has both, and its own
 // vcodec/acodec/url describe it directly.
-type YtDlpFormat = { url: string; vcodec?: string; acodec?: string; ext: string };
+type YtDlpFormat = {
+	url: string;
+	vcodec?: string;
+	acodec?: string;
+	ext: string;
+	// Set on HLS formats: the master playlist this variant was listed in.
+	manifest_url?: string;
+};
 // `subtitles` (manually authored, uploaded by the channel) and
 // `automatic_captions` (speech-to-text) are both keyed by language code,
 // each holding one entry per format yt-dlp knows the track in (vtt, srv1,
 // srv3, ttml, ...) -- reported here for free as part of the same info dump
 // this file already fetches for the stream itself, no extra request needed.
 type YtDlpSubtitleEntry = { url: string; ext: string; name?: string };
-type YtDlpInfo = {
+export type YtDlpInfo = {
 	title: string;
-	duration: number;
+	// null for anything without a fixed length (a livestream, a stream that just ended).
+	duration?: number | null;
 	url?: string;
 	vcodec?: string;
 	acodec?: string;
 	ext?: string;
 	requested_formats?: YtDlpFormat[];
 	// Every format yt-dlp knows for the video, audio-only ones have no height.
-	formats?: { height?: number | null; vcodec?: string }[];
+	formats?: { height?: number | null; vcodec?: string; url?: string; manifest_url?: string }[];
 	subtitles?: Record<string, YtDlpSubtitleEntry[]>;
 	automatic_captions?: Record<string, YtDlpSubtitleEntry[]>;
+	// A broadcast still running. yt-dlp then reports HLS formats, and the
+	// master playlist those variants came from as `manifest_url`.
+	is_live?: boolean;
+	live_status?: string;
+	manifest_url?: string;
 };
 
 // Only ever picks a `vtt` entry -- the app contract restricts
@@ -211,9 +224,44 @@ export async function resolveStream(videoId: string, maxHeight?: number): Promis
 		'bun',
 		...CACHE_ARGS
 	]);
-	const info = JSON.parse(output.trim()) as YtDlpInfo;
+	return resolveFromInfo(videoId, JSON.parse(output.trim()) as YtDlpInfo);
+}
+
+/** Split from resolveStream so what yt-dlp reported can be tested without running it. */
+export function resolveFromInfo(videoId: string, info: YtDlpInfo): ResolvedStream {
+	if (info.is_live || info.live_status === 'is_live') return toLiveStream(videoId, info);
 	const { video, audio } = extractTracks(videoId, info);
 	return toResolvedStream(info, video, audio);
+}
+
+// A livestream is one HLS playlist the host proxies and the player picks
+// variants from itself, not a video+audio pair to remux. The master playlist
+// is preferred so the quality picker works; the single variant yt-dlp chose is
+// the fallback when it didn't report one.
+function toLiveStream(videoId: string, info: YtDlpInfo): ResolvedStream {
+	// Where yt-dlp puts it depends on how the format selector resolved: on the
+	// info itself for one chosen format, on `requested_formats` for a pair, and
+	// always on the listed formats. The master playlist is preferred so the
+	// quality picker works, a single variant's own URL is the last resort.
+	const videoUrl =
+		info.manifest_url ??
+		info.requested_formats?.find((format) => format.manifest_url)?.manifest_url ??
+		info.formats?.find((format) => format.manifest_url)?.manifest_url ??
+		info.url ??
+		info.requested_formats?.[0]?.url;
+	if (!videoUrl) throw new Error(`yt-dlp returned no live stream URL for ${videoId}`);
+	return {
+		videoUrl,
+		videoContainer: 'hls',
+		vcodec: info.vcodec && info.vcodec !== 'none' ? info.vcodec : 'avc1',
+		acodec: info.acodec && info.acodec !== 'none' ? info.acodec : undefined,
+		title: info.title,
+		// A broadcast has no end to measure to.
+		duration: 0,
+		live: true,
+		qualities: extractQualities(info),
+		controls: { seek: false, seekButtons: false }
+	};
 }
 
 // No separate audio track means a progressive/direct format, where the video
@@ -237,7 +285,7 @@ function toResolvedStream(
 		videoContainer: containerFrom(video.ext),
 		...audioFieldsFor(video, audio),
 		title: info.title,
-		duration: info.duration,
+		duration: info.duration ?? 0,
 		qualities: extractQualities(info),
 		subtitleTracks: extractSubtitleTracks(info)
 	};

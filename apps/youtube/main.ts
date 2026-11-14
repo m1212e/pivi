@@ -818,9 +818,7 @@ function main() {
 	// 'activate' that arrives straight away is never missed.
 	connection.onNotification(activateNotification, ({ locale }) => {
 		setLocale(locale);
-		activate().catch((err: unknown) => {
-			log('error', err instanceof Error ? err.message : String(err));
-		});
+		activateWithRetry();
 	});
 
 	// The language can become known after activation, once a page was opened on
@@ -979,6 +977,18 @@ function routeUiEvent(event: UiEvent) {
 }
 
 let activated = false;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+// YouTube may be unreachable when the app starts (the TV just booted, Wi-Fi is
+// still joining), so a failed activation is tried again instead of leaving the
+// app empty until it is restarted.
+function activateWithRetry() {
+	clearTimeout(retryTimer);
+	activate().catch((err: unknown) => {
+		log('error', err instanceof Error ? err.message : String(err));
+		if (!activated) retryTimer = setTimeout(activateWithRetry, 15_000);
+	});
+}
 
 async function activate() {
 	// Needed before isSignedIn() (refresh()/browseScreen(), below) can be

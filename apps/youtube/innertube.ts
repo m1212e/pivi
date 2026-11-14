@@ -49,13 +49,18 @@ async function storeTokens(tokens: OAuth2Tokens): Promise<void> {
 // can't read TV/ANDROID-shaped responses anyway, which is why tvHomeFeed.ts
 // walks the raw TV response itself instead of using them.
 //
-// A `let` so the session can be swapped once the stored login has been loaded
-// (loadStoredSession below); every module importing `innertube` sees the live
-// binding.
-export let innertube = await Innertube.create({
-	cache: new UniversalCache(false),
-	enable_session_cache: false
-});
+// Created in loadStoredSession (below), once the host has activated the app,
+// not at module load: a top level await on YouTube being reachable would keep
+// the app from ever saying `ready` while offline, and the host would then kill
+// it. Every module importing `innertube` sees the live binding. Anything that
+// runs before activation must not touch it.
+export let innertube!: Innertube;
+
+// Requests the library makes itself (session setup, API calls) get a deadline,
+// since none of them has one and a stalled connection would hang the app.
+const REQUEST_TIMEOUT_MS = 20_000;
+const fetchWithTimeout: typeof fetch = (input, init) =>
+	fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
 
 // The host's language and region, from its `host/activate`. Without them
 // YouTube answers in English with English-ranked results, however the account
@@ -70,6 +75,7 @@ export function setLocale(tag: string) {
 		localeOptions = {};
 	}
 	// A session that already exists keeps what it was created with.
+	if (!innertube) return;
 	const client = innertube.session.context.client;
 	if (localeOptions.lang) client.hl = localeOptions.lang;
 	if (localeOptions.location) client.gl = localeOptions.location;
@@ -87,22 +93,34 @@ function wirePersistence(client: Innertube) {
 	client.session.on('auth', persist);
 	client.session.on('update-credentials', persist);
 }
-wirePersistence(innertube);
-
 // Not run at module load but from main.ts once the host has activated the
 // app. The host runs this app once per active pivi profile (it's stopped
 // and started again on a profile switch), with that profile's own /storage
 // mounted — so there's exactly one login to look for here, and no cross-profile
 // state to reset. A fresh Innertube rather than reusing the old one: a Session's
 // own signOut() revokes the credentials at Google, which nothing here should do.
+async function createWithRetry(): Promise<Innertube> {
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+		try {
+			return await Innertube.create({
+				...localeOptions,
+				cache: new UniversalCache(false),
+				enable_session_cache: false,
+				fetch: fetchWithTimeout
+			});
+		} catch (err) {
+			lastError = err;
+		}
+	}
+	throw lastError;
+}
+
 export async function loadStoredSession(): Promise<void> {
 	const stored = await getStoredTokens();
 
-	const next = await Innertube.create({
-		...localeOptions,
-		cache: new UniversalCache(false),
-		enable_session_cache: false
-	});
+	const next = await createWithRetry();
 	wirePersistence(next);
 	if (stored) {
 		try {
