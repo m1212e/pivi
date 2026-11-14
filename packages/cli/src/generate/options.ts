@@ -19,7 +19,7 @@ function ownPackage(): { version: string; peerDependencies: Record<string, strin
 }
 
 /** What a new app depends on: the SDK range this CLI supports, and this CLI's own version. */
-export function defaultSpecs() {
+function defaultSpecs() {
 	const pkg = ownPackage();
 	return { sdk: pkg.peerDependencies['@pivi/sdk']!, cli: `^${pkg.version}` };
 }

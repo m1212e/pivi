@@ -172,62 +172,75 @@ export class Harness {
 	}
 
 	private onAppMessage(method: string, params: unknown, id: unknown) {
-		const spec = appMethod(method);
-		if (id !== undefined) {
-			this.problem(`${method}: the app sent a request, the protocol has none`);
-			return;
-		}
-		if (!spec) {
-			this.problem(`${method}: not a method an app may send`);
-			return;
-		}
-		if (spec.feature && !this.manifest.features.includes(spec.feature)) {
+		if (method === 'app/ready') return this.onReady(params);
+		const data = this.accept(method, params, id);
+		if (data) this.apply(method, data);
+	}
+
+	private onReady(params: unknown) {
+		const protocol = (params as { protocol?: number } | undefined)?.protocol;
+		if (protocol === undefined || !SUPPORTED_PROTOCOLS.includes(protocol)) {
 			this.problem(
-				`${method}: the host drops this, the manifest does not declare "${spec.feature}"`
+				`app/ready: protocol ${protocol} is not supported (host speaks ${PROTOCOL_VERSION})`
 			);
-			return;
 		}
-		if (method === 'app/ready') {
-			const protocol = (params as { protocol?: number } | undefined)?.protocol;
-			if (protocol === undefined || !SUPPORTED_PROTOCOLS.includes(protocol)) {
-				this.problem(
-					`app/ready: protocol ${protocol} is not supported (host speaks ${PROTOCOL_VERSION})`
-				);
-			}
-			this.ready?.();
-			return;
+		this.ready?.();
+	}
+
+	/** Why the host would refuse this message, if it would. */
+	private refusal(spec: MethodSpec | undefined, id: unknown): string | undefined {
+		if (id !== undefined) return 'the app sent a request, the protocol has none';
+		if (!spec) return 'not a method an app may send';
+		if (spec.feature && !this.manifest.features.includes(spec.feature)) {
+			return `the host drops this, the manifest does not declare "${spec.feature}"`;
 		}
-		const parsed = spec.params?.safeParse(params);
+		if (!this.activated) return 'sent before host/activate, the host drops it';
+		return undefined;
+	}
+
+	/** The message's validated params, or undefined (and a problem) when the host would refuse it. */
+	private accept(
+		method: string,
+		params: unknown,
+		id: unknown
+	): Record<string, unknown> | undefined {
+		const spec = appMethod(method);
+		const refusal = this.refusal(spec, id);
+		if (refusal) {
+			this.problem(`${method}: ${refusal}`);
+			return undefined;
+		}
+		const parsed = spec?.params?.safeParse(params);
 		if (parsed && !parsed.success) {
 			const issues = parsed.error.issues
 				.slice(0, 4)
 				.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
 			this.problem(`${method}: the host rejects this: ${issues.join('; ')}`);
-			return;
+			return undefined;
 		}
-		if (!this.activated && method !== 'app/ready') {
-			this.problem(`${method}: sent before host/activate, the host drops it`);
-			return;
-		}
-		const data = parsed?.data as Record<string, unknown> | undefined;
+		return (parsed?.data ?? {}) as Record<string, unknown>;
+	}
+
+	/** Remembers what an accepted message published. */
+	private apply(method: string, data: Record<string, unknown>) {
 		switch (method) {
 			case 'app/publishDashboard':
 				this.dashboard.current = data as unknown as DashboardContribution;
 				this.emit(`← dashboard: ${this.dashboard.current.cards.length} cards`);
 				break;
 			case 'app/publishScreen':
-				this.screens.set(String(data?.screenId), data?.root as UiNode);
-				this.emit(`← screen "${String(data?.screenId)}"`);
+				this.screens.set(String(data.screenId), data.root as UiNode);
+				this.emit(`← screen "${String(data.screenId)}"`);
 				break;
 			case 'app/openOnPhone': {
-				const url = String(data?.url);
+				const url = String(data.url);
 				this.phoneUrls.push(url);
 				this.emit(`← open on phone: ${url}`);
 				if (!url.startsWith('https://')) this.problem('app/openOnPhone: the url must be https');
 				break;
 			}
 			case 'app/chatMessages':
-				this.chat.push(data ?? {});
+				this.chat.push(data);
 				this.emit('← chat messages');
 				break;
 		}

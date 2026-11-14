@@ -3,8 +3,16 @@
 	"$schema": "./node_modules/fallow/schema.json",
 	// deploy/pivi-server.mjs is the production entry point (the systemd unit
 	// runs it directly; see DEPLOYMENT.md), so nothing imports it and the
-	// module graph can only see it as an unreachable file.
-	"entry": ["src/index.{ts,tsx,js,jsx}", "src/main.{ts,tsx,js,jsx}", "deploy/pivi-server.mjs"],
+	// module graph can only see it as an unreachable file. Each app's main.ts is
+	// the entry its image runs (see apps/*/Dockerfile), and the release script
+	// and the packages' build scripts are run directly too.
+	"entry": [
+		"src/index.{ts,tsx,js,jsx}",
+		"src/main.{ts,tsx,js,jsx}",
+		"deploy/pivi-server.mjs",
+		"apps/*/main.ts",
+		"packages/*/scripts/*.ts"
+	],
 	"ignoreFindings": ["src/lib/api/rumbleClient/**"],
 	// Registered by URL string (navigator.serviceWorker.register), not an
 	// import, so the static module graph can't see it's reachable.
@@ -17,24 +25,14 @@
 	// reintroduce them). `ignoreFindings`, not `ignorePatterns`, since other
 	// files still genuinely import real symbols from it and need it to stay
 	// part of the module graph.
-	// Both actually used, just invisible to static import-graph analysis:
+	// Actually used, just invisible to static import-graph analysis:
 	// `pg` is drizzle-orm/node-postgres's own runtime driver (src/api/db/
-	// index.ts imports the drizzle wrapper, never `pg` by name), and
-	// `@tailwindcss/typography` is pulled in via a CSS `@plugin` directive
-	// (src/routes/layout.css), not a JS/TS import.
-	//
-	// And `vscode-jsonrpc` / `zod`, which apps/youtube/package.json lists for
-	// the app image's build (see its Dockerfile): they're imported by sdk/, which
-	// gets bundled into the image, never by the app's own files, so that manifest
-	// can't be seen using them. Both are real dependencies of the host too.
+	// index.ts imports the drizzle wrapper, never `pg` by name).
 	//
 	// And the two @inlang plugins, which project.inlang/settings.json loads by
 	// path (`modules`), never by import.
 	"ignoreDependencies": [
 		"pg",
-		"@tailwindcss/typography",
-		"vscode-jsonrpc",
-		"zod",
 		"@inlang/plugin-message-format",
 		"@inlang/plugin-m-function-matcher"
 	],

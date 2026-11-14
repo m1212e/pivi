@@ -40,95 +40,123 @@ const includes = (haystack: Uint8Array, needle: number[]) => {
 	return false;
 };
 
-export async function probeStream(
-	manifest: AppManifest,
-	stream: ResolvedStream
-): Promise<ProbeLine[]> {
-	const lines: ProbeLine[] = [];
-	const signal = AbortSignal.timeout(15_000);
+const fail = (message: string): ProbeLine => ({ level: 'fail', message });
+const ok = (message: string): ProbeLine => ({ level: 'ok', message });
+
+/** Every URL in the answer has to be https and on a declared domain. */
+function checkUrls(manifest: AppManifest, stream: ResolvedStream): ProbeLine[] {
 	const urls: [string, string][] = [['videoUrl', stream.videoUrl]];
 	if (stream.audioUrl) urls.push(['audioUrl', stream.audioUrl]);
 	for (const track of stream.subtitleTracks ?? [])
 		urls.push([`subtitle ${track.language}`, track.url]);
-
-	for (const [label, url] of urls) {
+	return urls.map(([label, url]) => {
 		const problem = allowed(manifest, url);
-		lines.push(
-			problem
-				? { level: 'fail', message: `${label}: ${problem}` }
-				: { level: 'ok', message: `${label}: https, domain allowed` }
-		);
-	}
+		return problem ? fail(`${label}: ${problem}`) : ok(`${label}: https, domain allowed`);
+	});
+}
 
-	if (stream.videoContainer === 'hls') {
-		try {
-			const base = new URL(stream.videoUrl);
-			const response = await fetch(base, { signal });
-			const text = await response.text();
-			if (!response.ok || !text.startsWith('#EXTM3U')) {
-				lines.push({
-					level: 'fail',
-					message: `videoUrl is not an HLS playlist (HTTP ${response.status})`
-				});
-			} else {
-				const refs = [...text.matchAll(/^(?!#)(\S+)$/gm), ...text.matchAll(/URI="([^"]+)"/g)].map(
-					(m) => m[1]!
-				);
-				const hosts = new Set(refs.slice(0, 50).map((ref) => new URL(ref, base).toString()));
-				const bad = [...hosts].map((u) => [u, allowed(manifest, u)] as const).filter(([, p]) => p);
-				lines.push(
-					bad.length
-						? {
-								level: 'fail',
-								message: `playlist references blocked URLs, e.g. ${bad[0]![0]} (${bad[0]![1]})`
-							}
-						: { level: 'ok', message: `playlist ok, ${hosts.size} references on allowed domains` }
-				);
-				if (!/#EXT-X-STREAM-INF/.test(text) && !/#EXTINF/.test(text)) {
-					lines.push({ level: 'warn', message: 'playlist has neither variants nor segments' });
-				}
-			}
-		} catch (error) {
-			lines.push({ level: 'fail', message: `could not fetch the playlist: ${String(error)}` });
+/** The URIs a playlist references, variants, segments and keys alike, made absolute. */
+function playlistRefs(text: string, base: URL): string[] {
+	const refs = [...text.matchAll(/^(?!#)(\S+)$/gm), ...text.matchAll(/URI="([^"]+)"/g)].map(
+		(m) => m[1]!
+	);
+	return [...new Set(refs.slice(0, 50).map((ref) => new URL(ref, base).toString()))];
+}
+
+/** The host proxies an HLS playlist and everything it references, so all of it must be allowed. */
+async function probeHls(
+	manifest: AppManifest,
+	url: string,
+	signal: AbortSignal
+): Promise<ProbeLine[]> {
+	try {
+		const base = new URL(url);
+		const response = await fetch(base, { signal });
+		const text = await response.text();
+		if (!response.ok || !text.startsWith('#EXTM3U')) {
+			return [fail(`videoUrl is not an HLS playlist (HTTP ${response.status})`)];
+		}
+		const refs = playlistRefs(text, base);
+		const blocked = refs
+			.map((u) => [u, allowed(manifest, u)] as const)
+			.find(([, problem]) => problem);
+		const lines = [
+			blocked
+				? fail(`playlist references blocked URLs, e.g. ${blocked[0]} (${blocked[1]})`)
+				: ok(`playlist ok, ${refs.length} references on allowed domains`)
+		];
+		if (!/#EXT-X-STREAM-INF|#EXTINF/.test(text)) {
+			lines.push({ level: 'warn', message: 'playlist has neither variants nor segments' });
 		}
 		return lines;
+	} catch (error) {
+		return [fail(`could not fetch the playlist: ${String(error)}`)];
 	}
+}
 
-	for (const [label, url, container] of [
-		['videoUrl', stream.videoUrl, stream.videoContainer],
-		...(stream.audioUrl ? [['audioUrl', stream.audioUrl, stream.audioContainer ?? 'mp4']] : [])
-	] as [string, string, string][]) {
-		try {
-			const { response, bytes } = await head(url, signal);
-			if (!response.ok && response.status !== 206) {
-				lines.push({ level: 'fail', message: `${label}: HTTP ${response.status}` });
-				continue;
-			}
-			lines.push({
-				level: 'ok',
-				message: `${label}: HTTP ${response.status}, ${response.headers.get('content-type') ?? 'no content type'}`
-			});
-			if (stream.audioUrl) {
-				// Separate tracks are played through MSE, which needs the segment index up front.
-				const hasIndex =
-					container === 'webm'
-						? includes(bytes, [0x1c, 0x53, 0xbb, 0x6b])
-						: includes(bytes, [0x73, 0x69, 0x64, 0x78]);
-				lines.push(
-					hasIndex
-						? {
-								level: 'ok',
-								message: `${label}: segment index (${container === 'webm' ? 'Cues' : 'sidx'}) within the first 2 MiB`
-							}
-						: {
-								level: 'fail',
-								message: `${label}: no ${container === 'webm' ? 'Cues' : 'sidx'} within the first 2 MiB, the player cannot seek separate tracks`
-							}
-				);
-			}
-		} catch (error) {
-			lines.push({ level: 'fail', message: `${label}: could not fetch: ${String(error)}` });
+const INDEX_MARKERS = {
+	webm: { name: 'Cues', bytes: [0x1c, 0x53, 0xbb, 0x6b] },
+	mp4: { name: 'sidx', bytes: [0x73, 0x69, 0x64, 0x78] }
+};
+
+/**
+ * Fetches the start of one file. Separate video and audio tracks go through MSE, which needs the
+ * segment index up front, so for those it also looks for it.
+ */
+async function probeFile(
+	label: string,
+	url: string,
+	container: string,
+	separateTracks: boolean,
+	signal: AbortSignal
+): Promise<ProbeLine[]> {
+	try {
+		const { response, bytes } = await head(url, signal);
+		if (!response.ok && response.status !== 206) return [fail(`${label}: HTTP ${response.status}`)];
+		const lines = [
+			ok(
+				`${label}: HTTP ${response.status}, ${response.headers.get('content-type') ?? 'no content type'}`
+			)
+		];
+		if (separateTracks) {
+			const marker = container === 'webm' ? INDEX_MARKERS.webm : INDEX_MARKERS.mp4;
+			lines.push(
+				includes(bytes, marker.bytes)
+					? ok(`${label}: segment index (${marker.name}) within the first 2 MiB`)
+					: fail(
+							`${label}: no ${marker.name} within the first 2 MiB, the player cannot seek separate tracks`
+						)
+			);
 		}
+		return lines;
+	} catch (error) {
+		return [fail(`${label}: could not fetch: ${String(error)}`)];
+	}
+}
+
+export async function probeStream(
+	manifest: AppManifest,
+	stream: ResolvedStream
+): Promise<ProbeLine[]> {
+	const signal = AbortSignal.timeout(15_000);
+	const lines = checkUrls(manifest, stream);
+	if (stream.videoContainer === 'hls')
+		return [...lines, ...(await probeHls(manifest, stream.videoUrl, signal))];
+
+	const separate = Boolean(stream.audioUrl);
+	lines.push(
+		...(await probeFile('videoUrl', stream.videoUrl, stream.videoContainer, separate, signal))
+	);
+	if (stream.audioUrl) {
+		lines.push(
+			...(await probeFile(
+				'audioUrl',
+				stream.audioUrl,
+				stream.audioContainer ?? 'mp4',
+				true,
+				signal
+			))
+		);
 	}
 	return lines;
 }

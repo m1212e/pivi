@@ -49,8 +49,11 @@ function cancelled<T>(value: T): Exclude<T, symbol> {
 	return value as Exclude<T, symbol>;
 }
 
-export async function init(args: string[]): Promise<number> {
-	const { values, positionals } = parseArgs({
+type Values = ReturnType<typeof parseInitArgs>['values'];
+type Draft = Partial<InitOptions> & { id: string };
+
+function parseInitArgs(args: string[]) {
+	return parseArgs({
 		args,
 		allowPositionals: true,
 		options: {
@@ -70,29 +73,24 @@ export async function init(args: string[]): Promise<number> {
 			help: { type: 'boolean', short: 'h' }
 		}
 	});
-	if (values.help) {
-		console.log(HELP);
-		return 0;
-	}
+}
 
-	const interactive = !values.yes && process.stdin.isTTY === true;
-	const dirArg = positionals[0];
-	if (interactive) p.intro('pivi-app init');
+const idFromDirectory = (target: string) =>
+	basename(target)
+		.toLowerCase()
+		.replace(/[^a-z0-9-]+/g, '-')
+		.replace(/^-+|-+$/g, '');
 
+/** The target directory and app id, asked for when interactive and not passed. */
+async function askLocation(dirArg: string | undefined, values: Values, interactive: boolean) {
 	let dir = dirArg;
-	if (!dir && interactive)
+	if (!dir && interactive) {
 		dir = cancelled(
 			await p.text({ message: 'Directory', placeholder: 'my-app', defaultValue: 'my-app' })
 		);
-	dir ??= '.';
-	const target = resolve(dir);
-
-	let id =
-		values.id ??
-		basename(target)
-			.toLowerCase()
-			.replace(/[^a-z0-9-]+/g, '-')
-			.replace(/^-+|-+$/g, '');
+	}
+	const target = resolve(dir ?? '.');
+	let id = values.id ?? idFromDirectory(target);
 	if (interactive && !values.id) {
 		id = cancelled(
 			await p.text({
@@ -103,116 +101,146 @@ export async function init(args: string[]): Promise<number> {
 			})
 		);
 	}
+	return { target, id };
+}
 
-	const partial: Partial<InitOptions> & { id: string } = { id };
-	partial.name = values.name;
-	partial.description = values.description;
-	partial.features = list(values.features) as InitOptions['features'] | undefined;
-	partial.domains = list(values.domains);
-	partial.storage = values.storage;
-	partial.ci = values.ci as CiPlatform | undefined;
-	partial.agent = values.agent as AgentFiles | undefined;
-	partial.sdkSpec = values.sdk;
-	partial.cliSpec = values.cli;
+function fromFlags(id: string, values: Values): Draft {
+	return {
+		id,
+		name: values.name,
+		description: values.description,
+		features: list(values.features) as InitOptions['features'] | undefined,
+		domains: list(values.domains),
+		storage: values.storage,
+		ci: values.ci as CiPlatform | undefined,
+		agent: values.agent as AgentFiles | undefined,
+		sdkSpec: values.sdk,
+		cliSpec: values.cli
+	};
+}
 
-	if (interactive) {
-		partial.name ??= cancelled(
-			await p.text({ message: 'Display name', initialValue: titleCase(id) })
-		);
-		partial.description ??= cancelled(
+/** What the app is and does. */
+async function askApp(partial: Draft) {
+	partial.name ??= cancelled(
+		await p.text({ message: 'Display name', initialValue: titleCase(partial.id) })
+	);
+	partial.description ??= cancelled(
+		await p.text({
+			message: 'One line description',
+			initialValue: `Watch ${partial.name} on pivi`,
+			validate: (v) => ((v?.length ?? 0) > 140 ? 'At most 140 characters' : undefined)
+		})
+	);
+	partial.features ??= cancelled(
+		await p.multiselect({
+			message: 'What does the app do?',
+			options: [
+				{ value: 'dashboard', label: 'dashboard', hint: 'cards on the home screen' },
+				{ value: 'screen', label: 'screen', hint: 'its own pages (browse, search, settings)' },
+				{ value: 'playback', label: 'playback', hint: 'plays video' },
+				{ value: 'skipSegments', label: 'skipSegments', hint: 'sponsor/intro skipping' },
+				{ value: 'chat', label: 'chat', hint: 'live chat beside a stream' }
+			],
+			initialValues: ['dashboard', 'screen', 'playback'],
+			required: true
+		})
+	) as InitOptions['features'];
+	partial.domains ??= list(
+		cancelled(
 			await p.text({
-				message: 'One line description',
-				initialValue: `Watch ${partial.name} on pivi`,
-				validate: (v) => ((v?.length ?? 0) > 140 ? 'At most 140 characters' : undefined)
+				message: 'Hosts the app contacts (comma separated, you can add more later)',
+				placeholder: 'api.example.com, *.cdn.example.com',
+				defaultValue: ''
 			})
-		);
-		partial.features ??= cancelled(
-			await p.multiselect({
-				message: 'What does the app do?',
-				options: [
-					{ value: 'dashboard', label: 'dashboard', hint: 'cards on the home screen' },
-					{ value: 'screen', label: 'screen', hint: 'its own pages (browse, search, settings)' },
-					{ value: 'playback', label: 'playback', hint: 'plays video' },
-					{ value: 'skipSegments', label: 'skipSegments', hint: 'sponsor/intro skipping' },
-					{ value: 'chat', label: 'chat', hint: 'live chat beside a stream' }
-				],
-				initialValues: ['dashboard', 'screen', 'playback'],
-				required: true
-			})
-		) as InitOptions['features'];
-		partial.domains ??= list(
-			cancelled(
-				await p.text({
-					message: 'Hosts the app contacts (comma separated, you can add more later)',
-					placeholder: 'api.example.com, *.cdn.example.com',
-					defaultValue: ''
-				})
-			)
-		);
-		partial.storage ??= cancelled(
-			await p.confirm({ message: 'Does it keep data, such as a sign-in?', initialValue: false })
-		);
-		partial.ci ??= cancelled(
-			await p.select({
-				message: 'CI to generate',
-				options: [
-					{ value: 'github', label: 'GitHub Actions', hint: 'builds and pushes to ghcr.io' },
-					{ value: 'none', label: 'none' }
-				]
-			})
-		) as CiPlatform;
-		partial.agent ??= cancelled(
-			await p.select({
-				message: 'Files for AI coding agents',
-				options: [
-					{
-						value: 'claude',
-						label: 'Claude Code',
-						hint: 'AGENTS.md, CLAUDE.md and the pivi plugin'
-					},
-					{ value: 'agents', label: 'AGENTS.md only' },
-					{ value: 'none', label: 'none' }
-				]
-			})
-		) as AgentFiles;
-	}
+		)
+	);
+	partial.storage ??= cancelled(
+		await p.confirm({ message: 'Does it keep data, such as a sign-in?', initialValue: false })
+	);
+}
 
+/** The tooling around the app. */
+async function askTooling(partial: Draft) {
+	partial.ci ??= cancelled(
+		await p.select({
+			message: 'CI to generate',
+			options: [
+				{ value: 'github', label: 'GitHub Actions', hint: 'builds and pushes to ghcr.io' },
+				{ value: 'none', label: 'none' }
+			]
+		})
+	) as CiPlatform;
+	partial.agent ??= cancelled(
+		await p.select({
+			message: 'Files for AI coding agents',
+			options: [
+				{ value: 'claude', label: 'Claude Code', hint: 'AGENTS.md, CLAUDE.md and the pivi plugin' },
+				{ value: 'agents', label: 'AGENTS.md only' },
+				{ value: 'none', label: 'none' }
+			]
+		})
+	) as AgentFiles;
+}
+
+/** The complete options, or an error message. */
+function finalize(partial: Draft): InitOptions | string {
 	let options: InitOptions;
 	try {
 		options = normalizeOptions(partial);
 	} catch (error) {
-		console.error(error instanceof Error ? error.message : error);
-		return 2;
+		return error instanceof Error ? error.message : String(error);
 	}
-	if ((options.description?.length ?? 0) > 140) {
-		console.error('The description is at most 140 characters.');
-		return 2;
-	}
+	if (options.description.length > 140) return 'The description is at most 140 characters.';
 	if (options.ci !== 'github' && options.ci !== 'none') {
-		console.error(`Unknown --ci "${options.ci}". Supported: github, none.`);
+		return `Unknown --ci "${options.ci}". Supported: github, none.`;
+	}
+	return options;
+}
+
+function install(target: string, interactive: boolean) {
+	const spinner = interactive ? p.spinner() : undefined;
+	spinner?.start('bun install');
+	const result = spawnSync('bun', ['install'], {
+		cwd: target,
+		stdio: interactive ? 'ignore' : 'inherit'
+	});
+	spinner?.stop(
+		result.error || result.status !== 0
+			? 'bun install failed, run it yourself'
+			: 'Dependencies installed'
+	);
+}
+
+export async function init(args: string[]): Promise<number> {
+	const { values, positionals } = parseInitArgs(args);
+	if (values.help) {
+		console.log(HELP);
+		return 0;
+	}
+	const interactive = !values.yes && process.stdin.isTTY === true;
+	if (interactive) p.intro('pivi-app init');
+
+	const { target, id } = await askLocation(positionals[0], values, interactive);
+	const partial = fromFlags(id, values);
+	if (interactive) {
+		await askApp(partial);
+		await askTooling(partial);
+	}
+	const options = finalize(partial);
+	if (typeof options === 'string') {
+		console.error(options);
 		return 2;
 	}
-
 	if (existsSync(target) && readdirSync(target).length > 0 && !values.force) {
 		console.error(`${target} is not empty. Pass --force to write into it anyway.`);
 		return 1;
 	}
+
 	writeProject(target, generateProject(options));
+	if (!values['no-install']) install(target, interactive);
 
-	if (!values['no-install']) {
-		const spinner = interactive ? p.spinner() : undefined;
-		spinner?.start('bun install');
-		const result = spawnSync('bun', ['install'], {
-			cwd: target,
-			stdio: interactive ? 'ignore' : 'inherit'
-		});
-		if (result.error || result.status !== 0) {
-			spinner?.stop('bun install failed, run it yourself');
-		} else spinner?.stop('Dependencies installed');
-	}
-
-	const cd = dirArg && dirArg !== '.' ? `cd ${dirArg} && ` : '';
-	const next = `${cd}bun run dev`;
+	const dirArg = positionals[0];
+	const next = `${dirArg && dirArg !== '.' ? `cd ${dirArg} && ` : ''}bun run dev`;
 	if (interactive) p.outro(`Created ${options.name}. Next: ${next}`);
 	else console.log(`Created ${options.name} in ${target}\nNext: ${next}`);
 	return 0;
