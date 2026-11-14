@@ -57,8 +57,10 @@ let
           ../package.json
           ../bun.lock
           ../.npmrc
-          # A workspace member: `bun install --frozen-lockfile` fails without its manifest.
+          # Workspace members: `bun install --frozen-lockfile` refuses the lockfile
+          # without every member's manifest.
           ../packages/sdk/package.json
+          ../packages/cli/package.json
         ];
       };
 
@@ -94,6 +96,12 @@ let
         # bun's own cache records absolute paths — it would make the hash
         # depend on the build directory.
         rm -rf node_modules/.cache
+        # bun's isolated linker creates a package's own node_modules/.bin (the
+        # bins of its peer dependencies) only sometimes, depending on install
+        # order: the same lockfile gave different hashes from run to run. Those
+        # bins only serve lifecycle scripts, which --ignore-scripts never runs,
+        # so drop them. The top-level node_modules/.bin stays.
+        find node_modules/.bun -mindepth 3 -maxdepth 3 -type d -path '*/node_modules/.bin' -exec rm -rf {} +
         cp -R node_modules $out
         runHook postInstall
       '';
