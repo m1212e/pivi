@@ -87,7 +87,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run validate
@@ -101,23 +101,23 @@ jobs:
           echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
 
       # Raspberry Pis are arm64 and the host picks its own platform out of the image index.
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
       - if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: \${{ github.actor }}
           password: \${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/\${{ github.repository }}
           tags: |
             type=raw,value=\${{ steps.manifest.outputs.version }},enable=\${{ github.ref_type == 'tag' }}
             type=raw,value=latest,enable=\${{ github.ref_type == 'tag' }}
             type=ref,event=branch
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64

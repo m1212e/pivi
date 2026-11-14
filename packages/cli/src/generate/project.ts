@@ -202,7 +202,7 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 				image: `docker build --label "dev.pivi.manifest=$(pivi-app manifest)" -t pivi-${o.id}:latest .`
 			},
 			dependencies: { '@pivi/sdk': o.sdkSpec, 'vscode-jsonrpc': '^10.0.0', zod: '^4.6.7' },
-			devDependencies: { '@pivi/cli': o.cliSpec, '@types/bun': 'latest', typescript: '^6.0.3' }
+			devDependencies: { '@pivi/cli': o.cliSpec, '@types/bun': 'latest', typescript: '^7.0.2' }
 		}),
 		'tsconfig.json': json({
 			compilerOptions: {

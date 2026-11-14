@@ -29,7 +29,7 @@ RUN bun build ./apps/youtube/main.ts --target=bun --conditions pivi-source --out
 # installed in the *system* trust store, so yt-dlp has to use that store, which
 # it does when certifi is absent. yt-dlp-ejs is the YouTube challenge solver.
 FROM oven/bun:1
-ARG YTDLP_VERSION=2026.08.19
+ARG YTDLP_VERSION=2026.10.26
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
 	&& python3 -m venv /opt/yt-dlp \

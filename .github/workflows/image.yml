@@ -40,7 +40,7 @@ jobs:
     # for public repositories; on a private repo they need a paid plan, in
     # which case swap in `ubuntu-latest` plus a QEMU step:
     #
-    #   - uses: docker/setup-qemu-action@v3
+    #   - uses: docker/setup-qemu-action@v4
     #   - run: echo "extra-platforms = aarch64-linux" | sudo tee -a /etc/nix/nix.conf
     #
     # and expect it to be very slow.
@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 180
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -121,7 +121,7 @@ jobs:
 
       # Kept even when there's no release to attach to (a plain
       # workflow_dispatch), so a manual build is still downloadable.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.image.outputs.path }}
           path: ${{ steps.image.outputs.path }}

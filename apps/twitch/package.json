@@ -5,7 +5,7 @@
 	"description": "Dependencies of the Twitch app image, pinned by this directory's own bun.lock. The protocol comes from @pivi/sdk, linked to the repo's packages/sdk here (an app outside this repo depends on the published version), which needs zod and vscode-jsonrpc from here.",
 	"dependencies": {
 		"@pivi/sdk": "file:../../packages/sdk",
-		"vscode-jsonrpc": "^9.0.2",
+		"vscode-jsonrpc": "^10.0.0",
 		"zod": "^4.5.4"
 	}
 }
