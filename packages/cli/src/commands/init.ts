@@ -28,8 +28,8 @@ Scaffolds a new pivi app. Without --yes it asks for what you did not pass.
   --ci <github|none>     CI workflow to generate (default github)
   --agent <claude|agents|none>
                          files for AI coding agents (default claude)
-  --sdk <spec>           how package.json depends on @pivi/sdk (default ^0.1.0)
-  --cli <spec>           how package.json depends on @pivi/cli (default ^0.1.0)
+  --sdk <spec>           how package.json depends on @pivi/sdk (default: the range this CLI supports)
+  --cli <spec>           how package.json depends on @pivi/cli (default: this CLI's version)
   --no-install           do not run bun install
   --force                write into a directory that is not empty
   --yes                  take defaults for everything not passed, never prompt

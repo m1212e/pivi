@@ -1,0 +1,65 @@
+name: Packages
+
+# @pivi/sdk and @pivi/cli. Every pull request checks that they build into correct
+# packages. Every push to main publishes each package whose version is not on npm
+# yet (scripts/release-packages.sh), so a release is a version bump in its
+# package.json:
+#
+#   cd packages/sdk && npm version minor --no-git-tag-version
+#
+# Bump the SDK's major (minor while it is 0.x) whenever PROTOCOL_VERSION changes,
+# and the CLI's @pivi/sdk peer range with it (packages/cli/src/peer.spec.ts fails
+# until you do). Publishing needs an NPM_TOKEN secret with publish rights for @pivi.
+on:
+  pull_request:
+    paths:
+      ['packages/**', 'scripts/release-packages.sh', '.github/workflows/packages.yml', 'bun.lock']
+  push:
+    branches: [main]
+    paths:
+      ['packages/**', 'scripts/release-packages.sh', '.github/workflows/packages.yml', 'bun.lock']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run sdk:check
+      - run: bun run cli:check
+      - run: bunx vitest --run --project server packages
+
+  release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    # Two pushes in a row must not both try to publish the same version.
+    concurrency:
+      group: release-packages
+      cancel-in-progress: false
+    permissions:
+      contents: write # tags and GitHub releases
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # existing tags
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - name: Publish changed packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/release-packages.sh

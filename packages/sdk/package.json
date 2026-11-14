@@ -1,8 +1,14 @@
 {
 	"name": "@pivi/sdk",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "The contract between pivi and its apps: manifest, JSON-RPC protocol, declarative UI and the app-side runtime.",
 	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/m1212e/pivi.git",
+		"directory": "packages/sdk"
+	},
+	"homepage": "https://github.com/m1212e/pivi/tree/main/packages/sdk#readme",
 	"type": "module",
 	"files": [
 		"dist",

@@ -3,6 +3,12 @@
 	"version": "0.1.0",
 	"description": "Build, test and ship pivi apps: scaffold a project, run it against a fake host, validate it.",
 	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/m1212e/pivi.git",
+		"directory": "packages/cli"
+	},
+	"homepage": "https://github.com/m1212e/pivi/tree/main/packages/cli#readme",
 	"type": "module",
 	"bin": {
 		"pivi-app": "./dist/cli.mjs"
@@ -24,7 +30,7 @@
 		"@clack/prompts": "^0.11.0"
 	},
 	"peerDependencies": {
-		"@pivi/sdk": "^0.1"
+		"@pivi/sdk": "^0.2"
 	},
 	"devDependencies": {
 		"@pivi/sdk": "workspace:*",

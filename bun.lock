@@ -88,12 +88,12 @@
         "tsdown": "^0.23.7",
       },
       "peerDependencies": {
-        "@pivi/sdk": "^0.1",
+        "@pivi/sdk": "^0.2",
       },
     },
     "packages/sdk": {
       "name": "@pivi/sdk",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "devDependencies": {
         "@arethetypeswrong/cli": "^0.18.5",
         "publint": "^0.3.25",

@@ -1,10 +1,12 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appManifestSchema } from '@pivi/sdk/manifest';
 import { describe, expect, it } from 'vitest';
 import { generateProject, normalizeOptions, writeProject, FEATURES } from './generate';
 import { checkProject } from './staticChecks';
+
+const files = (path: string) => generateProject(normalizeOptions({ id: 'demo' }))[path]!;
 
 describe('init', () => {
 	it('refuses ids the manifest would refuse', () => {
@@ -35,6 +37,13 @@ describe('init', () => {
 			});
 		}
 	}
+
+	it('depends on the SDK range and CLI version of this CLI by default', () => {
+		const pkg = JSON.parse(files('package.json'));
+		const own = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+		expect(pkg.dependencies['@pivi/sdk']).toBe(own.peerDependencies['@pivi/sdk']);
+		expect(pkg.devDependencies['@pivi/cli']).toBe(`^${own.version}`);
+	});
 
 	it('only generates what was asked for', () => {
 		const none = generateProject(normalizeOptions({ id: 'demo', ci: 'none', agent: 'none' }));

@@ -1,4 +1,28 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { featureSchema, type Feature } from '@pivi/sdk/manifest';
+
+/** This CLI's package.json, found from src/ in the repo or from dist/ once published. */
+function ownPackage(): { version: string; peerDependencies: Record<string, string> } {
+	let dir = dirname(fileURLToPath(import.meta.url));
+	for (let i = 0; i < 4; i++) {
+		try {
+			const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+			if (pkg.name === '@pivi/cli') return pkg;
+		} catch {
+			// keep looking upwards
+		}
+		dir = dirname(dir);
+	}
+	throw new Error('could not find the @pivi/cli package.json');
+}
+
+/** What a new app depends on: the SDK range this CLI supports, and this CLI's own version. */
+export function defaultSpecs() {
+	const pkg = ownPackage();
+	return { sdk: pkg.peerDependencies['@pivi/sdk']!, cli: `^${pkg.version}` };
+}
 
 export type CiPlatform = 'github' | 'none';
 export type AgentFiles = 'claude' | 'agents' | 'none';
@@ -49,7 +73,7 @@ export function normalizeOptions(partial: Partial<InitOptions> & { id: string })
 		storage: partial.storage ?? false,
 		ci: partial.ci ?? 'github',
 		agent: partial.agent ?? 'claude',
-		sdkSpec: partial.sdkSpec ?? '^0.1.0',
-		cliSpec: partial.cliSpec ?? '^0.1.0'
+		sdkSpec: partial.sdkSpec ?? defaultSpecs().sdk,
+		cliSpec: partial.cliSpec ?? defaultSpecs().cli
 	};
 }
