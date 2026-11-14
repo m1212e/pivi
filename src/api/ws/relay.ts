@@ -135,6 +135,45 @@ function isLoopback(address: string | undefined) {
 	return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 
+// Browsers always send Origin on a WebSocket handshake. A page from another
+// site open on the TV must not be able to claim the TV role just because the
+// browser's connection comes from loopback. Non-browser clients send none.
+const socketOrigins = new WeakMap<WebSocket, string | undefined>();
+
+function isLoopbackOrigin(origin: string | undefined) {
+	if (origin === undefined) return true;
+	try {
+		const { hostname } = new URL(origin);
+		return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+	} catch {
+		return false;
+	}
+}
+
+// A phone that vanished (walked out of Wi-Fi range) never sends a close
+// frame, so without this it would stay "connected" and block new pairings.
+const HEARTBEAT_MS = 30_000;
+const alive = new WeakSet<WebSocket>();
+
+function startHeartbeat(wss: WebSocketServer) {
+	const timer = setInterval(() => {
+		for (const socket of wss.clients) {
+			if (!alive.has(socket)) {
+				socket.terminate();
+				continue;
+			}
+			alive.delete(socket);
+			try {
+				socket.ping();
+			} catch {
+				socket.terminate();
+			}
+		}
+	}, HEARTBEAT_MS);
+	timer.unref();
+	wss.on('close', () => clearInterval(timer));
+}
+
 // Handshake errors are final, so the socket is closed rather than retried.
 function fail(socket: WebSocket, message: object) {
 	send(socket, message);
@@ -420,9 +459,15 @@ export function startPairingRelay() {
 
 	const wss = new WebSocketServer({ port: PAIRING_WS_PORT, maxPayload: MAX_FRAME_BYTES });
 
+	wss.on('error', (error) => console.error('pairing relay: server error', error));
+	startHeartbeat(wss);
+
 	wss.on('connection', (socket, request) => {
 		const remoteAddress = request.socket.remoteAddress;
 		const userAgent = request.headers['user-agent'];
+		socketOrigins.set(socket, request.headers.origin);
+		alive.add(socket);
+		socket.on('pong', () => alive.add(socket));
 		connections.set(socket, { role: 'unauth', timeout: startHandshakeTimeout(socket), userAgent });
 
 		socket.on('message', (data: RawData) => {
@@ -432,6 +477,12 @@ export function startPairingRelay() {
 				console.error('pairing relay: dropping a socket after an error', error);
 				fail(socket, { type: 'authError', message: 'Internal error' } satisfies AuthError);
 			});
+		});
+		// An unhandled 'error' (oversized or malformed frame) would otherwise
+		// throw and take the whole server down.
+		socket.on('error', (error) => {
+			console.error('pairing relay: socket error', error);
+			socket.terminate();
 		});
 		socket.on('close', () => {
 			clearHandshakeTimeout(socket);
@@ -554,7 +605,7 @@ function isOutdatedHandshake(raw: unknown): boolean {
 // The TV role is what gets to see every phone's decrypted traffic, so it's
 // only ever granted to something already running on this machine.
 function acceptTvHello(socket: WebSocket, remoteAddress: string | undefined) {
-	if (!isLoopback(remoteAddress)) {
+	if (!isLoopback(remoteAddress) || !isLoopbackOrigin(socketOrigins.get(socket))) {
 		fail(socket, { type: 'authError', message: 'TV role is loopback-only' } satisfies AuthError);
 		return;
 	}

@@ -348,7 +348,7 @@
 			>
 				<!-- Independent of mode. Shaka never touches <track> children, and the effect
 			     above turns on the selected language. -->
-				{#each subtitleTracks as track (track.language)}
+				{#each subtitleTracks as track, i (i)}
 					<track
 						kind="subtitles"
 						srclang={track.language}

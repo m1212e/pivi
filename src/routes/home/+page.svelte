@@ -390,7 +390,7 @@
 
 		<div class="flex flex-col gap-10">
 			<AppsRow title={m.apps()} items={apps} />
-			{#each appRows as row (row.id)}
+			{#each appRows as row, i (i)}
 				{#if row.loading}
 					<VideoRowSkeleton title={row.name} />
 				{:else if row.shelfCards.length > 0}

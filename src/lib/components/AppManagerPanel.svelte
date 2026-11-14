@@ -11,6 +11,7 @@
 		SquarePlay,
 		Trash2
 	} from '@lucide/svelte';
+	import { untrack } from 'svelte';
 	import { fade, fly, scale, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import type { AppsState } from '#lib/apps/management';
@@ -66,7 +67,20 @@
 	// releases. Leaving it off sends no `publicKey` at all, not an empty one.
 	let verifySignature = $state(false);
 	// Starts with everything the app asks for, the user turns off what they won't give.
-	let chosen = $derived<PermissionKey[]>(apps.preview ? [...apps.preview.permissions] : []);
+	// Only resets when the previewed app itself changes, not on every state
+	// push, which would silently switch back on what the user turned off.
+	const previewKey = $derived(
+		apps.preview
+			? `${apps.preview.image}|${apps.preview.version}|${apps.preview.permissions.join(',')}`
+			: ''
+	);
+	let chosen = $state<PermissionKey[]>([]);
+	$effect.pre(() => {
+		void previewKey;
+		untrack(() => {
+			chosen = apps.preview ? [...apps.preview.permissions] : [];
+		});
+	});
 	// Only one app's settings show at a time, so several apps don't become a
 	// wall of switches.
 	// svelte-ignore state_referenced_locally
@@ -206,7 +220,7 @@
 
 {#snippet domainList(domains: string[])}
 	<ul class="mt-1 flex flex-wrap gap-1.5 pl-14">
-		{#each domains as domain (domain)}
+		{#each domains as domain, i (i)}
 			<li class="rounded-full bg-white/10 px-2.5 py-0.5 font-mono text-xs text-white/70">
 				{domain}
 			</li>
@@ -238,7 +252,7 @@
 
 		<div>
 			<h4 class="text-sm font-medium text-white/70">{m.apps_permissions()}</h4>
-			{#each p.permissions as key (key)}
+			{#each p.permissions as key, i (i)}
 				{@render toggle(
 					permissionLabel(key),
 					chosen.includes(key),
@@ -278,7 +292,7 @@
 	<div class="flex flex-col gap-2">
 		<h3 class="text-sm font-medium text-white/70">{m.apps_suggested_heading()}</h3>
 		<ul class="flex flex-col gap-2">
-			{#each visibleSuggested as entry, i (entry.id)}
+			{#each visibleSuggested as entry, i (i)}
 				<li in:fly|global={{ y: 16, duration: 350, delay: i * 60, easing: quintOut }}>
 					<button
 						type="button"
@@ -360,7 +374,7 @@
 		{#if update.addedPermissions.length > 0 || update.addedDomains.length > 0}
 			<p class="mt-2 text-sm text-white/60">{m.apps_update_adds()}</p>
 			<ul class="mt-1 list-disc pl-5 text-sm text-white/80">
-				{#each update.addedPermissions as key (key)}
+				{#each update.addedPermissions as key, i (i)}
 					<li>{permissionLabel(key)}</li>
 				{/each}
 			</ul>
@@ -519,7 +533,7 @@
 			</p>
 		{:else}
 			<ul class="flex flex-col gap-3">
-				{#each apps.apps as app (app.id)}
+				{#each apps.apps as app, i (i)}
 					{@render installed(app)}
 				{/each}
 			</ul>

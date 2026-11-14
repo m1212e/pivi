@@ -162,10 +162,35 @@ export class RegistryClient {
 		return response;
 	}
 
-	// Checked after download, which still bounds what gets hashed and parsed.
+	// Stops reading once the limit is passed, so a hostile registry can't make
+	// the host buffer an unbounded body.
 	private async readBounded(response: Response, limit: number): Promise<Uint8Array> {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.length > limit) throw new RegistryError(`Response exceeds ${limit} bytes`);
+		const declared = Number(response.headers.get('content-length'));
+		if (Number.isFinite(declared) && declared > limit) {
+			await response.body?.cancel().catch(() => {});
+			throw new RegistryError(`Response exceeds ${limit} bytes`);
+		}
+		if (!response.body) return new Uint8Array();
+
+		const chunks: Uint8Array[] = [];
+		let total = 0;
+		const reader = response.body.getReader();
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			total += value.length;
+			if (total > limit) {
+				await reader.cancel().catch(() => {});
+				throw new RegistryError(`Response exceeds ${limit} bytes`);
+			}
+			chunks.push(value);
+		}
+		const bytes = new Uint8Array(total);
+		let offset = 0;
+		for (const chunk of chunks) {
+			bytes.set(chunk, offset);
+			offset += chunk.length;
+		}
 		return bytes;
 	}
 

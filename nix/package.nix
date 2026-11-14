@@ -189,10 +189,8 @@ stdenv.mkDerivation {
 
     # Both are validated at startup by src/env.ts's defineEnvVars, which also
     # runs during the build. Neither value is read while building; the real
-    # ones come from the systemd unit. ORIGIN is deliberately empty — see the
-    # module for why.
+    # ones come from the systemd unit. ORIGIN is optional and left unset.
     export DATABASE_URL=postgres://pivi@localhost/pivi
-    export ORIGIN=
 
     # Every node_modules/.bin entry ships `#!/usr/bin/env node`, and
     # /usr/bin/env does not exist inside the Nix build sandbox:

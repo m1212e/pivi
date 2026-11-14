@@ -31,7 +31,15 @@ function containerFor(vcodec: string): 'webm' | 'mp4' {
 // ffmpeg ever needs. Without this a response that turns out to be a playlist
 // (or a concat list) could make ffmpeg open file:, data: or any other protocol
 // it knows. Applied per input, since it's an input option.
-const INPUT_RESTRICTIONS = ['-protocol_whitelist', 'http,tcp'];
+// Container formats are pinned as well: the HLS and DASH demuxers fetch their
+// segments by themselves, to whatever host the playlist names, past the URL
+// guard the relay applies to the first request.
+const INPUT_RESTRICTIONS = [
+	'-protocol_whitelist',
+	'http,tcp',
+	'-format_whitelist',
+	'matroska,webm,mov,mp4,m4a,3gp,3g2,mj2'
+];
 
 function inputArgs(url: string, seekSeconds: number): string[] {
 	return [...INPUT_RESTRICTIONS, '-ss', String(seekSeconds), '-i', url];

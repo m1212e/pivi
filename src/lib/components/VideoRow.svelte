@@ -23,7 +23,7 @@
 </script>
 
 <ContentRow {title}>
-	{#each items as item, i (item.id)}
+	{#each items as item, i (i)}
 		<div class="shrink-0" in:fly|global={{ y: 24, duration: 400, delay: i * 70 }}>
 			<MediaCard
 				title={item.title}

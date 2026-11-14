@@ -70,7 +70,15 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 		userId: user.id
 	});
 
-	return loadApp({
+	// A late exit callback from an old instance must not tear down the newer
+	// one that replaced it under the same id.
+	const self: { app?: AppInstance } = {};
+	const forgetIfCurrent = () => {
+		if (self.app && started.get(appId) !== self.app) return;
+		forgetApp(appId);
+	};
+
+	const app = await loadApp({
 		manifest: row.approvedManifest,
 		granted: row.grantedPermissions,
 		start: (handlers) => microsandboxBackend.start(spec, handlers),
@@ -84,10 +92,10 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 			sendToPhones({ jsonrpc: '2.0', method: openUrlNotification.method, params: { url } }),
 		onCrash: (code) => {
 			console.error(`[app:${appId}] exited unexpectedly (${code}); it restarts on next use`);
-			forgetApp(appId);
+			forgetIfCurrent();
 		},
 		onForcedStop: (reason) => {
-			forgetApp(appId);
+			forgetIfCurrent();
 			forcedStopPubSub.publish('apps:forcedStop', {
 				appId,
 				appName: row.approvedManifest.name,
@@ -95,6 +103,8 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 			});
 		}
 	});
+	self.app = app;
+	return app;
 }
 
 // Forgets the dead process and its resolved streams, keeping its last

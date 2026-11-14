@@ -110,7 +110,7 @@
 
 {#snippet networkList(networks: WifiNetwork[])}
 	<ul class="flex flex-col gap-2">
-		{#each networks as network (network.ssid)}
+		{#each networks as network, i (i)}
 			<li>
 				<button
 					type="button"

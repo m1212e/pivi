@@ -16,6 +16,8 @@ export const variables = defineEnvVars({
 		schema: (value) => value || null
 	},
 	ORIGIN: {
-		description: 'The app origin (base URL), e.g. `http://localhost:5173`.'
+		description:
+			'The app origin (base URL), e.g. `http://localhost:5173`. Leave unset to derive it from each request (the TV and the phone reach the server on different hosts). Must not be set to an empty string: adapter-node rejects that.',
+		schema: (value) => value || null
 	}
 });

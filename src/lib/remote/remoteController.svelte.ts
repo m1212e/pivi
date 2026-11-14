@@ -168,11 +168,12 @@ export function createRemoteController() {
 	onMount(() => {
 		let cancelled = false;
 
-		// Registered only from this route (not the root layout) so installing
-		// "Pivi Remote" to the home screen doesn't put a service worker in
-		// front of the rest of the app. Browsers only allow it in a secure
-		// context, so on the plain HTTP LAN address this does nothing.
-		navigator.serviceWorker?.register('/remote/sw.js', { scope: '/remote/' }).catch(() => {});
+		// An earlier release registered a caching service worker here. Removing
+		// it keeps phones that still have it from being served a stale page.
+		navigator.serviceWorker
+			?.getRegistrations()
+			.then((all) => all.forEach((registration) => void registration.unregister()))
+			.catch(() => {});
 
 		ensureRal();
 

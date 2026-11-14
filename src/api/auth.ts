@@ -72,14 +72,32 @@ async function verifyCredentials(username: string, pin: string) {
  * username is locked out.
  */
 export async function loginWithPin(username: string, pin: string) {
-	pruneLoginAttempts();
+	// Attempts for one username run one at a time. Otherwise a burst of
+	// parallel guesses would all pass the lockout check before any of them
+	// recorded a failure.
+	const previous = loginQueue.get(username) ?? Promise.resolve();
+	const run = previous.then(() => attemptLogin(username, pin));
+	const tail = run.then(
+		() => undefined,
+		() => undefined
+	);
+	loginQueue.set(username, tail);
+	try {
+		return await run;
+	} finally {
+		if (loginQueue.get(username) === tail) loginQueue.delete(username);
+	}
+}
 
-	const state = loginAttempts.get(username);
-	checkNotLockedOut(state);
+const loginQueue = new Map<string, Promise<void>>();
+
+async function attemptLogin(username: string, pin: string) {
+	pruneLoginAttempts();
+	checkNotLockedOut(loginAttempts.get(username));
 
 	const existing = await verifyCredentials(username, pin);
 	if (!existing) {
-		recordFailedLogin(username, state);
+		recordFailedLogin(username, loginAttempts.get(username));
 		throw new AuthError('Wrong PIN');
 	}
 

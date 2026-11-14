@@ -111,10 +111,11 @@ function readVint(
 	keepMarker: boolean
 ): { value: number; length: number } {
 	const first = data[pos];
-	if (first === 0) error(502, `Invalid EBML vint at offset ${pos}`);
+	if (first === undefined || first === 0) error(502, `Invalid EBML vint at offset ${pos}`);
 
 	const { length, mask } = vintWidth(first);
 	let value = keepMarker ? first : first & (mask - 1);
+	if (pos + length > data.length) error(502, `Truncated EBML vint at offset ${pos}`);
 	for (let i = 1; i < length; i++) value = value * 256 + data[pos + i];
 	return { value, length };
 }

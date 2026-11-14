@@ -58,10 +58,18 @@ const ALLOWED_METHODS = new Set(['GET', 'HEAD']);
 
 function isRemoteRequest(req) {
 	if (!ALLOWED_METHODS.has(req.method)) return false;
-	// Query string and fragment are irrelevant to the decision, and `req.url`
-	// is always an origin-form path here (Node rejects anything else for a
-	// plain HTTP server).
-	const pathname = req.url.split(/[?#]/, 1)[0];
+	// Decide on the path SvelteKit will actually route, not the raw target:
+	// it normalises `..` and percent-encoded dots afterwards, so a raw-prefix
+	// check would let `/remote/../api/graphql` through. Anything that could be
+	// read differently by the two sides is refused outright.
+	const raw = req.url.split(/[?#]/, 1)[0];
+	if (/\.\.|%2e|%2f|%5c|\\|\/\//i.test(raw)) return false;
+	let pathname;
+	try {
+		pathname = new URL(req.url, 'http://x').pathname;
+	} catch {
+		return false;
+	}
 	return ALLOWED_PATHS.some((pattern) => pattern.test(pathname));
 }
 

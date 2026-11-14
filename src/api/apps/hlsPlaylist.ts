@@ -79,19 +79,36 @@ function absolutize(uri: string, base: string): string | undefined {
 	}
 }
 
+// One `KEY=value` attribute: the value is a quoted string (which may contain
+// commas and `URI=`) or runs up to the next comma.
+const ATTRIBUTE = /([A-Za-z0-9-]+)=("[^"]*"|[^,]*)(,|$)/y;
+
 function rewriteTag(line: string, base: string, link: HlsLinkBuilder): string | undefined {
-	const tag = /^#([A-Z0-9-]+):/.exec(line)?.[1];
-	if (!tag || !URI_TAGS.has(tag)) return line;
-	let dropped = false;
-	const rewritten = line.replace(/URI="([^"]*)"/, (_match, uri: string) => {
-		const absolute = absolutize(uri, base);
-		if (!absolute) {
-			dropped = true;
-			return '';
+	const match = /^#([A-Z0-9-]+):/.exec(line);
+	if (!match || !URI_TAGS.has(match[1])) return line;
+
+	const head = match[0];
+	const out: string[] = [];
+	ATTRIBUTE.lastIndex = head.length;
+	let pos = head.length;
+	while (pos < line.length) {
+		ATTRIBUTE.lastIndex = pos;
+		const attr = ATTRIBUTE.exec(line);
+		// Not parseable as an attribute list: don't guess, drop the line.
+		if (!attr || attr[0].length === 0) return undefined;
+		pos += attr[0].length;
+		const [, key, value] = attr;
+		if (key.toUpperCase() !== 'URI') {
+			out.push(`${key}=${value}`);
+			continue;
 		}
-		return `URI="${link(absolute)}"`;
-	});
-	return dropped ? undefined : rewritten;
+		// Only a quoted URI is valid; anything else is not proxied.
+		if (!value.startsWith('"')) return undefined;
+		const absolute = absolutize(value.slice(1, -1), base);
+		if (!absolute) return undefined;
+		out.push(`URI="${link(absolute)}"`);
+	}
+	return head + out.join(',');
 }
 
 /**

@@ -72,3 +72,18 @@ describe('isPlaylist', () => {
 		expect(isPlaylist(null, 'https://a.example.com/x.m3u8?y=1')).toBe(true);
 	});
 });
+
+describe('rewritePlaylist URI attributes', () => {
+	it('does not let a lookalike attribute hide the real URI', () => {
+		const line =
+			'#EXT-X-KEY:METHOD=AES-128,X-URI="https://a.example/x",URI="https://evil.example/k"';
+		const out = rewritePlaylist(line, 'https://c.example/p.m3u8', link);
+		expect(out).toContain('URI="P(https://evil.example/k)"');
+		expect(out).toContain('X-URI="https://a.example/x"');
+	});
+
+	it('drops tags with an unquoted URI instead of passing it through', () => {
+		const line = '#EXT-X-MAP:URI=https://evil.example/init.mp4';
+		expect(rewritePlaylist(line, 'https://c.example/p.m3u8', link)).toBe('');
+	});
+});

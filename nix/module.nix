@@ -384,15 +384,11 @@ in
       // lib.optionalAttrs (cfg.wifi.provisioning && cfg.wifi.interface != null) {
         PIVI_WIFI_INTERFACE = cfg.wifi.interface;
       }
-      // {
-        # src/env.ts validates ORIGIN as present-but-may-be-empty, and
-        # adapter-node treats empty as "derive the origin from the request".
-        # That is exactly what's needed here: the TV arrives on
-        # 127.0.0.1:<port> and the phone on <lan ip>:<port>, two origins for
-        # one server, so pinning a single one would break the other's CSRF
-        # check and the port in the pairing URL.
-        ORIGIN = "";
-      } // lib.optionalAttrs (cfg.remote.address != null) { PIVI_REMOTE_HOST = cfg.remote.address; };
+      # ORIGIN is deliberately left unset: adapter-node then derives the
+      # origin from each request, which is what's needed here since the TV
+      # arrives on 127.0.0.1:<port> and the phone on <lan ip>:<port>. An
+      # empty string is NOT equivalent: adapter-node 6 throws on it.
+      // lib.optionalAttrs (cfg.remote.address != null) { PIVI_REMOTE_HOST = cfg.remote.address; };
 
       serviceConfig = {
         ExecStartPre = lib.optional cfg.database.autoPush "${cfg.package}/bin/pivi-db-push";

@@ -157,27 +157,31 @@
 	// Traps focus while expanded. Otherwise spatial nav could reach controls
 	// behind the overlay, which the focus-out handling reads as leaving and
 	// closes the list. `inert` up the whole ancestor path, as there is no portal.
-	function setChildrenInert(parent: Element, except: Element, isInert: boolean) {
-		for (const sibling of parent.children) {
-			if (sibling !== except) sibling.toggleAttribute('inert', isInert);
-		}
-	}
-
-	function setSiblingsInert(target: Element, isInert: boolean) {
+	// Remembers exactly which elements were made inert, so unmounting while open
+	// restores them even if the surrounding tree has already been detached.
+	function makeSiblingsInert(target: Element): () => void {
+		const touched: Element[] = [];
 		let node: Element = target;
 		let parent = node.parentElement;
 		while (parent) {
-			setChildrenInert(parent, node, isInert);
+			for (const sibling of parent.children) {
+				if (sibling !== node && !sibling.hasAttribute('inert')) {
+					sibling.setAttribute('inert', '');
+					touched.push(sibling);
+				}
+			}
 			node = parent;
 			parent = node.parentElement;
 		}
+		return () => {
+			for (const element of touched) element.removeAttribute('inert');
+		};
 	}
 
 	$effect(() => {
 		const container = root;
 		if (!expanded || !container) return;
-		setSiblingsInert(container, true);
-		return () => setSiblingsInert(container, false);
+		return makeSiblingsInert(container);
 	});
 </script>
 
@@ -211,7 +215,7 @@
 			     properties -- no `in:` transition here, which would fight
 			     over the same properties on mount instead of leaving them
 			     alone until this option actually scrolls into view. -->
-			{#each options as candidate (candidate)}
+			{#each options as candidate, i (i)}
 				{@const selected = candidate === value}
 				<button
 					type="button"
@@ -243,7 +247,7 @@
 			? 'bottom-full mb-2'
 			: 'top-full mt-2'} max-h-[60vh] w-32 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/12 p-1.5 shadow-lg ring-1 shadow-black/20 ring-white/20 backdrop-blur-2xl backdrop-saturate-150"
 	>
-		{#each options as candidate (candidate)}
+		{#each options as candidate, i (i)}
 			{@const selected = candidate === value}
 			<button
 				type="button"

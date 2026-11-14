@@ -47,6 +47,12 @@
 	const classes = $derived(
 		`group flex ${WIDTH[shape]} shrink-0 flex-col gap-2 focus:outline-none ${shape === 'avatar' ? 'items-center text-center' : 'text-left'}`
 	);
+
+	// App supplied, so it must not be able to close the url() or add declarations.
+	function cssUrl(value: string | undefined | null) {
+		if (!value) return undefined;
+		return `url("${value.replace(/[\\"\n\r\f]/g, (c) => '\\' + c.charCodeAt(0).toString(16) + ' ')}")`;
+	}
 </script>
 
 {#snippet content()}
@@ -55,7 +61,7 @@
 	     rounded corners, which would also clip the glow bleeding outside it. -->
 	<span
 		class="pivi-card relative block {shape === 'avatar' ? 'mx-auto w-44 sm:w-52' : ''}"
-		style="--pivi-glow: url({image})"
+		style:--pivi-glow={cssUrl(image)}
 	>
 		{#if stacked}
 			<span class="absolute inset-x-4 -top-2 h-3 rounded-t-xl bg-white/30" aria-hidden="true"

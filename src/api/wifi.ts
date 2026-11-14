@@ -278,7 +278,9 @@ export async function connectToNetwork(
 	} catch (error) {
 		// nmcli puts the useful part ("Secrets were required, but not provided")
 		// on stderr, which the thrown Error carries.
-		return { ok: false, error: nmcliError(error) };
+		const message = nmcliError(error);
+		// A timeout or crash carries the whole command line, password included.
+		return { ok: false, error: password ? message.split(password).join('***') : message };
 	}
 }
 

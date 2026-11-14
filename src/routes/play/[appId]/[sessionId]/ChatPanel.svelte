@@ -115,7 +115,7 @@
 	<ol
 		class="chat-lines flex min-h-0 flex-1 flex-col justify-end gap-2 overflow-hidden px-5 pt-2 pb-4"
 	>
-		{#each messages as message (message.id)}
+		{#each messages as message, i (i)}
 			{@render line(message)}
 		{:else}
 			<li class="text-white/50">{m.chat_empty()}</li>

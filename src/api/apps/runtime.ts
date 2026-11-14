@@ -405,6 +405,12 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		onExit(code) {
 			markExited();
 			reader.close();
+			// Rejects whatever is still pending instead of leaving it to hang.
+			try {
+				connection.dispose();
+			} catch {
+				// Already disposed by a forced stop.
+			}
 			if (!readySettled) rejectReady(new Error(`App exited before it was ready (${code})`));
 			if (!disposing) options.onCrash?.(code);
 		}
@@ -473,7 +479,11 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		try {
 			return await requestWithTimeout(connection, type, params, timeoutMs);
 		} catch (error) {
-			if (error instanceof AppTimeoutError && !disposing) void stopIfHung();
+			if (error instanceof AppTimeoutError && !disposing) {
+				// A closed connection throws here, which would otherwise be an
+				// unhandled rejection that takes the server down.
+				stopIfHung().catch(() => {});
+			}
 			throw error;
 		} finally {
 			inFlight--;

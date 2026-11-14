@@ -37,7 +37,7 @@
 >
 	{#if suggestions.length > 0}
 		<div class="flex w-full flex-wrap justify-center gap-2" aria-label={m.osk_suggestions()}>
-			{#each suggestions.slice(0, MAX_SUGGESTIONS) as suggestion (suggestion)}
+			{#each suggestions.slice(0, MAX_SUGGESTIONS) as suggestion, i (i)}
 				<button
 					type="button"
 					onclick={() => onPickSuggestion(suggestion)}

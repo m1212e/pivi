@@ -33,7 +33,7 @@
 </script>
 
 <ContentRow {title}>
-	{#each items as app, i (app.id)}
+	{#each items as app, i (i)}
 		<div class="shrink-0" in:fly|global={{ y: 24, duration: 400, delay: i * 70 }}>
 			<AppCard
 				id={app.id}

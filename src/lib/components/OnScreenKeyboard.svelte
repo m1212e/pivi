@@ -194,7 +194,7 @@
 {#snippet suggestionBar()}
 	{#if suggestions.length > 0}
 		<div class="flex flex-wrap gap-2.5" aria-label={m.osk_suggestions()}>
-			{#each suggestions.slice(0, 6) as suggestion (suggestion)}
+			{#each suggestions.slice(0, 6) as suggestion, i (i)}
 				<button
 					type="button"
 					onclick={() => pick(suggestion)}
