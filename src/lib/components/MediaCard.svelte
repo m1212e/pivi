@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import type { Path } from '$app/types';
 	import { swapToFallback } from '#lib/apps/imageFallback';
 
 	// The one media card, used by the dashboard's VideoRow and by apps through
@@ -105,7 +107,7 @@
 {/snippet}
 
 {#if href}
-	<a {href} class={classes}>
+	<a href={resolve(href as Path)} class={classes}>
 		{@render content()}
 	</a>
 {:else}
