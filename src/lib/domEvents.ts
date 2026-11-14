@@ -8,6 +8,7 @@ export const DOM_EVENTS = {
 	playerQuality: 'pivi-player-quality',
 	playerSubtitle: 'pivi-player-subtitle',
 	playerVolume: 'pivi-player-volume',
+	playerChatMode: 'pivi-player-chat-mode',
 	playerStateChanged: 'pivi-player-state-changed',
 	suggestion: 'pivi-suggestion',
 	sliderAdjust: 'pivi-slider-adjust',

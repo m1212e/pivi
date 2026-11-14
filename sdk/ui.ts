@@ -11,6 +11,7 @@
 // so steps 1-2 are also what app authors outside TypeScript get to see.
 import { z } from 'zod';
 import { appActionSchema, type AppAction } from './dashboard';
+import { iconRefSchema, type IconRef } from './icons';
 import { idSchema, MAX_LIST_ITEMS, textSchema, urlSchema } from './limits';
 
 /**
@@ -49,7 +50,9 @@ export type UiNode =
 			// vertically, needed when one side is much taller than the other.
 			alignStart?: boolean;
 			// Spreads a row's children over its width: `between` pushes them to
-			// the edges, `around` leaves equal space around each.
+			// the edges, `around` leaves equal space around each. On a sticky
+			// column (a sidebar) the same over the screen's height, so its last
+			// child sits at the bottom.
 			justify?: 'between' | 'around';
 			// Centers children horizontally and the whole block in the space
 			// it's given, for single-purpose screens like a sign-in code.
@@ -77,9 +80,10 @@ export type UiNode =
 			// card grid need to wrap without pushing neighboring cards around.
 			lines?: number;
 	  }
-	// A glyph in a round badge. `path` is the `d` of a single 24x24 SVG path,
-	// same as a nav button's `icon`, so apps need no image assets.
-	| { type: 'icon'; path: string; size?: 'normal' | 'large' }
+	// A glyph in a round badge. `path` is an IconRef (#sdk/icons): a host icon
+	// name like 'radio', or the `d` of a single 24x24 SVG path, so apps need
+	// no image assets.
+	| { type: 'icon'; path: IconRef; size?: 'normal' | 'large' }
 	// The shell's loading animation, for a screen or section with nothing to
 	// show yet.
 	| { type: 'spinner'; label?: string }
@@ -142,8 +146,9 @@ export type UiNode =
 	// like a dashboard card with that action) rather than firing a UI event. This is how a screen's own "Play" button
 	// reaches the shared player route without a bespoke navigation path.
 	// `nav` renders a sidebar entry (full width, optional icon, highlighted
-	// when `selected`) instead of the default pill. `icon` is the `d` of a
-	// single 24x24 SVG path, so apps don't need to ship image assets.
+	// when `selected`) instead of the default pill. `icon` is an IconRef
+	// (#sdk/icons): a host icon name like 'arrow-left', or the `d` of a single
+	// 24x24 SVG path, so apps don't need to ship image assets.
 	| {
 			type: 'button';
 			label: string;
@@ -153,7 +158,7 @@ export type UiNode =
 			// full-width sidebar entry.
 			variant?: 'solid' | 'soft' | 'nav';
 			selected?: boolean;
-			icon?: string;
+			icon?: IconRef;
 			// `lg` is sized to be read and hit from across a room.
 			size?: 'sm' | 'md' | 'lg';
 	  }
@@ -207,7 +212,7 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 		}),
 		z.object({
 			type: z.literal('icon'),
-			path: textSchema,
+			path: iconRefSchema,
 			size: z.enum(['normal', 'large']).optional()
 		}),
 		z.object({ type: z.literal('spinner'), label: textSchema.optional() }),
@@ -257,7 +262,7 @@ const uiNodeSchema: z.ZodType<UiNode> = z.lazy(() =>
 			action: appActionSchema.optional(),
 			variant: z.enum(['solid', 'soft', 'nav']).optional(),
 			selected: z.boolean().optional(),
-			icon: textSchema.optional(),
+			icon: iconRefSchema.optional(),
 			size: z.enum(['sm', 'md', 'lg']).optional()
 		}),
 		z.object({

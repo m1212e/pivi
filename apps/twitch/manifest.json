@@ -1,7 +1,7 @@
 {
 	"id": "twitch",
 	"name": "Twitch",
-	"version": "0.2.0",
+	"version": "0.5.1",
 	"description": "Watch Twitch live streams and chat on the TV",
 	"protocol": 2,
 	"features": ["dashboard", "screen", "playback", "chat"],
@@ -9,10 +9,12 @@
 	"network": {
 		"domains": [
 			"gql.twitch.tv",
+			"api.twitch.tv",
 			"id.twitch.tv",
 			"irc-ws.chat.twitch.tv",
 			"*.ttvnw.net",
 			"*.live-video.net",
+			"*.cloudfront.net",
 			"static-cdn.jtvnw.net"
 		]
 	},

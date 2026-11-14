@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { QualityMode, QualityOption } from '#lib/playback/quality';
 	import type { SubtitleTrack } from '#lib/playback/subtitles';
+	import type { ChatMode } from '#lib/playback/chatMode';
 	import LiveBadge from './LiveBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import TrackPickers from './TrackPickers.svelte';
@@ -20,8 +21,8 @@
 		liveLatency,
 		onGoLive,
 		chatAvailable,
-		chatOpen,
-		onToggleChat,
+		chatMode,
+		onChatMode,
 		subtitleTracks,
 		subtitleLanguage,
 		qualities,
@@ -47,8 +48,8 @@
 		liveLatency: number | null;
 		onGoLive: () => void;
 		chatAvailable: boolean;
-		chatOpen: boolean;
-		onToggleChat: () => void;
+		chatMode: ChatMode;
+		onChatMode: (mode: ChatMode) => void;
 		subtitleTracks: SubtitleTrack[];
 		subtitleLanguage: string | null;
 		qualities: readonly QualityOption[];
@@ -95,10 +96,10 @@
 			{modeFor}
 			{locked}
 			{chatAvailable}
-			{chatOpen}
+			{chatMode}
 			{onSubtitle}
 			{onQuality}
-			{onToggleChat}
+			{onChatMode}
 		/>
 	</div>
 

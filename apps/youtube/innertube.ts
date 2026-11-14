@@ -12,7 +12,7 @@
 // official integration.
 import { Innertube, UniversalCache } from 'youtubei.js';
 import type { OAuth2Tokens } from 'youtubei.js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 
 // The signed-in session's tokens, in this app's own persistent volume (the
 // `storage` permission mounts it at /storage, one per profile — so each pivi
@@ -115,4 +115,23 @@ export async function loadStoredSession(): Promise<void> {
 	}
 
 	innertube = next;
+}
+
+/** The signed-in account's name for the sidebar, undefined when signed out or unknown. */
+export async function accountName(): Promise<string | undefined> {
+	if (!innertube.session.logged_in) return undefined;
+	const info = await innertube.account.getInfo();
+	const first = info.contents?.contents?.[0] as { account_name?: { text?: string } } | undefined;
+	return first?.account_name?.text || undefined;
+}
+
+/**
+ * The sidebar's "Sign out": revokes the login at Google (best effort), forgets
+ * it here and starts over with a signed-out session, the same way a restart
+ * without stored tokens would.
+ */
+export async function signOut(): Promise<void> {
+	if (innertube.session.logged_in) await innertube.session.signOut().catch(() => {});
+	await rm(TOKEN_FILE, { force: true }).catch(() => {});
+	await loadStoredSession();
 }

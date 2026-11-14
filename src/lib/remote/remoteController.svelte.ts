@@ -25,6 +25,8 @@ import {
 	openUrlParamsSchema,
 	playerActionNotification,
 	playerActionParamsSchema,
+	playerChatModeNotification,
+	playerChatModeParamsSchema,
 	playerQualityNotification,
 	playerQualityParamsSchema,
 	playerSeekNotification,
@@ -81,7 +83,7 @@ const INITIAL_TV_STATE: TvState = {
 	diagnosticsOpen: false,
 	volume: 0,
 	live: null,
-	chat: { available: false, open: false },
+	chat: { available: false, mode: 'off' },
 	controls: {
 		seek: true,
 		seekButtons: true,
@@ -317,6 +319,10 @@ export function createRemoteController() {
 		selectQuality(quality: number) {
 			if (quality === tv.quality) return;
 			send(playerQualityNotification, playerQualityParamsSchema, { quality }, BUZZ.strong);
+		},
+		selectChatMode(mode: z.infer<typeof playerChatModeParamsSchema>['mode']) {
+			if (mode === tv.chat.mode) return;
+			send(playerChatModeNotification, playerChatModeParamsSchema, { mode }, BUZZ.strong);
 		},
 		selectSubtitle(language: string | null) {
 			if (language === tv.subtitleLanguage) return;

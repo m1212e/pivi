@@ -22,8 +22,16 @@ function optionalClasses(n: Container): string {
 }
 
 // A centered column also fills most of the viewport so its content sits mid-screen.
+// A sticky one with `justify` (a sidebar) spans the screen's height, so
+// `between` puts its last child at the bottom. Sized for where it starts,
+// below the app page's padding, title row and gap (src/routes/apps/[appId],
+// 7.5rem) plus the bottom padding, so the bottom shows without scrolling.
+// Stuck at the top later, it ends that much above the bottom edge.
 function columnClasses(n: Container, extra: string): string {
-	return `flex flex-col ${n.center ? 'justify-center gap-8 min-h-[70vh]' : 'gap-3'}${extra}`;
+	const base = n.center ? 'justify-center gap-8 min-h-[70vh]' : 'gap-3';
+	const justify = n.justify && !n.center ? JUSTIFY[n.justify] : '';
+	const fill = justify && n.sticky ? ' h-[calc(100vh-10rem)]' : '';
+	return `flex flex-col ${base}${justify ?? ''}${fill}${extra}`;
 }
 
 function rowClasses(n: Container, extra: string): string {

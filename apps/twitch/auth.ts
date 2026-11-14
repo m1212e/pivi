@@ -18,7 +18,17 @@ const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 // Refreshed this long before it runs out, so a request never races the expiry.
 const EXPIRY_MARGIN_MS = 5 * 60_000;
 
-type Tokens = { accessToken: string; refreshToken?: string; expiresAt?: number };
+// GQL no longer lists an account's follows (raw `follows` queries answer
+// "service error"), the documented Helix endpoint does, but only with this
+// scope. The TV client grants it like any other.
+const SCOPES = ['user:read:follows'];
+
+type Tokens = {
+	accessToken: string;
+	refreshToken?: string;
+	expiresAt?: number;
+	scopes?: string[];
+};
 
 let tokens: Tokens | undefined;
 
@@ -38,13 +48,15 @@ type TokenResponse = {
 	access_token: string;
 	refresh_token?: string;
 	expires_in?: number;
+	scope?: string[];
 };
 
 function toTokens(body: TokenResponse): Tokens {
 	return {
 		accessToken: body.access_token,
 		refreshToken: body.refresh_token,
-		expiresAt: body.expires_in ? Date.now() + body.expires_in * 1000 : undefined
+		expiresAt: body.expires_in ? Date.now() + body.expires_in * 1000 : undefined,
+		scopes: body.scope
 	};
 }
 
@@ -68,7 +80,10 @@ function isTokens(value: unknown): value is Tokens {
 export async function loadSession() {
 	try {
 		const parsed: unknown = JSON.parse(await readFile(FILE, 'utf8'));
-		tokens = isTokens(parsed) ? parsed : undefined;
+		// A session from before SCOPES can't read follows, signing in again
+		// fixes that, so it counts as signed out.
+		tokens =
+			isTokens(parsed) && SCOPES.every((s) => parsed.scopes?.includes(s)) ? parsed : undefined;
 	} catch {
 		tokens = undefined;
 	}
@@ -154,8 +169,11 @@ export function beginSignIn(onStatus: (auth: DeviceCodeAuth) => void): Promise<v
 }
 
 async function runSignIn(onStatus: (auth: DeviceCodeAuth) => void) {
-	// No scopes: the TV client is first party, its tokens reach GQL as is.
-	const response = await postForm('device', { client_id: TV_CLIENT_ID, scopes: '' });
+	// GQL takes the TV client's tokens without scopes, SCOPES are for Helix.
+	const response = await postForm('device', {
+		client_id: TV_CLIENT_ID,
+		scopes: SCOPES.join(' ')
+	});
 	if (!response.ok) throw new Error(`Twitch device login answered ${response.status}`);
 	const device = (await response.json()) as DeviceResponse;
 	const report = (status: DeviceCodeStatus) =>

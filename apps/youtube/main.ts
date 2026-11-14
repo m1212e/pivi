@@ -25,6 +25,7 @@ import {
 	uiEventNotification
 } from '../../sdk/protocol';
 import type { HomeCard } from '../../sdk/dashboard';
+import type { HostIcon } from '../../sdk/icons';
 import type { UiNode } from '../../sdk/ui';
 import { connection } from './connection';
 import { beginSignIn, isSignedIn, type DeviceCodeAuth } from './auth';
@@ -47,7 +48,7 @@ import { resolveStream } from './stream';
 import { fetchSkipSegments } from './sponsorBlock';
 import { fetchNextVideoId } from './tvNext';
 import { loadRecentSearches, recentSearches, rememberSearch } from './recentSearches';
-import { innertube, loadStoredSession, setLocale } from './innertube';
+import { accountName, innertube, loadStoredSession, setLocale, signOut } from './innertube';
 
 const SCREEN_ID = 'browse';
 
@@ -56,41 +57,19 @@ const SCREEN_ID = 'browse';
 // available width, so card size and look are decided in one place, VideoCard.
 const SIDEBAR_WIDTH = '14rem';
 const DASHBOARD_CARDS = 15;
-const LIBRARY_ICON =
-	'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5z';
-const ACCOUNT_ICON =
-	'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z';
+// Host icons (#sdk/icons), drawn by the shell in its own style.
+const LIBRARY_ICON: HostIcon = 'library';
+const ACCOUNT_ICON: HostIcon = 'user';
 
-// Material-style 24x24 icon paths, so the sidebar needs no image assets.
-const SECTIONS = [
-	{ id: 'home', label: 'Home', icon: 'M4 21V9l8-6 8 6v12h-6v-7h-4v7z' },
-	{
-		id: 'subscriptions',
-		label: 'Subscriptions',
-		icon: 'M18 2H6v2h12zM20 6H4v2h16zM22 10H2v12h20zM10 20v-8l6 4z'
-	}
+const SECTIONS: { id: string; label: string; icon: HostIcon }[] = [
+	{ id: 'home', label: 'Home', icon: 'home' },
+	{ id: 'subscriptions', label: 'Subscriptions', icon: 'playlist' }
 ];
-const LIBRARY = [
-	{
-		id: 'history',
-		label: 'History',
-		icon: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8z'
-	},
-	{
-		id: 'playlists',
-		label: 'Playlists',
-		icon: 'M3 13h12v-2H3zm0-7v2h18V6zm0 12h8v-2H3zm13-3v6l5-3z'
-	},
-	{
-		id: 'watchLater',
-		label: 'Watch later',
-		icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7z'
-	},
-	{
-		id: 'liked',
-		label: 'Liked videos',
-		icon: 'M1 21h4V9H1zm22-11a2 2 0 0 0-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59A1.98 1.98 0 0 0 7 9v10a2 2 0 0 0 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73z'
-	}
+const LIBRARY: { id: string; label: string; icon: HostIcon }[] = [
+	{ id: 'history', label: 'History', icon: 'history' },
+	{ id: 'playlists', label: 'Playlists', icon: 'list' },
+	{ id: 'watchLater', label: 'Watch later', icon: 'clock' },
+	{ id: 'liked', label: 'Liked videos', icon: 'thumbs-up' }
 ];
 
 // stderr is the app's log stream; the host captures it line by line.
@@ -161,7 +140,7 @@ function videoCard(video: VideoSummary, playlistId?: string): UiNode {
 	};
 }
 
-function navItem(section: { id: string; label: string; icon: string }): UiNode {
+function navItem(section: { id: string; label: string; icon: HostIcon }): UiNode {
 	return {
 		type: 'button',
 		label: section.label,
@@ -172,27 +151,49 @@ function navItem(section: { id: string; label: string; icon: string }): UiNode {
 	};
 }
 
+// The account sits at the bottom of the sidebar, away from the sections,
+// the same as in the Twitch app.
+function accountEntries(): UiNode[] {
+	if (!isSignedIn()) {
+		return [
+			{ type: 'button', label: 'Sign in', variant: 'nav', icon: 'log-in', onSelect: 'signIn' }
+		];
+	}
+	return [
+		{ type: 'text', value: account ?? 'Signed in', variant: 'title' },
+		{ type: 'button', label: 'Sign out', variant: 'nav', icon: 'log-out', onSelect: 'signOut' }
+	];
+}
+
 function sidebar(): UiNode {
 	return {
 		type: 'container',
 		direction: 'column',
 		width: SIDEBAR_WIDTH,
 		sticky: true,
+		justify: 'between',
 		children: [
-			{
-				type: 'textInput',
-				label: 'Search',
-				placeholder: 'Search',
-				search: true,
-				suggestions: searchSuggestions,
-				onInput: 'suggest',
-				onSubmit: 'search'
-			},
-			...SECTIONS.map(navItem),
-			{ type: 'text', value: 'You', variant: 'title' },
-			...LIBRARY.map(navItem)
+			{ type: 'container', direction: 'column', children: navEntries() },
+			{ type: 'container', direction: 'column', children: accountEntries() }
 		]
 	};
+}
+
+function navEntries(): UiNode[] {
+	return [
+		{
+			type: 'textInput',
+			label: 'Search',
+			placeholder: 'Search',
+			search: true,
+			suggestions: searchSuggestions,
+			onInput: 'suggest',
+			onSubmit: 'search'
+		},
+		...SECTIONS.map(navItem),
+		{ type: 'text', value: 'You', variant: 'title' },
+		...LIBRARY.map(navItem)
+	];
 }
 
 // Sign-in is a manual action, not something gating activation. The screen
@@ -437,7 +438,21 @@ function collectionView(open: NonNullable<typeof openPlaylist>): UiNode {
 		type: 'container',
 		direction: 'column',
 		children: [
-			{ type: 'button', label: BACK_LABELS[open.back], onSelect: 'back' },
+			// In a row of its own so the column doesn't stretch it, as in Twitch.
+			{
+				type: 'container',
+				direction: 'row',
+				children: [
+					{
+						type: 'button',
+						label: BACK_LABELS[open.back],
+						icon: 'arrow-left',
+						variant: 'soft',
+						size: 'md',
+						onSelect: 'back'
+					}
+				]
+			},
 			...latestShelf(open),
 			collectionBody(open)
 		]
@@ -513,6 +528,15 @@ const EMPTY_ERROR = "Couldn't load this right now.";
 // The in-progress device-code prompt, while beginSignIn() is running —
 // undefined the rest of the time (signed in, or not yet started).
 let signInStatus: DeviceCodeAuth | undefined;
+// The signed-in account's name, asked of YouTube, never stored.
+let account: string | undefined;
+
+async function loadAccount() {
+	account = await accountName().catch((err: unknown) => {
+		log('warn', `account name failed: ${String(err)}`);
+		return undefined;
+	});
+}
 
 function mergeById<T extends { id: string }>(have: T[], more: T[]): T[] {
 	const seen = new Set(have.map((item) => item.id));
@@ -912,18 +936,29 @@ function onSignIn() {
 			// A real refresh, not just a re-publish: signing in switches the
 			// feed itself over to this account's personalized one.
 			signInStatus = undefined;
-			return refresh();
+			return loadAccount().then(refresh);
 		})
 		.catch((err: unknown) => {
 			log('error', err instanceof Error ? err.message : String(err));
 		});
 }
 
+async function onSignOut() {
+	await signOut();
+	account = undefined;
+	signInStatus = undefined;
+	openPlaylist = undefined;
+	leaveTyping();
+	currentSection = 'home';
+	await refresh();
+}
+
 const EXACT_EVENTS = new Map<string, (event: UiEvent) => void>([
 	['suggest', onSuggest],
 	['search', onSearch],
 	['back', onBack],
-	['signIn', onSignIn]
+	['signIn', onSignIn],
+	['signOut', () => void onSignOut()]
 ]);
 
 // Patterns are anchored so a malformed id is ignored like an unknown event.
@@ -949,7 +984,7 @@ async function activate() {
 	// Needed before isSignedIn() (refresh()/browseScreen(), below) can be
 	// trusted — see loadStoredSession's own comment.
 	await loadStoredSession();
-	await loadRecentSearches();
+	await Promise.all([loadRecentSearches(), loadAccount()]);
 	activated = true;
 	await refresh();
 

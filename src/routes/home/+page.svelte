@@ -175,45 +175,50 @@
 	// (never declared the tier), which is different from one that has but
 	// hasn't published yet (entry is null). The former is just left out of
 	// the shelves below instead of showing a skeleton forever.
-	// Whatever the first app-with-cards' top-ranked card happens to be
-	// becomes the hero — generic over whichever app's cards these are, so
-	// this doesn't need touching as more apps start contributing cards.
-	// Pulled out of its row so it isn't shown twice.
-	const heroCard = $derived(apps.map((app) => cardsByAppId[app.id]?.[0]).find(Boolean));
+	// The hero takes turns between the installed apps and their top cards:
+	// each app's first, then each app's second, and so on, up to
+	// HERO_CARDS_PER_APP each, the apps in the order of the apps row (most
+	// recently used first). Generic over whichever apps contribute, so nothing
+	// here changes as more do.
+	const HERO_CARDS_PER_APP = 5;
+	const heroCandidates = $derived.by(() => {
+		const perApp = apps.map((app) => (cardsByAppId[app.id] ?? []).slice(0, HERO_CARDS_PER_APP));
+		const turns: AppCard[] = [];
+		for (let rank = 0; rank < HERO_CARDS_PER_APP; rank++) {
+			for (const cards of perApp) if (cards[rank]) turns.push(cards[rank]);
+		}
+		return turns;
+	});
+	// Long enough to read the title and decide, short enough that the home
+	// screen doesn't feel frozen.
+	const HERO_ROTATION_MS = 20_000;
+	let heroTurn = $state(0);
+	// Set while the remote's focus is on the hero's button, which a turn
+	// would take away from under it.
+	let heroFocused = $state(false);
+	const heroCard = $derived(
+		heroCandidates.length ? heroCandidates[heroTurn % heroCandidates.length] : undefined
+	);
+	$effect(() => {
+		if (heroCandidates.length < 2 || heroFocused) return;
+		const timer = setInterval(() => (heroTurn += 1), HERO_ROTATION_MS);
+		return () => clearInterval(timer);
+	});
 
-	function isHeroCard(cards: AppCard[] | null, heroCard: AppCard | undefined): boolean {
-		if (!cards || cards.length === 0 || !heroCard) return false;
-		return cards[0].id === heroCard.id;
-	}
-
-	function shelfCardsFor(cards: AppCard[] | null, isHero: boolean): AppCard[] {
-		if (!cards) return [];
-		return isHero ? cards.slice(1) : cards;
-	}
-
-	function appRowFor(
-		app: (typeof apps)[number],
-		cards: AppCard[] | null,
-		heroCard: AppCard | undefined
-	) {
-		const isHero = isHeroCard(cards, heroCard);
-		return {
-			...app,
-			loading: cards === null,
-			shelfCards: shelfCardsFor(cards, isHero)
-		};
-	}
-
-	// Per app: whether it's still loading, and the cards to show in its shelf
-	// (with the hero card, if it came from this app, excluded so it isn't
-	// shown twice). An app that's still loading gets a skeleton; one that
+	// Per app: whether it's still loading, and the cards to show in its shelf.
+	// The hero's card stays in its row too, since the hero moves on and a row
+	// shifting under the remote every few seconds would be worse than one
+	// card shown twice. An app that's still loading gets a skeleton; one that
 	// settled with zero cards is left out of the shelves below entirely,
 	// rather than a row titled "Suggested on {app}" for content that
 	// doesn't exist.
 	const appRows = $derived(
 		apps
 			.filter((app) => app.id in cardsByAppId)
-			.map((app) => appRowFor(app, cardsByAppId[app.id], heroCard))
+			.map((app) => {
+				const cards = cardsByAppId[app.id];
+				return { ...app, loading: cards === null, shelfCards: cards ?? [] };
+			})
 	);
 
 	// True once every app has published something (even an empty result) --
@@ -342,13 +347,17 @@
 	</div>
 {/snippet}
 
-{#if me}
-	<div class="relative isolate flex min-h-screen flex-col gap-10 bg-slate-950 pb-16 text-white">
-		<div class="pivi-aurora" aria-hidden="true">
-			<span></span><span></span><span></span>
-		</div>
-		<div class="relative">
-			{#if heroCard}
+<!-- Top-level for the same reason as topBar: its own complexity unit. -->
+{#snippet hero()}
+	{#if heroCard}
+		<!-- One cell, so the outgoing banner fades out on top of the
+		     incoming one instead of stacking below it. -->
+		<div
+			class="grid *:col-start-1 *:row-start-1"
+			onfocusin={() => (heroFocused = true)}
+			onfocusout={() => (heroFocused = false)}
+		>
+			{#key `${heroCard.appId}:${heroCard.id}`}
 				<HeroBanner
 					title={heroCard.title}
 					description={heroCard.subtitle}
@@ -358,11 +367,22 @@
 					source={heroCard.appName}
 					href={cardHref(heroCard)}
 				/>
-			{:else if dashboardLoading}
-				<HeroBannerSkeleton />
-			{:else}
-				<HeroBannerEmpty />
-			{/if}
+			{/key}
+		</div>
+	{:else if dashboardLoading}
+		<HeroBannerSkeleton />
+	{:else}
+		<HeroBannerEmpty />
+	{/if}
+{/snippet}
+
+{#if me}
+	<div class="relative isolate flex min-h-screen flex-col gap-10 bg-slate-950 pb-16 text-white">
+		<div class="pivi-aurora" aria-hidden="true">
+			<span></span><span></span><span></span>
+		</div>
+		<div class="relative">
+			{@render hero()}
 
 			{@render topBar(me)}
 		</div>

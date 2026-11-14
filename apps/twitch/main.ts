@@ -25,53 +25,46 @@ import {
 	uiEventNotification
 } from '../../sdk/protocol';
 import type { HomeCard } from '../../sdk/dashboard';
+import type { HostIcon } from '../../sdk/icons';
 import type { UiNode } from '../../sdk/ui';
 import { connection } from './connection';
 import { beginSignIn, isSignedIn, loadSession, signOut, type DeviceCodeAuth } from './auth';
 import { createChat } from './chat';
 import {
 	categoryStreams,
+	channelProfile,
+	channelVideos,
 	currentAccount,
 	followedLive,
 	search,
+	searchSuggestions,
 	topCategories,
 	topStreams,
 	viewerCount,
 	type Account,
 	type Category,
 	type Channel,
+	type ChannelVideos,
 	type LiveStream,
-	type SearchResults
+	type Profile,
+	type SearchResults,
+	type Video
 } from './gql';
-import { resolveStream } from './stream';
+import { resolveStream, vodSession } from './stream';
 
 const SCREEN_ID = 'browse';
 const SIDEBAR_WIDTH = '14rem';
 const DASHBOARD_CARDS = 15;
 const EMPTY_ERROR = "Couldn't load this right now.";
 
-// Material-style 24x24 icon paths, so the sidebar needs no image assets.
-const SECTIONS = [
-	{
-		id: 'following',
-		label: 'Following',
-		icon: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z'
-	},
-	{
-		id: 'browse',
-		label: 'Live now',
-		icon: 'M21 6h-7.59l3.29-3.29L16 2l-4 4-4-4-.71.71L10.59 6H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm0 14H3V8h18z'
-	},
-	{
-		id: 'categories',
-		label: 'Categories',
-		icon: 'M4 8h4V4H4zm6 12h4v-4h-4zm-6 0h4v-4H4zm0-6h4v-4H4zm6 0h4v-4h-4zm6-10v4h4V4zm-6 4h4V4h-4zm6 6h4v-4h-4zm0 6h4v-4h-4z'
-	}
+// Host icons (#sdk/icons), drawn by the shell in its own style.
+const SECTIONS: { id: string; label: string; icon: HostIcon }[] = [
+	{ id: 'following', label: 'Following', icon: 'heart' },
+	{ id: 'browse', label: 'Live now', icon: 'radio' },
+	{ id: 'categories', label: 'Categories', icon: 'grid' }
 ];
-const ACCOUNT_ICON =
-	'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z';
-const LIVE_ICON =
-	'M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-5.66 7.66A8 8 0 0 1 6.34 6.34l1.42 1.42a6 6 0 0 0 0 8.48zm11.32 0-1.42-1.42a6 6 0 0 0 0-8.48l1.42-1.42a8 8 0 0 1 0 11.32z';
+const ACCOUNT_ICON: HostIcon = 'user';
+const LIVE_ICON: HostIcon = 'tv';
 
 function log(level: 'info' | 'warn' | 'error', message: string) {
 	console.error(`[${level}] ${message}`);
@@ -82,6 +75,11 @@ let locale = 'en';
 function viewerLabel(viewers: number): string {
 	const count = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 });
 	return `${count.format(viewers)} viewers`;
+}
+
+function followersLabel(followers: number): string {
+	const count = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 });
+	return `${count.format(followers)} followers`;
 }
 
 // --- state ---------------------------------------------------------------
@@ -102,6 +100,11 @@ let openCategory: { id: string; name: string; back: 'categories' | 'search' } | 
 const categoryStreamsById = new Map<string, LiveStream[]>();
 const KEEP_CATEGORIES = 3;
 let searchState: { query: string; results?: SearchResults } | undefined;
+// Shown on the on-screen keyboard while typing in the search field.
+let suggestions: string[] = [];
+// A channel's page, opened from search. Only the open one is kept, `null`
+// once Twitch says there's no such channel.
+let openProfile: { login: string; profile?: Profile | null; videos?: ChannelVideos } | undefined;
 // Keys that last failed to load: a section id, `search` or `category:<id>`.
 const failed = new Set<string>();
 
@@ -129,16 +132,16 @@ function categoryCard(category: Category): UiNode {
 	};
 }
 
-// Offline channels are listed so a search for one doesn't look like it found
-// nothing, but there's nothing to play.
+// Every channel a search finds, live or not, as its profile picture. It opens
+// the channel's page, the live ones are also listed as streams to play.
 function channelCard(channel: Channel): UiNode {
-	if (channel.stream) return streamCard(channel.stream);
 	return {
 		type: 'mediaCard',
 		title: channel.displayName,
-		meta: 'Offline',
+		meta: channel.stream ? `Live · ${viewerLabel(channel.stream.viewers)}` : 'Offline',
 		image: channel.avatar,
-		shape: 'avatar'
+		shape: 'avatar',
+		onSelect: `profile:${channel.login}`
 	};
 }
 
@@ -242,6 +245,18 @@ function categoriesView(): UiNode {
 
 const BACK_LABELS = { categories: 'Back to categories', search: 'Back to results' };
 
+// In a row of its own, so the column it sits in doesn't stretch it into a
+// full-width bar: a compact glass pill with an arrow, at the top left.
+function backButton(label: string): UiNode {
+	return {
+		type: 'container',
+		direction: 'row',
+		children: [
+			{ type: 'button', label, icon: 'arrow-left', variant: 'soft', size: 'md', onSelect: 'back' }
+		]
+	};
+}
+
 function categoryView(open: NonNullable<typeof openCategory>): UiNode {
 	const streams = categoryStreamsById.get(open.id);
 	let body: UiNode;
@@ -251,7 +266,7 @@ function categoryView(open: NonNullable<typeof openCategory>): UiNode {
 	return {
 		type: 'container',
 		direction: 'column',
-		children: [{ type: 'button', label: BACK_LABELS[open.back], onSelect: 'back' }, body]
+		children: [backButton(BACK_LABELS[open.back]), body]
 	};
 }
 
@@ -262,19 +277,140 @@ function searchView(): UiNode {
 	const { channels, categories: found } = results;
 	if (channels.length === 0 && found.length === 0)
 		return statusMessage(`No results for "${query}".`);
+	const live = channels.flatMap((channel) => (channel.stream ? [channel.stream] : []));
+	const children: UiNode[] = [];
+	if (channels.length) {
+		children.push({ type: 'shelf', title: 'Channels', children: channels.map(channelCard) });
+	}
+	if (found.length) {
+		children.push({ type: 'shelf', title: 'Categories', children: found.map(categoryCard) });
+	}
+	if (live.length) children.push(grid(live.map(streamCard), `Live for "${query}"`));
+	return { type: 'container', direction: 'column', children };
+}
+
+function formatDate(iso: string | undefined): string | undefined {
+	if (!iso) return undefined;
+	const date = new Date(iso);
+	return Number.isNaN(date.getTime())
+		? undefined
+		: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+}
+
+// 2:45:02, or 12:07 under an hour, as on the website's thumbnails.
+function durationLabel(seconds: number): string {
+	const h = Math.floor(seconds / 3600);
+	const m = Math.floor((seconds % 3600) / 60);
+	const s = Math.floor(seconds % 60);
+	const pad = (n: number) => String(n).padStart(2, '0');
+	return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function videoCard(video: Video): UiNode {
+	const meta = [formatDate(video.createdAt), video.game].filter(Boolean).join(' · ');
+	return {
+		type: 'mediaCard',
+		title: video.title || 'Untitled',
+		meta,
+		image: video.preview,
+		badge: durationLabel(video.lengthSeconds),
+		action: { type: 'session', sessionId: vodSession(video.id) }
+	};
+}
+
+// What the channel put out besides the live stream, one row per kind, left
+// out when empty.
+function videoShelves(videos: ChannelVideos | undefined): UiNode[] {
+	if (!videos) return [];
+	const kinds: [string, Video[]][] = [
+		['Past broadcasts', videos.broadcasts],
+		['Highlights', videos.highlights],
+		['Uploads', videos.uploads]
+	];
+	return kinds.flatMap(([title, list]): UiNode[] =>
+		list.length ? [{ type: 'shelf', title, children: list.map(videoCard) }] : []
+	);
+}
+
+function lastBroadcastLabel(last: NonNullable<Profile['lastBroadcast']>): string {
+	const parts = ['Last streamed'];
+	if (last.game) parts.push(last.game);
+	const date = formatDate(last.startedAt);
+	if (date) parts.push(date);
+	return parts.length > 1 ? `${parts[0]} ${parts.slice(1).join(' · ')}` : parts[0];
+}
+
+// Picture, name and bio, then the stream to play when live, or what it
+// streamed last when not, then its videos.
+function profileBody(profile: Profile, videos: ChannelVideos | undefined): UiNode[] {
+	const about: UiNode[] = [{ type: 'text', value: profile.displayName, variant: 'display' }];
+	if (profile.followers !== undefined) {
+		about.push({ type: 'text', value: followersLabel(profile.followers), variant: 'subtitle' });
+	}
+	if (profile.description) {
+		about.push({ type: 'text', value: profile.description, variant: 'body', lines: 4 });
+	}
+	const header: UiNode = {
+		type: 'container',
+		direction: 'row',
+		alignStart: true,
+		children: [
+			...(profile.avatar
+				? [{ type: 'image', src: profile.avatar, aspect: 'square', width: '10rem' } as UiNode]
+				: []),
+			{ type: 'container', direction: 'column', grow: true, children: about }
+		]
+	};
+	if (profile.stream) {
+		const stream = profile.stream;
+		return [
+			header,
+			{
+				type: 'hero',
+				title: stream.title || stream.displayName,
+				description: stream.game
+					? `${stream.game} · ${viewerLabel(stream.viewers)}`
+					: viewerLabel(stream.viewers),
+				image: stream.preview || undefined,
+				badge: 'LIVE',
+				action: { type: 'session', sessionId: stream.login }
+			},
+			...videoShelves(videos)
+		];
+	}
+	const offline: UiNode[] = [{ type: 'text', value: 'Offline', variant: 'headline' }];
+	if (profile.lastBroadcast) {
+		offline.push({
+			type: 'text',
+			value: lastBroadcastLabel(profile.lastBroadcast),
+			variant: 'body'
+		});
+		if (profile.lastBroadcast.title) {
+			offline.push({ type: 'text', value: profile.lastBroadcast.title, variant: 'body', lines: 2 });
+		}
+	}
+	return [
+		header,
+		{ type: 'container', direction: 'column', panel: true, children: offline },
+		...videoShelves(videos)
+	];
+}
+
+function profileView(open: NonNullable<typeof openProfile>): UiNode {
+	let body: UiNode[];
+	if (open.profile === undefined)
+		body = [pending(`profile:${open.login}`, `profile:${open.login}`)];
+	else if (open.profile === null) body = [statusMessage("This channel doesn't exist anymore.")];
+	else body = profileBody(open.profile, open.videos);
 	return {
 		type: 'container',
 		direction: 'column',
-		children: [
-			...(found.length
-				? [{ type: 'shelf', title: 'Categories', children: found.map(categoryCard) } as UiNode]
-				: []),
-			grid(channels.map(channelCard), `Channels for "${query}"`)
-		]
+		children: [backButton(BACK_LABELS.search), ...body]
 	};
 }
 
 function mainView(): UiNode {
+	if (openProfile) return profileView(openProfile);
 	if (openCategory) return categoryView(openCategory);
 	if (section === 'search') return searchView();
 	if (section === 'following') return followingView();
@@ -287,37 +423,46 @@ function sidebar(): UiNode {
 		direction: 'column',
 		width: SIDEBAR_WIDTH,
 		sticky: true,
+		// The account sits at the bottom, away from the sections.
+		justify: 'between',
 		children: [
-			{
-				type: 'textInput',
-				label: 'Search',
-				placeholder: 'Search',
-				search: true,
-				onInput: 'typing',
-				onSubmit: 'search'
-			},
-			...SECTIONS.map((entry): UiNode => ({
-				type: 'button',
-				label: entry.label,
-				variant: 'nav',
-				icon: entry.icon,
-				selected: entry.id === section && !openCategory,
-				onSelect: `nav:${entry.id}`
-			})),
-			...accountEntries()
+			{ type: 'container', direction: 'column', children: navEntries() },
+			{ type: 'container', direction: 'column', children: accountEntries() }
 		]
 	};
+}
+
+function navEntries(): UiNode[] {
+	return [
+		{
+			type: 'textInput',
+			label: 'Search',
+			placeholder: 'Search',
+			search: true,
+			suggestions,
+			onInput: 'typing',
+			onSubmit: 'search'
+		},
+		...SECTIONS.map((entry): UiNode => ({
+			type: 'button',
+			label: entry.label,
+			variant: 'nav',
+			icon: entry.icon,
+			selected: entry.id === section && !openCategory && !openProfile,
+			onSelect: `nav:${entry.id}`
+		}))
+	];
 }
 
 function accountEntries(): UiNode[] {
 	if (!isSignedIn()) {
 		return [
-			{ type: 'button', label: 'Sign in', variant: 'nav', icon: ACCOUNT_ICON, onSelect: 'signIn' }
+			{ type: 'button', label: 'Sign in', variant: 'nav', icon: 'log-in', onSelect: 'signIn' }
 		];
 	}
 	return [
 		{ type: 'text', value: account?.displayName ?? 'Signed in', variant: 'title' },
-		{ type: 'button', label: 'Sign out', variant: 'nav', icon: ACCOUNT_ICON, onSelect: 'signOut' }
+		{ type: 'button', label: 'Sign out', variant: 'nav', icon: 'log-out', onSelect: 'signOut' }
 	];
 }
 
@@ -394,6 +539,7 @@ async function onSessionChanged() {
 	account = isSignedIn() ? await currentAccount().catch(() => undefined) : undefined;
 	following = undefined;
 	openCategory = undefined;
+	openProfile = undefined;
 	section = isSignedIn() ? 'following' : 'browse';
 	publishScreen();
 	await loadDashboard();
@@ -421,6 +567,7 @@ async function runSearch(query: string) {
 	searchState = current;
 	section = 'search';
 	openCategory = undefined;
+	openProfile = undefined;
 	failed.delete('search');
 	publishScreen();
 	try {
@@ -440,16 +587,42 @@ function textOf(value: unknown): string {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
+let suggestionQuery = '';
+
+async function suggest(text: string) {
+	suggestionQuery = text;
+	let next: string[] = [];
+	if (text) {
+		try {
+			next = await searchSuggestions(text);
+		} catch (err) {
+			log(
+				'error',
+				`suggestions for "${text}" failed: ${err instanceof Error ? err.message : String(err)}`
+			);
+		}
+	}
+	// A slower answer for text that has since changed would flash old entries.
+	if (suggestionQuery !== text) return;
+	suggestions = next;
+	publishScreen();
+}
+
 // Results follow the typing after a short pause, so each keystroke doesn't
-// start its own search.
+// start its own search. Suggestions come with every keystroke.
 function onTyping(value: unknown) {
 	const text = textOf(value);
 	clearTimeout(typingTimer);
+	void suggest(text);
 	if (text.length >= 2) typingTimer = setTimeout(() => void runSearch(text), 400);
 }
 
+// Submitting ends the typing, the keyboard's suggestions go with it. The
+// searches that follow the typing (onTyping) leave them.
 function onSearch(value: unknown) {
 	clearTimeout(typingTimer);
+	suggestions = [];
+	suggestionQuery = '';
 	const text = textOf(value);
 	if (text) void runSearch(text);
 }
@@ -463,6 +636,7 @@ const SECTION_LOADERS: Record<string, () => Promise<unknown>> = {
 function onNav(target: string) {
 	section = target;
 	openCategory = undefined;
+	openProfile = undefined;
 	publishScreen();
 	void SECTION_LOADERS[target]?.();
 }
@@ -470,6 +644,7 @@ function onNav(target: string) {
 function onSignIn() {
 	section = 'following';
 	openCategory = undefined;
+	openProfile = undefined;
 	beginSignIn((status) => {
 		// Only once per code, the button stays for sending it again.
 		if (status.status === 'pending' && status.userCode !== signInStatus?.userCode) {
@@ -512,8 +687,36 @@ function onOpenCategory(id: string) {
 	void loadCategory(id);
 }
 
+async function onOpenProfile(login: string) {
+	const current: NonNullable<typeof openProfile> = { login };
+	openProfile = current;
+	openCategory = undefined;
+	failed.delete(`profile:${login}`);
+	publishScreen();
+	try {
+		// The videos are extra: a page without them beats no page at all.
+		const [profile, videos] = await Promise.all([
+			channelProfile(login),
+			channelVideos(login).catch((err: unknown) => {
+				log(
+					'warn',
+					`videos of ${login} failed: ${err instanceof Error ? err.message : String(err)}`
+				);
+				return undefined;
+			})
+		]);
+		current.profile = profile ?? null;
+		current.videos = videos;
+	} catch (err) {
+		if (openProfile === current) failed.add(`profile:${login}`);
+		log('error', `profile ${login} failed: ${err instanceof Error ? err.message : String(err)}`);
+	}
+	if (openProfile === current) publishScreen();
+}
+
 function onBack() {
 	openCategory = undefined;
+	openProfile = undefined;
 	publishScreen();
 }
 
@@ -524,10 +727,11 @@ function routeUiEvent(eventId: string, value: unknown) {
 	if (eventId === 'back') return onBack();
 	if (eventId === 'signIn') return onSignIn();
 	if (eventId === 'signOut') return void onSignOut();
-	const match = /^(nav|category):(.+)$/.exec(eventId);
+	const match = /^(nav|category|profile):(.+)$/.exec(eventId);
 	if (!match) return;
 	const [, kind, arg] = match;
 	if (kind === 'nav') onNav(arg);
+	else if (kind === 'profile') void onOpenProfile(arg);
 	else onOpenCategory(arg);
 }
 

@@ -86,7 +86,7 @@ export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
  * defaults to true, an app that sends none gets the full player. This only
  * hides controls, the stream itself is unaffected.
  */
-export const playerControlsSchema = z.object({
+const playerControlsSchema = z.object({
 	// The progress bar and dragging it, also the phone's seek slider.
 	seek: z.boolean().optional(),
 	// The skip back / forward buttons, also the phone's.
@@ -99,7 +99,6 @@ export const playerControlsSchema = z.object({
 	// Hides the quality picker even when `qualities` lists tiers.
 	quality: z.boolean().optional()
 });
-export type PlayerControls = z.infer<typeof playerControlsSchema>;
 
 /**
  * The generic answer to `app/resolveStream`, so the shared player and the

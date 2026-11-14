@@ -34,6 +34,8 @@
 		pairingRequestParamsSchema,
 		playerActionNotification,
 		playerActionParamsSchema,
+		playerChatModeNotification,
+		playerChatModeParamsSchema,
 		playerQualityNotification,
 		playerQualityParamsSchema,
 		playerSubtitleNotification,
@@ -192,7 +194,7 @@
 		diagnosticsOpen: false,
 		volume: 0,
 		live: null as { viewers: number | null; latency: number | null } | null,
-		chat: { available: false, open: false },
+		chat: { available: false, mode: 'off' as 'off' | 'outside' | 'floating' | 'embedded' },
 		controls: {
 			seek: true,
 			seekButtons: true,
@@ -512,6 +514,14 @@
 		onNotification(connection, playerSeekNotification, playerSeekParamsSchema, ({ seconds }) => {
 			document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerSeek, { detail: { seconds } }));
 		});
+		onNotification(
+			connection,
+			playerChatModeNotification,
+			playerChatModeParamsSchema,
+			({ mode }) => {
+				document.dispatchEvent(new CustomEvent(DOM_EVENTS.playerChatMode, { detail: { mode } }));
+			}
+		);
 		onNotification(
 			connection,
 			playerQualityNotification,

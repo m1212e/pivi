@@ -20,6 +20,7 @@
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
 	import type { RemoteController } from '#lib/remote/remoteController.svelte';
+	import { CHAT_MODES, chatModeLabel, type ChatMode } from '#lib/playback/chatMode';
 	import { isBehindLive, viewersLabel } from '#lib/playback/live';
 	import { formatTime } from '#lib/playback/time';
 
@@ -59,6 +60,10 @@
 	{/if}
 {/snippet}
 
+{#snippet chatModeOption(mode: ChatMode)}
+	<span>{chatModeLabel(mode)}</span>
+{/snippet}
+
 {#snippet subtitleOption(language: string | null, onLight: boolean)}
 	{@const track = tv.subtitleTracks.find((t) => t.language === language) ?? null}
 	<span class="min-w-0 truncate">
@@ -69,23 +74,21 @@
 	{/if}
 {/snippet}
 
-<div class="flex w-full max-w-sm flex-col items-center gap-6">
-	<!-- Same badge as the TV's: viewers at the edge, the delay and a way back when behind. -->
+<!-- Same badge as the TV's: viewers at the edge, the delay and a way back when behind. -->
+{#snippet liveStatus()}
 	{#if tv.live}
 		<div class="flex items-center justify-center gap-3" in:fly|global={{ y: 24, duration: 400 }}>
 			{#if behindLive}
-				<span
-					class="rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold text-white tabular-nums ring-1 ring-white/20"
-				>
-					-{formatTime(tv.live.latency ?? 0)}
-				</span>
 				<button
 					type="button"
 					onclick={() => remote.playerAction('goToLive')}
-					class="flex items-center gap-2 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold tracking-wide text-white uppercase shadow-lg transition hover:bg-red-500 focus:outline-none"
+					class="flex items-center gap-2 rounded-full bg-red-600 py-2 pr-2 pl-5 text-sm font-semibold tracking-wide text-white uppercase shadow-lg transition hover:bg-red-500 focus:outline-none"
 				>
 					<Radio class="size-4" />
 					{m.jump_to_live()}
+					<span class="rounded-full bg-black/25 px-2.5 py-1 tracking-normal tabular-nums">
+						-{formatTime(tv.live.latency ?? 0)}
+					</span>
 				</button>
 			{:else}
 				<span
@@ -100,7 +103,9 @@
 			{/if}
 		</div>
 	{/if}
+{/snippet}
 
+{#snippet transport()}
 	<div
 		class="flex items-center justify-center gap-4"
 		in:fly|global={{ y: 24, duration: 400, delay: 0 }}
@@ -140,6 +145,12 @@
 			</button>
 		{/if}
 	</div>
+{/snippet}
+
+<div class="flex w-full max-w-sm flex-col items-center gap-6">
+	{@render liveStatus()}
+
+	{@render transport()}
 
 	{#if tv.controls.volume}
 		<div class="flex w-full items-center gap-3" in:fly|global={{ y: 24, duration: 400, delay: 70 }}>
@@ -226,19 +237,22 @@
 	{/if}
 
 	{#if tv.chat.available}
-		<button
-			type="button"
-			onclick={() => remote.playerAction('toggleChat')}
-			aria-pressed={tv.chat.open}
+		<div
+			class="flex flex-col items-center gap-2"
 			in:fly|global={{ y: 24, duration: 400, delay: 260 }}
-			class="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium shadow-lg ring-1 shadow-black/20 backdrop-blur-2xl backdrop-saturate-150 transition focus:outline-none {tv
-				.chat.open
-				? 'bg-white text-slate-950'
-				: 'bg-white/12 text-white/80 ring-white/25 hover:bg-white/20'}"
 		>
-			<MessageSquare class="size-4" />
-			{tv.chat.open ? m.chat_hide() : m.chat_show()}
-		</button>
+			<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
+				<MessageSquare class="size-4" />
+				{m.chat()}
+			</span>
+			<Select
+				value={tv.chat.mode}
+				onChange={remote.selectChatMode}
+				options={CHAT_MODES}
+				label={m.chat()}
+				option={chatModeOption}
+			/>
+		</div>
 	{/if}
 
 	<button

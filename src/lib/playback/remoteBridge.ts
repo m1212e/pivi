@@ -4,10 +4,10 @@
 import { DOM_EVENTS } from '#lib/domEvents';
 import { clampVolume, isOfferedSubtitle } from './preferences';
 import { isOfferedQuality, type QualityMode, type QualityOption } from './quality';
+import { isChatMode, type ChatMode } from './chatMode';
 
 /** Transport buttons on the phone's player tab, dispatched by RemoteBridge as `DOM_EVENTS.playerAction`. */
-export type PlayerAction =
-	'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo' | 'toggleChat' | 'goToLive';
+export type PlayerAction = 'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo' | 'goToLive';
 
 /** How the play page reacts to each phone command. */
 export type RemoteHandlers = {
@@ -18,6 +18,8 @@ export type RemoteHandlers = {
 	/** Only called for null (off) or a language the session actually offers. */
 	onSubtitle: (language: string | null) => void;
 	onVolume: (volume: number) => void;
+	/** Only called with a valid mode. */
+	onChatMode: (mode: ChatMode) => void;
 	getSubtitleTracks: () => readonly { language: string }[];
 	getQualities: () => readonly QualityOption[];
 };
@@ -47,7 +49,10 @@ export function bindRemotePlayerEvents(handlers: RemoteHandlers): () => void {
 		}),
 		listen<{ volume: number }>(DOM_EVENTS.playerVolume, ({ volume }) =>
 			handlers.onVolume(clampVolume(volume))
-		)
+		),
+		listen<{ mode: unknown }>(DOM_EVENTS.playerChatMode, ({ mode }) => {
+			if (isChatMode(mode)) handlers.onChatMode(mode);
+		})
 	];
 	return () => unbind.forEach((fn) => fn());
 }
@@ -73,7 +78,7 @@ type BridgeState = {
 	controls: Record<string, boolean>;
 	// Null unless the stream is live.
 	live: { viewers: number | null; latency: number | null } | null;
-	chat: { available: boolean; open: boolean };
+	chat: { available: boolean; mode: ChatMode };
 };
 
 /** Attributes for the player's root element, the state RemoteBridge mirrors onto the phone. */

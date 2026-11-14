@@ -24,19 +24,18 @@
 
 <div class="flex items-center justify-center gap-3">
 	{#if behind}
-		<span
-			class="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white tabular-nums ring-1 ring-white/20 backdrop-blur-2xl"
-		>
-			-{formatTime(latency ?? 0)}
-		</span>
+		<!-- How far behind sits inside the button, as what pressing it makes up. -->
 		<button
 			type="button"
 			onclick={onGoLive}
 			disabled={locked}
-			class="flex items-center gap-2 rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold tracking-wide text-white uppercase shadow-lg transition hover:bg-red-500 focus:ring-2 focus:ring-white focus:outline-none"
+			class="flex items-center gap-2 rounded-full bg-red-600 py-1.5 pr-1.5 pl-4 text-xs font-semibold tracking-wide text-white uppercase shadow-lg transition hover:bg-red-500 focus:ring-2 focus:ring-white focus:outline-none"
 		>
 			<Radio class="size-4" />
 			{m.jump_to_live()}
+			<span class="rounded-full bg-black/25 px-2 py-0.5 tracking-normal tabular-nums">
+				-{formatTime(latency ?? 0)}
+			</span>
 		</button>
 	{:else}
 		<span

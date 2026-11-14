@@ -63,8 +63,17 @@ export async function attachHlsSource(
 		onError(event.detail)) as EventListener);
 	await player.attach(videoEl);
 	player.configure('abr.enabled', maxHeight === undefined);
+	// Some Twitch channels send fMP4 segments stamped with the broadcast's
+	// running time (hours in), while Shaka's live timeline starts near 0. By
+	// default Shaka trusts those stamps and buffers far ahead of the playhead,
+	// which then waits forever. In sequence mode segments are placed one after
+	// another on Shaka's timeline, whatever their stamps, for TS as for fMP4.
+	player.configure('manifest.hls.sequenceMode', true);
+	// Absolute, since Shaka resolves the playlist's own links against it, and
+	// against a bare path they come out as file:// URLs the browser refuses.
 	// The URL ends in .m3u8, but saying so spares Shaka a request to sniff it.
-	await player.load(playlistUrl, undefined, 'application/x-mpegurl');
+	const absoluteUrl = new URL(playlistUrl, location.origin).href;
+	await player.load(absoluteUrl, undefined, 'application/x-mpegurl');
 	applyMaxHeight(player, maxHeight, false);
 
 	return {

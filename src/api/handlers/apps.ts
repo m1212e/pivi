@@ -16,6 +16,7 @@ import { dbAppStore } from '../apps/store';
 import { appPubSub } from '../apps/pubsub';
 import { hasAvailableUpdate } from '../apps/updateAvailability';
 import { releaseWhenDone } from '../apps/usage';
+import { lastUsedByApp, markAppUsed, sortByLastUsed } from '../apps/appUsage';
 
 type AppInfo = {
 	id: string;
@@ -102,9 +103,15 @@ const AppForcedStopRef = schemaBuilder.objectRef<AppForcedStop>('AppForcedStop')
 });
 
 // Read from the database rather than the running apps, so listing apps
-// never has to boot one.
-async function resolveApps(): Promise<AppInfo[]> {
-	const rows = (await dbAppStore.list()).filter((row) => row.enabled);
+// never has to boot one. The active profile's most recently opened apps come
+// first (appUsage.ts), everything that lists apps follows this order.
+async function resolveApps(userId: string | undefined): Promise<AppInfo[]> {
+	const [all, lastUsed] = await Promise.all([dbAppStore.list(), lastUsedByApp(userId)]);
+	const rows = sortByLastUsed(
+		all.filter((row) => row.enabled),
+		(row) => row.appId,
+		lastUsed
+	);
 	return Promise.all(
 		rows.map(async (row) => {
 			const manifest = row.approvedManifest;
@@ -155,7 +162,10 @@ async function resolveScreen(appId: string, screenId: string): Promise<AppScreen
 }
 
 schemaBuilder.queryFields((t) => ({
-	apps: t.field({ type: [AppInfoRef], resolve: resolveApps }),
+	apps: t.field({
+		type: [AppInfoRef],
+		resolve: (_root, _args, ctx) => resolveApps(ctx.user?.id)
+	}),
 
 	// Every dashboard-capable app's cards in one call, so the home page
 	// doesn't need a query per app (which can't be a fixed set of fields).
@@ -169,7 +179,10 @@ schemaBuilder.queryFields((t) => ({
 			appId: t.arg.string({ required: true }),
 			screenId: t.arg.string({ required: true })
 		},
-		resolve: (_root, args) => resolveScreen(args.appId, args.screenId)
+		resolve: (_root, args, ctx) => {
+			if (ctx.user) void markAppUsed(ctx.user.id, args.appId);
+			return resolveScreen(args.appId, args.screenId);
+		}
 	})
 }));
 
@@ -183,7 +196,7 @@ schemaBuilder.subscriptionFields((t) => ({
 	apps: t.field({
 		type: [AppInfoRef],
 		subscribe: () => appPubSub.subscribe(APP_LIST_EVENT),
-		resolve: resolveApps
+		resolve: (_root, _args, ctx) => resolveApps(ctx.user?.id)
 	}),
 	appDashboards: t.field({
 		type: [AppDashboardRef],
@@ -200,12 +213,15 @@ schemaBuilder.subscriptionFields((t) => ({
 			appId: t.arg.string({ required: true }),
 			screenId: t.arg.string({ required: true })
 		},
-		subscribe: (_root, args) =>
+		subscribe: (_root, args, ctx) => {
+			// Opening the screen is opening the app, see appUsage.ts.
+			if (ctx.user) void markAppUsed(ctx.user.id, args.appId);
 			// An open screen is the app in use, see usage.ts.
-			releaseWhenDone(
+			return releaseWhenDone(
 				appPubSub.subscribe(`${args.appId}:screen:${args.screenId}`),
 				holdApp(args.appId)
-			),
+			);
+		},
 		resolve: (_root, args) => resolveScreen(args.appId, args.screenId)
 	})
 }));

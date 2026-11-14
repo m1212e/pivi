@@ -31,15 +31,65 @@
 [data-sonner-toaster] {
 	--width: 22.25rem !important; /* 356px */
 	--gap: 0.875rem !important; /* 14px */
-	--border-radius: 0.5rem !important; /* 8px */
+	--border-radius: 1.5rem !important;
 }
 [data-sonner-toast][data-styled='true'] {
-	padding: 1rem !important; /* 16px */
-	font-size: 0.8125rem !important; /* 13px */
+	padding: 1rem 1.25rem !important;
+	font-size: 0.9375rem !important;
+	gap: 0.75rem !important;
 }
+
+/*
+ * Toasts in the shell's liquid glass, like the player's buttons and the chat
+ * card: a blurred, saturated pane with a bright hairline edge. Darker than the
+ * buttons' glass, since toasts carry sentences that have to stay readable over
+ * a bright video. The kinds (richColors) keep their colour as a tint of the
+ * glass instead of a solid fill. svelte-sonner sets these variables per theme on the toaster,
+ * so they're overridden with the same selector plus !important.
+ */
+[data-sonner-toaster][data-sonner-theme='dark'] {
+	--normal-bg: rgb(15 23 42 / 0.62) !important;
+	--normal-border: rgb(255 255 255 / 0.22) !important;
+	--normal-text: rgb(255 255 255) !important;
+	--success-bg: rgb(20 83 45 / 0.68) !important;
+	--success-border: rgb(134 239 172 / 0.4) !important;
+	--success-text: rgb(240 253 244) !important;
+	--info-bg: rgb(30 58 138 / 0.68) !important;
+	--info-border: rgb(147 197 253 / 0.4) !important;
+	--info-text: rgb(239 246 255) !important;
+	--warning-bg: rgb(113 63 18 / 0.7) !important;
+	--warning-border: rgb(253 224 71 / 0.4) !important;
+	--warning-text: rgb(254 252 232) !important;
+	--error-bg: rgb(127 29 29 / 0.7) !important;
+	--error-border: rgb(252 165 165 / 0.4) !important;
+	--error-text: rgb(254 242 242) !important;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+	-webkit-backdrop-filter: blur(40px) saturate(1.5);
+	backdrop-filter: blur(40px) saturate(1.5);
+	box-shadow:
+		0 1.25rem 2.5rem -0.75rem rgb(0 0 0 / 0.45),
+		inset 0 1px 0 rgb(255 255 255 / 0.12) !important;
+}
+/* The library draws its icons at a fixed 20px, wider than this box, so
+   they spilled onto the text. Sized to the box instead. */
 [data-sonner-toast][data-styled='true'] [data-icon] {
-	height: 1rem !important; /* 16px */
-	width: 1rem !important;
+	height: 1.25rem !important;
+	width: 1.25rem !important;
+	margin: 0 !important;
+}
+[data-sonner-toast][data-styled='true'] [data-icon] svg {
+	width: 100% !important;
+	height: 100% !important;
+	margin: 0 !important;
+}
+[data-sonner-toast][data-styled='true'] [data-title] {
+	font-weight: 600 !important;
+	line-height: 1.35 !important;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-description] {
+	color: rgb(255 255 255 / 0.8) !important;
+	line-height: 1.4 !important;
 }
 [data-sonner-toast][data-styled='true'] [data-button] {
 	height: 1.5rem !important; /* 24px */

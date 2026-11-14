@@ -1,4 +1,4 @@
-import { boolean, jsonb, snakeCase, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, jsonb, snakeCase, text, timestamp, unique } from 'drizzle-orm/pg-core';
 import type { PermissionKey, AppManifest } from '#sdk/manifest';
 import type { AppImage } from '../apps/image';
 import type { AppSigner } from '../apps/signature';
@@ -97,3 +97,23 @@ export const installedApp = snakeCase.table('installed_app', {
 	lastCheckedAt: timestamp(),
 	lastError: text()
 });
+
+// When each profile last opened each app (its screen or something to play),
+// which orders the home screen's apps (apps/appUsage.ts). Per profile, since
+// it's a matter of taste, and gone with the profile. An uninstalled app's
+// rows stay but are never listed, and put it back where it was if it's
+// installed again.
+export const appUsage = snakeCase.table(
+	'app_usage',
+	{
+		// Its own id like every table, rumble expects one.
+		...defaultIdAndTimestamps,
+		userId: text()
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		appId: text().notNull(),
+		lastUsedAt: timestamp({ mode: 'date' }).notNull()
+	},
+	// One row per profile and app, what markAppUsed upserts on.
+	(table) => [unique().on(table.userId, table.appId)]
+);

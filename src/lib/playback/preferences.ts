@@ -1,4 +1,5 @@
 import { readItem, writeItem, type KeyValueStorage } from '../storage';
+import { isChatMode, type ChatMode } from './chatMode';
 
 // Player settings remembered per TV browser, so they survive between videos.
 // Storage may be unavailable, so every accessor takes null and falls back to defaults.
@@ -6,6 +7,7 @@ const VOLUME_KEY = 'pivi:player:volume';
 const SKIP_ACTIVE_KEY = 'pivi:player:skipActive';
 const SUBTITLE_KEY = 'pivi:player:subtitleLanguage';
 const CHAT_OPEN_KEY = 'pivi:player:chatOpen';
+const CHAT_MODE_KEY = 'pivi:player:chatMode';
 
 /** Also guards volume values arriving from the phone. */
 export function clampVolume(value: number): number {
@@ -54,12 +56,15 @@ export function isOfferedSubtitle(
 	return language === null || tracks.some((t) => t.language === language);
 }
 
-/** Whether live chat shows next to a stream that has one. On until turned off once. */
-export function loadChatOpen(storage: KeyValueStorage | null): boolean {
-	return readItem(storage, CHAT_OPEN_KEY) !== 'false';
+/** How live chat shows next to a stream that has one. Floating until changed once. */
+export function loadChatMode(storage: KeyValueStorage | null): ChatMode {
+	const stored = readItem(storage, CHAT_MODE_KEY);
+	if (isChatMode(stored)) return stored;
+	// The earlier on/off switch, carried over so an "off" stays off.
+	return readItem(storage, CHAT_OPEN_KEY) === 'false' ? 'off' : 'floating';
 }
 
-/** Called by the play page when the chat toggle flips. */
-export function saveChatOpen(storage: KeyValueStorage | null, open: boolean) {
-	writeItem(storage, CHAT_OPEN_KEY, String(open));
+/** Called by the play page when a chat mode is picked on the TV or the phone. */
+export function saveChatMode(storage: KeyValueStorage | null, mode: ChatMode) {
+	writeItem(storage, CHAT_MODE_KEY, mode);
 }

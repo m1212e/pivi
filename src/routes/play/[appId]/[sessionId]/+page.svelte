@@ -12,10 +12,10 @@
 	import { createPlayerEngine } from '#lib/playback/engine.svelte';
 	import {
 		clampVolume,
-		loadChatOpen,
+		loadChatMode,
 		loadSubtitleLanguage,
 		loadVolume,
-		saveChatOpen,
+		saveChatMode,
 		saveSubtitleLanguage,
 		saveVolume
 	} from '#lib/playback/preferences';
@@ -39,6 +39,7 @@
 	import { browserStorage } from '#lib/storage';
 	import BottomOverlay from './BottomOverlay.svelte';
 	import ChatPanel from './ChatPanel.svelte';
+	import type { ChatMode } from '#lib/playback/chatMode';
 	import DiagnosticsPanel from './DiagnosticsPanel.svelte';
 	import ErrorScreen from './ErrorScreen.svelte';
 	import SkipSegmentBanner from './SkipSegmentBanner.svelte';
@@ -105,8 +106,9 @@
 	let playerRoot = $state<HTMLElement>();
 	let quality = $state<QualityOption | undefined>(initialQuality);
 	let volume = $state(loadVolume(storage));
-	let chatOpen = $state(loadChatOpen(storage));
-	const showChat = $derived(chatAvailable && chatOpen);
+	let chatMode = $state<ChatMode>(loadChatMode(storage));
+	// What actually shows: nothing for a stream without chat, whatever was picked.
+	const shownChatMode = $derived<ChatMode>(chatAvailable ? chatMode : 'off');
 	// From the app, refreshed while a live stream plays.
 	let viewers = $state<number | null>(null);
 	// null means captions off.
@@ -184,9 +186,9 @@
 		if (meta && quality === target) engine.setupPlayback(meta, resumeAt);
 	}
 
-	function toggleChat() {
-		chatOpen = !chatOpen;
-		saveChatOpen(storage, chatOpen);
+	function selectChatMode(mode: ChatMode) {
+		chatMode = mode;
+		saveChatMode(storage, mode);
 	}
 
 	// Viewer counts move slowly, once a minute is plenty.
@@ -223,13 +225,13 @@
 					seekBack: () => allowed.seekButtons && engine.seekBy(-SEEK_STEP_SECONDS),
 					seekForward: () => allowed.seekButtons && engine.seekBy(SEEK_STEP_SECONDS),
 					toggleInfo: diagnostics.toggle,
-					toggleChat: () => chatAvailable && toggleChat(),
 					goToLive: () => live && engine.goToLive()
 				})[action](),
 			onSeek: (seconds) => allowed.seek && engine.seek(seconds),
 			onQuality: selectQuality,
 			onSubtitle: selectSubtitle,
 			onVolume: (target) => allowed.volume && (volume = clampVolume(target)),
+			onChatMode: (mode) => chatAvailable && selectChatMode(mode),
 			getSubtitleTracks: () => subtitleTracks,
 			getQualities: () => qualities
 		})
@@ -240,7 +242,7 @@
 		void quality;
 		void subtitleLanguage;
 		void diagnostics.open;
-		void showChat;
+		void chatMode;
 		void viewers;
 		// Position too. RemoteBridge's timeupdate push runs before this page renders
 		// the new value, so the phone's progress bar would trail by a tick.
@@ -261,7 +263,7 @@
 			volume,
 			controls: allowed,
 			live: live ? { viewers, latency: engine.liveLatency } : null,
-			chat: { available: chatAvailable, open: showChat }
+			chat: { available: chatAvailable, mode: chatMode }
 		})
 	);
 
@@ -331,7 +333,7 @@
 	style:view-transition-name="player-video"
 	{...bridgeAttributes}
 >
-	<!-- The video and its overlays share what chat leaves of the width. -->
+	<!-- The video and its overlays, narrower only while chat sits outside it. -->
 	<div class="relative h-full min-w-0 flex-1">
 		{#if engine.failed}
 			<ErrorScreen message={m.stream_stopped()} onBack={goBack} />
@@ -360,6 +362,11 @@
 				<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
 					<LoaderCircle class="size-12 animate-spin text-white/80" />
 				</div>
+			{/if}
+
+			<!-- Under the control overlays, so they stay on top when they show. -->
+			{#if shownChatMode === 'floating' || shownChatMode === 'embedded'}
+				<ChatPanel {appId} {sessionId} mode={shownChatMode} controlsVisible={controls.visible} />
 			{/if}
 
 			<TopOverlay
@@ -395,8 +402,8 @@
 				liveLatency={engine.liveLatency}
 				onGoLive={engine.goToLive}
 				{chatAvailable}
-				chatOpen={showChat}
-				onToggleChat={toggleChat}
+				{chatMode}
+				onChatMode={selectChatMode}
 				{subtitleTracks}
 				{subtitleLanguage}
 				{qualities}
@@ -418,8 +425,8 @@
 		{/if}
 	</div>
 
-	{#if showChat}
-		<ChatPanel {appId} {sessionId} />
+	{#if shownChatMode === 'outside'}
+		<ChatPanel {appId} {sessionId} mode="outside" controlsVisible={controls.visible} />
 	{/if}
 </div>
 

@@ -73,7 +73,7 @@ export const selectAppNotification = new NotificationType<z.infer<typeof selectA
 // The phone's player tab buttons. Sent as an action, not a click target,
 // because some (the info toggle) have no single button on the TV to click.
 export const playerActionParamsSchema = z.object({
-	action: z.enum(['playPause', 'seekBack', 'seekForward', 'toggleInfo', 'toggleChat', 'goToLive'])
+	action: z.enum(['playPause', 'seekBack', 'seekForward', 'toggleInfo', 'goToLive'])
 });
 export const playerActionNotification = new NotificationType<
 	z.infer<typeof playerActionParamsSchema>
@@ -86,6 +86,14 @@ export const playerSeekNotification = new NotificationType<z.infer<typeof player
 );
 
 // A pick from the phone's quality list, mirrored from `qualityOptions`.
+// Validated again on the TV (isChatMode), the phone is just another sender.
+export const playerChatModeParamsSchema = z.object({
+	mode: z.enum(['off', 'outside', 'floating', 'embedded'])
+});
+export const playerChatModeNotification = new NotificationType<
+	z.infer<typeof playerChatModeParamsSchema>
+>('remote/playerChatMode');
+
 export const playerQualityParamsSchema = z.object({ quality: z.number() });
 export const playerQualityNotification = new NotificationType<
 	z.infer<typeof playerQualityParamsSchema>
@@ -195,11 +203,13 @@ export const stateParamsSchema = z.object({
 		.object({ viewers: z.number().nullable(), latency: z.number().nullable() })
 		.nullable()
 		.default(null),
-	// Whether the stream has a chat and the TV shows it, for the phone's toggle.
-	chat: z.object({ available: z.boolean(), open: z.boolean() }).default({
-		available: false,
-		open: false
-	}),
+	// Whether the stream has a chat and how the TV shows it, for the phone's picker.
+	chat: z
+		.object({
+			available: z.boolean(),
+			mode: z.enum(['off', 'outside', 'floating', 'embedded'])
+		})
+		.default({ available: false, mode: 'off' }),
 	controls: playerControlsStateSchema.default({
 		seek: true,
 		seekButtons: true,

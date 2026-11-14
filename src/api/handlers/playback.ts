@@ -9,6 +9,7 @@ import { resolveSkipSegmentsCached } from '../apps/skipSegmentsCache';
 import { chatEventKey, chatPubSub } from '../apps/events';
 import { releaseWhenDone } from '../apps/usage';
 import type { ChatBatch, ChatMessage } from '#sdk/protocol';
+import { markAppUsed } from '../apps/appUsage';
 
 // Lets the player offer a subtitle menu. Without `url`, the player fetches a
 // track through routes/api/stream-subtitle by its language.
@@ -151,7 +152,9 @@ schemaBuilder.queryFields((t) => ({
 			// hits the same cache entry instead of resolving the stream twice.
 			maxHeight: t.arg.int({ required: false })
 		},
-		resolve: async (_root, args) => {
+		resolve: async (_root, args, ctx) => {
+			// Playing something of the app counts as opening it, see appUsage.ts.
+			if (ctx.user) void markAppUsed(ctx.user.id, args.appId);
 			const app = await getApp(args.appId);
 			const stream = await resolveStreamCached(
 				args.appId,

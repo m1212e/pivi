@@ -18,6 +18,7 @@
 	import MediaCard from '#lib/components/MediaCard.svelte';
 	import MediaCardSkeleton from '#lib/components/MediaCardSkeleton.svelte';
 	import { containerRowClasses } from '#lib/apps/containerClasses';
+	import AppIcon from './AppIcon.svelte';
 	import Self from './UiNodeRenderer.svelte';
 
 	let {
@@ -269,9 +270,7 @@
 
 {#snippet buttonLabel(n: Extract<UiNode, { type: 'button' }>)}
 	{#if n.icon}
-		<svg viewBox="0 0 24 24" class="size-6 shrink-0 fill-current" aria-hidden="true">
-			<path d={n.icon} />
-		</svg>
+		<AppIcon icon={n.icon} />
 	{/if}
 	{n.label}
 {/snippet}

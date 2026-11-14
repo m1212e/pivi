@@ -216,6 +216,147 @@ export async function search(query: string): Promise<SearchResults> {
 	};
 }
 
+/** What the on-screen keyboard offers while typing a search: channel and category names. */
+export async function searchSuggestions(fragment: string): Promise<string[]> {
+	const data = await gql<{
+		searchSuggestions: Edges<{ text: string }> | null;
+	}>(
+		`query($fragment: String!) {
+			searchSuggestions(queryFragment: $fragment, withOfflineChannelContent: true) { edges { node { text } } }
+		}`,
+		{ fragment },
+		{ anonymous: true }
+	);
+	return fromEdges(data.searchSuggestions, (node) => node.text || undefined);
+}
+
+/** A channel's page: who it is, and what it streams now or streamed last. */
+export type Profile = {
+	login: string;
+	displayName: string;
+	avatar: string;
+	description: string;
+	followers?: number;
+	stream?: LiveStream;
+	lastBroadcast?: { title: string; game?: string; startedAt?: string };
+};
+
+/** A past video on a channel's page. */
+export type Video = {
+	id: string;
+	title: string;
+	preview: string;
+	lengthSeconds: number;
+	views: number;
+	createdAt?: string;
+	game?: string;
+};
+
+/** What a channel's page lists to play besides the live stream. */
+export type ChannelVideos = { broadcasts: Video[]; highlights: Video[]; uploads: Video[] };
+
+type RawVideo = {
+	id: string;
+	title: string | null;
+	previewThumbnailURL: string | null;
+	lengthSeconds: number | null;
+	viewCount: number | null;
+	createdAt: string | null;
+	game: { displayName: string } | null;
+};
+
+function toVideo(raw: RawVideo): Video {
+	return {
+		id: raw.id,
+		title: raw.title ?? '',
+		preview: raw.previewThumbnailURL ?? '',
+		lengthSeconds: raw.lengthSeconds ?? 0,
+		views: raw.viewCount ?? 0,
+		createdAt: raw.createdAt ?? undefined,
+		game: raw.game?.displayName
+	};
+}
+
+// One shelf each, newest first. Like every list here a single page, see
+// TOP_STREAMS.
+const VIDEOS_PER_KIND = 30;
+const VIDEO_FIELDS =
+	'id title previewThumbnailURL(width: 640, height: 360) lengthSeconds viewCount createdAt game { displayName }';
+
+export async function channelVideos(login: string): Promise<ChannelVideos> {
+	const data = await gql<{
+		user: {
+			broadcasts: Edges<RawVideo> | null;
+			highlights: Edges<RawVideo> | null;
+			uploads: Edges<RawVideo> | null;
+		} | null;
+	}>(
+		`query($login: String!, $first: Int!) {
+			user(login: $login) {
+				broadcasts: videos(first: $first, type: ARCHIVE, sort: TIME) { edges { node { ${VIDEO_FIELDS} } } }
+				highlights: videos(first: $first, type: HIGHLIGHT, sort: TIME) { edges { node { ${VIDEO_FIELDS} } } }
+				uploads: videos(first: $first, type: UPLOAD, sort: TIME) { edges { node { ${VIDEO_FIELDS} } } }
+			}
+		}`,
+		{ login, first: VIDEOS_PER_KIND },
+		{ anonymous: true }
+	);
+	return {
+		broadcasts: fromEdges(data.user?.broadcasts, toVideo),
+		highlights: fromEdges(data.user?.highlights, toVideo),
+		uploads: fromEdges(data.user?.uploads, toVideo)
+	};
+}
+
+/** Undefined when no channel has that login (renamed or banned). */
+export async function channelProfile(login: string): Promise<Profile | undefined> {
+	const data = await gql<{
+		user: {
+			login: string;
+			displayName: string;
+			description: string | null;
+			profileImageURL: string | null;
+			followers: { totalCount: number | null } | null;
+			stream: RawStream | null;
+			lastBroadcast: {
+				title: string | null;
+				startedAt: string | null;
+				game: { displayName: string } | null;
+			} | null;
+		} | null;
+	}>(
+		`query($login: String!) {
+			user(login: $login) {
+				login displayName description profileImageURL(width: 300)
+				followers { totalCount }
+				stream { ${STREAM_FIELDS} }
+				lastBroadcast { title startedAt game { displayName } }
+			}
+		}`,
+		{ login },
+		{ anonymous: true }
+	);
+	const user = data.user;
+	if (!user) return undefined;
+	const last = user.lastBroadcast;
+	return {
+		login: user.login,
+		displayName: user.displayName,
+		avatar: user.profileImageURL ?? '',
+		description: user.description ?? '',
+		followers: user.followers?.totalCount ?? undefined,
+		stream: user.stream ? toStream(user.stream, user.login, user.displayName) : undefined,
+		lastBroadcast:
+			last?.startedAt || last?.title
+				? {
+						title: last.title ?? '',
+						game: last.game?.displayName,
+						startedAt: last.startedAt ?? undefined
+					}
+				: undefined
+	};
+}
+
 /** The signed-in account, as the sidebar shows it. */
 export type Account = { login: string; displayName: string; avatar: string };
 
@@ -230,22 +371,51 @@ export async function currentAccount(): Promise<Account | undefined> {
 		: undefined;
 }
 
-type RawFollowedUser = { login: string; displayName: string; stream: RawStream | null };
+// Helix, Twitch's documented API, for what GQL won't answer anymore.
+const HELIX = 'https://api.twitch.tv/helix';
+
+async function helix<T>(path: string): Promise<T> {
+	const get = async () => {
+		const token = await accessToken();
+		if (!token) throw new Error('Not signed in');
+		return fetch(`${HELIX}/${path}`, {
+			headers: { 'Client-Id': TV_CLIENT_ID, Authorization: `Bearer ${token}` },
+			signal: AbortSignal.timeout(TIMEOUT_MS)
+		});
+	};
+	let response = await get();
+	if (response.status === 401 && (await recoverFromRejection())) response = await get();
+	if (!response.ok) throw new Error(`Twitch Helix answered ${response.status}`);
+	return (await response.json()) as T;
+}
+
+type HelixStream = {
+	user_login: string;
+	user_name: string;
+	title: string;
+	viewer_count: number;
+	game_name: string;
+	thumbnail_url: string;
+};
 
 /** Live channels the signed-in account follows, most watched first. */
 export async function followedLive(): Promise<LiveStream[]> {
-	const data = await gql<{
-		currentUser: { followedLiveUsers: Edges<RawFollowedUser> | null } | null;
-	}>(
-		`query($first: Int!) {
-			currentUser { followedLiveUsers(first: $first) { edges { node { login displayName stream { ${STREAM_FIELDS} } } } } }
-		}`,
-		{ first: LIST_SIZE }
+	const user = await gql<{ currentUser: { id: string } | null }>(`query { currentUser { id } }`);
+	if (!user.currentUser) throw new Error('Not signed in');
+	// Helix lists them by viewers already, and pages properly, but 100 live
+	// follows at once is plenty for a TV row.
+	const { data } = await helix<{ data: HelixStream[] }>(
+		`streams/followed?user_id=${encodeURIComponent(user.currentUser.id)}&first=${LIST_SIZE}`
 	);
-	if (!data.currentUser) throw new Error('Not signed in');
-	return fromEdges(data.currentUser.followedLiveUsers, (node) =>
-		node.stream ? toStream(node.stream, node.login, node.displayName) : undefined
-	).sort((a, b) => b.viewers - a.viewers);
+	return data.map((raw) => ({
+		login: raw.user_login,
+		displayName: raw.user_name,
+		title: raw.title,
+		viewers: raw.viewer_count,
+		// The same size as GQL's previews, see STREAM_FIELDS.
+		preview: raw.thumbnail_url.replace('{width}', '640').replace('{height}', '360'),
+		game: raw.game_name || undefined
+	}));
 }
 
 /** A live channel's current viewer count, undefined once it's offline. */

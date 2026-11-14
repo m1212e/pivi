@@ -11,6 +11,7 @@
 	} from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
 	import Select from '#lib/components/Select.svelte';
+	import { CHAT_MODES, chatModeLabel, type ChatMode } from '#lib/playback/chatMode';
 	import type { QualityMode, QualityOption } from '#lib/playback/quality';
 	import { subtitleOptions, type SubtitleTrack } from '#lib/playback/subtitles';
 
@@ -22,10 +23,10 @@
 		modeFor,
 		locked,
 		chatAvailable,
-		chatOpen,
+		chatMode,
 		onSubtitle,
 		onQuality,
-		onToggleChat
+		onChatMode
 	}: {
 		subtitleTracks: SubtitleTrack[];
 		/** null means captions off. */
@@ -37,10 +38,10 @@
 		locked: boolean;
 		/** The stream has a chat the app can deliver. */
 		chatAvailable: boolean;
-		chatOpen: boolean;
+		chatMode: ChatMode;
 		onSubtitle: (language: string | null) => void;
 		onQuality: (quality: QualityOption) => void;
-		onToggleChat: () => void;
+		onChatMode: (mode: ChatMode) => void;
 	} = $props();
 
 	const subtitleChoices = $derived(subtitleOptions(subtitleTracks));
@@ -67,6 +68,10 @@
 			<Radio class="size-4 {onLight ? 'text-violet-600' : 'text-violet-400'}" />
 		</span>
 	{/if}
+{/snippet}
+
+{#snippet chatModeOption(mode: ChatMode)}
+	<span>{chatModeLabel(mode)}</span>
 {/snippet}
 
 {#snippet subtitleOption(language: string | null, onLight: boolean)}
@@ -125,17 +130,14 @@
 				<MessageSquare class="size-4" />
 				{m.chat()}
 			</span>
-			<button
-				type="button"
-				onclick={onToggleChat}
+			<Select
+				value={chatMode}
+				onChange={onChatMode}
+				options={CHAT_MODES}
+				label={m.chat()}
 				disabled={locked}
-				aria-pressed={chatOpen}
-				class="rounded-full px-4 py-2 text-xs font-medium shadow-lg ring-1 transition focus:ring-2 focus:ring-white focus:outline-none {chatOpen
-					? 'bg-white text-slate-950 ring-white'
-					: 'bg-white/12 text-white/90 ring-white/20 backdrop-blur-2xl hover:bg-white/20'}"
-			>
-				{chatOpen ? m.chat_hide() : m.chat_show()}
-			</button>
+				option={chatModeOption}
+			/>
 		</div>
 	{/if}
 </div>
