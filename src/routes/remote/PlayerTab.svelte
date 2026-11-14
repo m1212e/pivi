@@ -5,8 +5,10 @@
 		Gauge,
 		Info,
 		Layers,
+		MessageSquare,
 		Pause,
 		Play,
+		Radio,
 		RotateCcw,
 		RotateCw,
 		Server,
@@ -18,13 +20,16 @@
 	import Select from '#lib/components/Select.svelte';
 	import Slider from '#lib/components/Slider.svelte';
 	import type { RemoteController } from '#lib/remote/remoteController.svelte';
+	import { isBehindLive, viewersLabel } from '#lib/playback/live';
 	import { formatTime } from '#lib/playback/time';
 
-	const QUALITY_MODE_ICON = { direct: Zap, mse: Layers, ffmpeg: Server } as const;
+	const QUALITY_MODE_ICON = { direct: Zap, mse: Layers, ffmpeg: Server, hls: Radio } as const;
 
 	let { remote }: { remote: RemoteController } = $props();
 
 	const tv = $derived(remote.tv);
+	const behindLive = $derived(isBehindLive(tv.live?.latency ?? null));
+	const viewerText = $derived(viewersLabel(tv.live?.viewers ?? null));
 
 	// `null` (Off) always leads, same as the TV player's own list.
 	const subtitleChoices = $derived<(string | null)[]>([
@@ -65,6 +70,37 @@
 {/snippet}
 
 <div class="flex w-full max-w-sm flex-col items-center gap-6">
+	<!-- Same badge as the TV's: viewers at the edge, the delay and a way back when behind. -->
+	{#if tv.live}
+		<div class="flex items-center justify-center gap-3" in:fly|global={{ y: 24, duration: 400 }}>
+			{#if behindLive}
+				<span
+					class="rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold text-white tabular-nums ring-1 ring-white/20"
+				>
+					-{formatTime(tv.live.latency ?? 0)}
+				</span>
+				<button
+					type="button"
+					onclick={() => remote.playerAction('goToLive')}
+					class="flex items-center gap-2 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold tracking-wide text-white uppercase shadow-lg transition hover:bg-red-500 focus:outline-none"
+				>
+					<Radio class="size-4" />
+					{m.jump_to_live()}
+				</button>
+			{:else}
+				<span
+					class="flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-lg"
+				>
+					<span class="size-2 rounded-full bg-white"></span>
+					<span class="uppercase">{m.live()}</span>
+					{#if viewerText}
+						<span class="font-medium opacity-90">· {viewerText}</span>
+					{/if}
+				</span>
+			{/if}
+		</div>
+	{/if}
+
 	<div
 		class="flex items-center justify-center gap-4"
 		in:fly|global={{ y: 24, duration: 400, delay: 0 }}
@@ -187,6 +223,22 @@
 				option={subtitleOption}
 			/>
 		</div>
+	{/if}
+
+	{#if tv.chat.available}
+		<button
+			type="button"
+			onclick={() => remote.playerAction('toggleChat')}
+			aria-pressed={tv.chat.open}
+			in:fly|global={{ y: 24, duration: 400, delay: 260 }}
+			class="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium shadow-lg ring-1 shadow-black/20 backdrop-blur-2xl backdrop-saturate-150 transition focus:outline-none {tv
+				.chat.open
+				? 'bg-white text-slate-950'
+				: 'bg-white/12 text-white/80 ring-white/25 hover:bg-white/20'}"
+		>
+			<MessageSquare class="size-4" />
+			{tv.chat.open ? m.chat_hide() : m.chat_show()}
+		</button>
 	{/if}
 
 	<button

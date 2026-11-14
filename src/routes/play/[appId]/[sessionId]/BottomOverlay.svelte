@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { QualityMode, QualityOption } from '#lib/playback/quality';
 	import type { SubtitleTrack } from '#lib/playback/subtitles';
+	import LiveBadge from './LiveBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import TrackPickers from './TrackPickers.svelte';
 	import TransportControls from './TransportControls.svelte';
@@ -14,6 +15,13 @@
 		playing,
 		position,
 		duration,
+		live,
+		viewers,
+		liveLatency,
+		onGoLive,
+		chatAvailable,
+		chatOpen,
+		onToggleChat,
 		subtitleTracks,
 		subtitleLanguage,
 		qualities,
@@ -33,6 +41,14 @@
 		playing: boolean;
 		position: number;
 		duration: number;
+		/** Still broadcasting, shown as a badge where the progress bar would be. */
+		live: boolean;
+		viewers: number | null;
+		liveLatency: number | null;
+		onGoLive: () => void;
+		chatAvailable: boolean;
+		chatOpen: boolean;
+		onToggleChat: () => void;
 		subtitleTracks: SubtitleTrack[];
 		subtitleLanguage: string | null;
 		qualities: readonly QualityOption[];
@@ -78,12 +94,17 @@
 			{quality}
 			{modeFor}
 			{locked}
+			{chatAvailable}
+			{chatOpen}
 			{onSubtitle}
 			{onQuality}
+			{onToggleChat}
 		/>
 	</div>
 
-	{#if controls.seek}
+	{#if live}
+		<LiveBadge {viewers} latency={liveLatency} {locked} {onGoLive} />
+	{:else if controls.seek}
 		<ProgressBar {position} {duration} {locked} {onSeek} />
 	{/if}
 </div>

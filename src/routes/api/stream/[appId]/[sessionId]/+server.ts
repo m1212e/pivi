@@ -13,7 +13,7 @@
 // scratch instead of seeking within one continuous connection.
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { relayForFfmpeg } from '#api/apps/ffmpegRelay';
 import { holdApp } from '#api/apps/manager';
 import { resolveStreamOrError } from '#api/apps/trackResolution';
@@ -162,6 +162,9 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 	const maxHeight = parseMaxHeight(url);
 	const { app, stream: resolved } = await resolveStreamOrError(appId, sessionId, maxHeight);
 	const { videoUrl, audioUrl, vcodec } = resolved;
+	// Played through src/routes/api/stream-hls only. Redirecting would hand the
+	// browser the raw playlist, and ffmpeg would fetch its segments itself.
+	if (resolved.videoContainer === 'hls') error(404, 'HLS sessions play through stream-hls');
 
 	const seekSeconds = parseSeekSeconds(url);
 

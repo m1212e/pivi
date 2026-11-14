@@ -34,7 +34,9 @@ export const featureSchema = z.enum([
 	// Resolves a session id to a playable stream (resolveStream).
 	'playback',
 	// Reports skippable stretches of a stream (resolveSkipSegments).
-	'skipSegments'
+	'skipSegments',
+	// Live chat for streams that say so (host/openChat, app/chatMessages).
+	'chat'
 	// There's no dedicated sign-in feature: an app that needs one shows it
 	// as part of its own 'screen' content (a code or link, a button whose
 	// action is `openOnPhone`, see dashboard.ts's AppAction) and handles the

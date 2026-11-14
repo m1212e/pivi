@@ -1,6 +1,8 @@
 import { attachDualTrackSource, type DualTrackHandle } from '#lib/mse/dualTrackPlayer';
+import { attachHlsSource, type HlsHandle } from '#lib/mse/hlsPlayer';
 import { describeError } from './errors';
 import {
+	isHls,
 	isMseCandidate,
 	type MseQualityMeta,
 	type QualityMeta,
@@ -24,7 +26,7 @@ function describeMediaError(error: MediaError | null | undefined): string {
 }
 
 /** The path currently playing, shown in the diagnostics panel. */
-export type PlaybackMode = 'direct' | 'mse' | 'ffmpeg';
+export type PlaybackMode = 'direct' | 'mse' | 'ffmpeg' | 'hls';
 
 /**
  * Playback core of the TV play page. Not every stream plays everywhere, so it
@@ -33,6 +35,8 @@ export type PlaybackMode = 'direct' | 'mse' | 'ffmpeg';
  * - direct: one URL, plain `<video src>`, native seeking.
  * - mse: separate tracks via Shaka over the range proxy, no remuxing.
  * - ffmpeg: live remux proxy. Works everywhere but slowest, so last resort.
+ * - hls: an HLS playlist via Shaka over the stream-hls proxy. Taken whenever
+ *   the stream is HLS, which none of the others can play, so it has no fallback.
  *
  * Owns everything derived from the element's clock (position, buffering,
  * seek bookkeeping). Must be created during component init.
@@ -53,8 +57,11 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 	let lastFallbackReason = $state<string | null>(null);
 	// Set once ffmpeg, the last resort, reports an error.
 	let failed = $state(false);
+	// Seconds behind the live edge of a live HLS stream, null otherwise.
+	let liveLatency = $state<number | null>(null);
 
 	let dualTrackHandle: DualTrackHandle | undefined;
+	let hlsHandle: HlsHandle | undefined;
 	// Video and audio pumps can both fail at once. A second fallback would tear
 	// down a SourceBuffer the first one is already discarding.
 	let fallenBack = false;
@@ -63,13 +70,23 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 
 	const streamUrlFor = (seconds: number) => urls.stream(seconds, getQuality());
 
-	function destroyDualTrack() {
+	// Both handles own a Shaka player, at most one is set.
+	function destroyShaka() {
 		dualTrackHandle?.destroy().catch(() => {});
 		dualTrackHandle = undefined;
+		hlsHandle?.destroy().catch(() => {});
+		hlsHandle = undefined;
 	}
 
 	// Stop Shaka fetching after leaving the page.
-	$effect(() => destroyDualTrack);
+	$effect(() => destroyShaka);
+
+	// Polled rather than read on timeupdate: while paused the element is quiet,
+	// but the live edge keeps moving away.
+	$effect(() => {
+		const timer = setInterval(() => (liveLatency = hlsHandle?.liveLatency() ?? null), 1000);
+		return () => clearInterval(timer);
+	});
 
 	/** ffmpeg output can't seek natively, so a seek reopens the stream at the new offset. */
 	function reloadFfmpegStream(el: HTMLVideoElement, seconds: number) {
@@ -88,7 +105,7 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 		fallenBack = true;
 		lastFallbackReason = reason;
 		console.error(`Falling back to remux proxy: ${reason}`);
-		destroyDualTrack();
+		destroyShaka();
 		mode = 'ffmpeg';
 		reloadFfmpegStream(el, clampSeek(resumeSeconds, duration));
 	}
@@ -135,6 +152,27 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 		}
 	}
 
+	// Shaka reports recoverable errors too and retries those itself.
+	function isCritical(err: unknown): boolean {
+		return (err as { severity?: number } | undefined)?.severity !== 1;
+	}
+
+	async function setupHlsPlayback(el: HTMLVideoElement, resumeSeconds: number) {
+		mode = 'hls';
+		const onError = (err: unknown) => {
+			if (!isCritical(err)) return;
+			lastFallbackReason = `HLS playback failed: ${describeError(err)}`;
+			failed = true;
+		};
+		try {
+			hlsHandle = await attachHlsSource(el, urls.hls(getQuality()), getQuality(), onError);
+			if (resumeSeconds > 0) hlsHandle.seek(resumeSeconds);
+			el.play().catch(() => {});
+		} catch (err) {
+			onError(err);
+		}
+	}
+
 	/**
 	 * Starts playback from scratch on whatever stream `meta` describes. Also
 	 * used for quality switches, which are a fresh setup on a different stream.
@@ -142,16 +180,20 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 	async function setupPlayback(meta: QualityMeta, resumeSeconds: number) {
 		const el = getVideo();
 		if (!el) return;
+		// The playlist already lists every tier, a switch stays on the same player.
+		if (isHls(meta) && hlsHandle) return hlsHandle.setMaxHeight(getQuality());
 		fallenBack = false;
 		lastFallbackReason = null;
-		destroyDualTrack();
+		destroyShaka();
 		buffering = true;
 		seekOffset = 0;
 		// Show the resume point now, the old stream's time is stale.
 		currentTime = resumeSeconds;
 		seekTarget = null;
 
-		if (meta.direct) {
+		if (isHls(meta)) {
+			await setupHlsPlayback(el, resumeSeconds);
+		} else if (meta.direct) {
 			setupDirectPlayback(el, resumeSeconds);
 		} else if (isMseCandidate(meta)) {
 			await setupMsePlayback(el, meta, resumeSeconds);
@@ -167,6 +209,7 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 		const seekActions: Record<PlaybackMode, () => void> = {
 			direct: () => (el.currentTime = clamped),
 			mse: () => dualTrackHandle?.seek(clamped),
+			hls: () => hlsHandle?.seek(clamped),
 			ffmpeg: () => reloadFfmpegStream(el, clamped)
 		};
 		seekActions[mode]();
@@ -192,9 +235,9 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 
 	// Direct and MSE failures fire this too, next to our own handling.
 	// Showing the error screen would destroy the <video> mid fallback.
-	// Only give up on ffmpeg, where nothing is left to fall back to.
+	// Only give up on ffmpeg and HLS, where nothing is left to fall back to.
 	function handleMediaError() {
-		if (mode === 'ffmpeg') {
+		if (mode === 'ffmpeg' || mode === 'hls') {
 			failed = true;
 			return;
 		}
@@ -231,12 +274,16 @@ export function createPlayerEngine({ urls, duration, getVideo, getQuality }: Dep
 		get failed() {
 			return failed;
 		},
+		get liveLatency() {
+			return liveLatency;
+		},
+		goToLive: () => hlsHandle?.goToLive(),
 		videoEvents,
 		setupPlayback,
 		seek,
 		seekBy: (deltaSeconds: number) => seek(position + deltaSeconds),
 		togglePlayPause,
-		/** Shaka's running stats, only available while playing through MSE. */
-		getShakaStats: () => (mode === 'mse' ? (dualTrackHandle?.getStats() ?? null) : null)
+		/** Shaka's running stats, only available while playing through MSE or HLS. */
+		getShakaStats: () => (dualTrackHandle ?? hlsHandle)?.getStats() ?? null
 	};
 }

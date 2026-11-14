@@ -182,7 +182,7 @@
 		duration: 0,
 		quality: 0,
 		qualityOptions: [] as number[],
-		qualityModes: {} as Record<string, 'direct' | 'mse' | 'ffmpeg'>,
+		qualityModes: {} as Record<string, 'direct' | 'mse' | 'ffmpeg' | 'hls'>,
 		subtitleTracks: [] as {
 			language: string;
 			label: string | null;
@@ -191,6 +191,8 @@
 		subtitleLanguage: null as string | null,
 		diagnosticsOpen: false,
 		volume: 0,
+		live: null as { viewers: number | null; latency: number | null } | null,
+		chat: { available: false, open: false },
 		controls: {
 			seek: true,
 			seekButtons: true,
@@ -234,7 +236,9 @@
 			subtitleLanguage: data.piviPlayerSubtitleLanguage || null,
 			diagnosticsOpen: data.piviPlayerDiagnosticsOpen === 'true',
 			volume: numberAttr(data.piviPlayerVolume),
-			controls: jsonAttr(data.piviPlayerControls, NO_PLAYER_PROGRESS.controls)
+			controls: jsonAttr(data.piviPlayerControls, NO_PLAYER_PROGRESS.controls),
+			live: jsonAttr(data.piviPlayerLive, NO_PLAYER_PROGRESS.live),
+			chat: jsonAttr(data.piviPlayerChat, NO_PLAYER_PROGRESS.chat)
 		};
 	}
 

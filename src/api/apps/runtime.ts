@@ -30,7 +30,13 @@ import type { DashboardContribution } from '#sdk/dashboard';
 import type { AppScreen, UiEvent } from '#sdk/ui';
 import {
 	activateNotification,
+	chatMessagesNotification,
+	chatMessagesParamsSchema,
+	closeChatNotification,
 	localeNotification,
+	openChatNotification,
+	resolveLiveStatusRequest,
+	resolveLiveStatusResultSchema,
 	openOnPhoneNotification,
 	openOnPhoneParamsSchema,
 	publishDashboardNotification,
@@ -48,12 +54,15 @@ import {
 	shutdownNotification,
 	SUPPORTED_PROTOCOLS,
 	uiEventNotification,
+	type ChatBatch,
+	type ChatMessage,
 	type ResolvedStream,
 	type SkipSegment
 } from '#sdk/protocol';
 import { dashboardContributionSchema } from '#sdk/dashboard';
 import { appScreenSchema } from '#sdk/ui';
-import { sanitizeDashboard, sanitizeScreen } from './sanitize';
+import { sanitizeChat, sanitizeDashboard, sanitizeScreen } from './sanitize';
+import { applyChatBatch } from '#lib/chat/removals';
 import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';
 import type { RunningSandbox, SandboxHandlers } from './sandbox/types';
 
@@ -73,6 +82,14 @@ export type AppInstance = {
 	resolveStream(sessionId: string, maxHeight?: number): Promise<ResolvedStream>;
 	resolveSkipSegments(sessionId: string): Promise<SkipSegment[]>;
 	resolveNext(sessionId: string, context: string): Promise<string | undefined>;
+	// Undefined fields when the app has nothing to say (or fails to answer).
+	resolveLiveStatus(sessionId: string): Promise<{ viewers?: number }>;
+	// Starts showing a session's chat, returns the function that stops it.
+	// The app is only told on the first open and the last close.
+	openChat(sessionId: string): () => void;
+	// What arrived since the chat was opened, capped, so a player that joins
+	// late isn't empty.
+	chatBacklog(sessionId: string): ChatMessage[];
 	// Whether the host may fetch (or show) a URL this app supplied: the
 	// app has to have been granted network, and the URL has to be on one of
 	// the domains its manifest declared. Anything else is the app trying to
@@ -123,6 +140,8 @@ export type LoadAppOptions = {
 	onForcedStop?: (reason: ForcedStopReason) => void;
 	// Already checked to be https and throttled.
 	onOpenOnPhone?: (url: string) => void;
+	// New messages of an open chat, already validated and sanitized.
+	onChat?: (sessionId: string, batch: ChatBatch) => void;
 	// What the CPU watchdog measures against.
 	cpus?: number;
 	// Overridable so tests don't have to wait out real minutes.
@@ -157,6 +176,8 @@ const MAX_SCREEN_BYTES = 8 << 20;
 const MAX_MESSAGE_BYTES = 4 << 20;
 // Every link pops up a prompt on the phone, so an app can't keep spamming it.
 const OPEN_ON_PHONE_INTERVAL_MS = 5_000;
+// Chat lines kept per open chat, about a screen and a half.
+const CHAT_BACKLOG = 150;
 
 function hasFeature(manifest: AppManifest, feature: Feature): boolean {
 	return manifest.features.includes(feature);
@@ -232,6 +253,8 @@ function createStderrLogger(appId: string) {
 // Latest accepted publish per kind, served to the UI without asking the app.
 type PublishedState = {
 	dashboard?: DashboardContribution;
+	// Open chats by session id: how many players show it, and the latest lines.
+	chats: Map<string, { refs: number; messages: ChatMessage[] }>;
 	screens: Map<string, AppScreen>;
 	// Serialized size per screen id, for MAX_SCREEN_BYTES.
 	screenBytes: Map<string, number>;
@@ -294,6 +317,20 @@ function wireNotifications(
 		onUpdate?.('screen', screen.screenId);
 	});
 
+	connection.onNotification(chatMessagesNotification, (raw) => {
+		if (!hasFeature(manifest, 'chat')) return drop('chat messages');
+		const parsed = chatMessagesParamsSchema.safeParse(raw);
+		if (!parsed.success) return;
+		const chat = published.chats.get(parsed.data.sessionId);
+		if (!chat) return;
+		const batch: ChatBatch = {
+			messages: sanitizeChat(parsed.data.messages.slice(-CHAT_BACKLOG), allows),
+			removed: parsed.data.removed
+		};
+		chat.messages = applyChatBatch(chat.messages, batch, CHAT_BACKLOG);
+		options.onChat?.(parsed.data.sessionId, batch);
+	});
+
 	let lastOpenOnPhone = -Infinity;
 	connection.onNotification(openOnPhoneNotification, (raw) => {
 		if (!hasFeature(manifest, 'screen')) return drop('a link for the phone');
@@ -322,7 +359,11 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	if (!SUPPORTED_PROTOCOLS.includes(manifest.protocol)) {
 		throw new Error(`${manifest.id} speaks app protocol ${manifest.protocol}; update it`);
 	}
-	const published: PublishedState = { screens: new Map(), screenBytes: new Map() };
+	const published: PublishedState = {
+		screens: new Map(),
+		screenBytes: new Map(),
+		chats: new Map()
+	};
 
 	const reader = new PushMessageReader();
 
@@ -544,6 +585,34 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 				return undefined;
 			}
 		},
+
+		async resolveLiveStatus(sessionId) {
+			if (!hasFeature(manifest, 'playback')) return {};
+			try {
+				const result = await request(resolveLiveStatusRequest, { sessionId }, watchdog.requestMs);
+				return resolveLiveStatusResultSchema.parse(result);
+			} catch {
+				// Apps without live streams answer with an error, which is just nothing to show.
+				return {};
+			}
+		},
+
+		openChat(sessionId) {
+			if (!hasFeature(manifest, 'chat')) return () => {};
+			const chat = published.chats.get(sessionId) ?? { refs: 0, messages: [] };
+			published.chats.set(sessionId, chat);
+			if (chat.refs++ === 0) connection.sendNotification(openChatNotification, { sessionId });
+			let closed = false;
+			return () => {
+				if (closed) return;
+				closed = true;
+				if (--chat.refs > 0) return;
+				published.chats.delete(sessionId);
+				if (!disposing) connection.sendNotification(closeChatNotification, { sessionId });
+			};
+		},
+
+		chatBacklog: (sessionId) => published.chats.get(sessionId)?.messages ?? [],
 
 		async dispose() {
 			if (disposing) return;

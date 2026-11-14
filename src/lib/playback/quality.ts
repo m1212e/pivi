@@ -27,20 +27,26 @@ export function screenStartHeight(): number {
 
 /** Containers the stream resolver reports, needed to build the MSE MIME types. */
 export type Container = 'mp4' | 'webm';
+/** The video side can also be an HLS playlist, which carries its own audio. */
+export type VideoContainer = Container | 'hls';
 /** How a tier plays, shown as an icon in the quality picker and on the phone. */
-export type QualityMode = 'direct' | 'mse' | 'ffmpeg';
+export type QualityMode = 'direct' | 'mse' | 'ffmpeg' | 'hls';
 
 /** Codec info the server resolves per tier, decides which playback path a tier can take. */
 export type QualityMeta = {
 	direct: boolean;
 	vcodec: string;
 	acodec: string | null;
-	videoContainer: Container;
+	videoContainer: VideoContainer;
 	audioContainer: Container | null;
 };
 
 /** Narrowed by isMseCandidate, so the MSE setup can rely on a separate audio track. */
-export type MseQualityMeta = QualityMeta & { acodec: string; audioContainer: Container };
+export type MseQualityMeta = QualityMeta & {
+	acodec: string;
+	videoContainer: Container;
+	audioContainer: Container;
+};
 
 /** Highest first without duplicates, so tiers always read the same however the app ordered them. */
 export function normalizeQualities(raw: readonly number[] | undefined): QualityOption[] {
@@ -64,7 +70,7 @@ export function startQuality(
 	return ordered.find((option) => option <= preferredHeight) ?? ordered.at(-1);
 }
 
-/** Converts the play page's GraphQL result. The server only reports mp4 or webm, GraphQL just has no literal union type. */
+/** Converts the play page's GraphQL result. The server only reports known containers, GraphQL just has no literal union type. */
 export function toQualityMeta(result: {
 	direct: boolean;
 	vcodec: string;
@@ -76,18 +82,24 @@ export function toQualityMeta(result: {
 		direct: result.direct,
 		vcodec: result.vcodec,
 		acodec: result.acodec,
-		videoContainer: result.videoContainer as Container,
+		videoContainer: result.videoContainer as VideoContainer,
 		audioContainer: result.audioContainer as Container | null
 	};
 }
 
 /** MSE needs a proxied stream with a separate audio track to pair with. Gates both the engine's MSE path and the per tier probe. */
 export function isMseCandidate(meta: QualityMeta): meta is MseQualityMeta {
-	return !meta.direct && !!meta.acodec && !!meta.audioContainer;
+	return !meta.direct && !isHls(meta) && !!meta.acodec && !!meta.audioContainer;
+}
+
+/** An HLS playlist, played through Shaka over the stream-hls proxy whatever else the meta says. */
+export function isHls(meta: QualityMeta): boolean {
+	return meta.videoContainer === 'hls';
 }
 
 /** Mirrors the engine's setupPlayback choice, so the icons can predict it without playing. MSE can still fail at runtime. */
 export function strategyFor(meta: QualityMeta): QualityMode {
+	if (isHls(meta)) return 'hls';
 	if (meta.direct) return 'direct';
 	return isMseCandidate(meta) ? 'mse' : 'ffmpeg';
 }

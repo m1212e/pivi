@@ -25,6 +25,12 @@ export function createSessionUrls(appId: string, sessionId: string) {
 		},
 		trackIndex: (track: TrackKind, container: Container, quality: QualityOption | undefined) =>
 			`${trackBase}/${track}/index?${new URLSearchParams({ container, ...qualityParam(quality) })}`,
+		// The quality only keeps the server on the same resolved stream as the
+		// playback info, the player picks among the playlist's variants itself.
+		hls: (quality: QualityOption | undefined) => {
+			const query = new URLSearchParams(qualityParam(quality)).toString();
+			return `/api/stream-hls/${app}/${session}/index.m3u8${query && `?${query}`}`;
+		},
 		subtitle: (language: string) =>
 			`/api/stream-subtitle/${app}/${session}/${encodeURIComponent(language)}`
 	};

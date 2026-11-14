@@ -36,6 +36,10 @@ export type AppCard = {
 	title: String;
 };
 
+export type AppChatBatch = {
+	json: String;
+};
+
 export type AppDashboard = {
 	appId: String;
 	appName: String;
@@ -73,6 +77,10 @@ export type AppInstallPreview = {
 	version: String;
 };
 
+export type AppLiveStatus = {
+	viewers: Int | null;
+};
+
 export type AppManagement = {
 	apps: () => ManagedApp[];
 	busy: String | null;
@@ -88,6 +96,7 @@ export type AppNextSession = {
 export type AppPlaybackInfo = {
 	acodec: String | null;
 	audioContainer: String | null;
+	chat: Boolean;
 	controlPlayPause: Boolean;
 	controlQuality: Boolean;
 	controlSeek: Boolean;
@@ -96,6 +105,7 @@ export type AppPlaybackInfo = {
 	controlVolume: Boolean;
 	direct: Boolean;
 	duration: Float;
+	live: Boolean;
 	qualities: Int[];
 	subtitleTracks: () => AppSubtitleTrack[];
 	title: String;
@@ -389,6 +399,7 @@ export type PhoneNumber = string;
 
 export type Query = {
 	appDashboards: () => AppDashboard[];
+	appLiveStatus: (p: { appId: String; sessionId: String }) => AppLiveStatus;
 	appManagement: () => AppManagement;
 	appNextSession: (p: { appId: String; context: String; sessionId: String }) => AppNextSession;
 	appPlaybackInfo: (p: {
@@ -442,6 +453,7 @@ export type StringWhereInputArgument = {
 };
 
 export type Subscription = {
+	appChat: (p: { appId: String; sessionId: String }) => AppChatBatch;
 	appDashboards: () => AppDashboard[];
 	appForcedStop: () => AppForcedStop;
 	appManagement: () => AppManagement;
@@ -537,6 +549,7 @@ export const client = {
 	liveQuery: makeLiveQuery<Query, false>({
 		urqlClient,
 		availableSubscriptions: new Set([
+			'appChat',
 			'appDashboards',
 			'appForcedStop',
 			'appManagement',

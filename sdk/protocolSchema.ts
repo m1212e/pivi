@@ -7,6 +7,14 @@ import { appScreenSchema, uiEventSchema } from './ui';
 import {
 	activateNotification,
 	activateParamsSchema,
+	chatMessagesNotification,
+	chatMessagesParamsSchema,
+	chatParamsSchema,
+	closeChatNotification,
+	openChatNotification,
+	resolveLiveStatusParamsSchema,
+	resolveLiveStatusRequest,
+	resolveLiveStatusResultSchema,
 	localeNotification,
 	openOnPhoneNotification,
 	openOnPhoneParamsSchema,
@@ -150,6 +158,42 @@ const METHODS: MethodSpec[] = [
 			'The session to play after this one ended, from the context its action carried. Optional, answer with no sessionId when there is none.',
 		params: resolveNextParamsSchema,
 		result: resolveNextResultSchema
+	},
+	{
+		method: resolveLiveStatusRequest.method,
+		from: 'host',
+		kind: 'request',
+		feature: 'playback',
+		description:
+			'Current figures for a live session, polled while its player is open. Answer with an empty object when there is nothing to report.',
+		params: resolveLiveStatusParamsSchema,
+		result: resolveLiveStatusResultSchema
+	},
+	{
+		method: openChatNotification.method,
+		from: 'host',
+		kind: 'notification',
+		feature: 'chat',
+		description:
+			'A player started showing the chat of a session whose stream had `chat: true`. Start sending app/chatMessages for it.',
+		params: chatParamsSchema
+	},
+	{
+		method: closeChatNotification.method,
+		from: 'host',
+		kind: 'notification',
+		feature: 'chat',
+		description: 'Nobody shows this session’s chat anymore. Stop sending messages for it.',
+		params: chatParamsSchema
+	},
+	{
+		method: chatMessagesNotification.method,
+		from: 'app',
+		kind: 'notification',
+		feature: 'chat',
+		description:
+			'New messages of an open chat, oldest first, batched a few times a second at most, plus what moderators removed since the last batch (applied to earlier lines; leave affected lines out of the batch itself). Ignored for chats that are not open.',
+		params: chatMessagesParamsSchema
 	}
 ];
 

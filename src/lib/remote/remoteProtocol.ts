@@ -73,7 +73,7 @@ export const selectAppNotification = new NotificationType<z.infer<typeof selectA
 // The phone's player tab buttons. Sent as an action, not a click target,
 // because some (the info toggle) have no single button on the TV to click.
 export const playerActionParamsSchema = z.object({
-	action: z.enum(['playPause', 'seekBack', 'seekForward', 'toggleInfo'])
+	action: z.enum(['playPause', 'seekBack', 'seekForward', 'toggleInfo', 'toggleChat', 'goToLive'])
 });
 export const playerActionNotification = new NotificationType<
 	z.infer<typeof playerActionParamsSchema>
@@ -178,7 +178,7 @@ export const stateParamsSchema = z.object({
 	qualityOptions: z.array(z.number()),
 	// Per-tier playback mode for the same icons as the TV's quality list,
 	// keyed by quality as a string (JSON keys are). Missing means not known yet.
-	qualityModes: z.record(z.string(), z.enum(['direct', 'mse', 'ffmpeg'])),
+	qualityModes: z.record(z.string(), z.enum(['direct', 'mse', 'ffmpeg', 'hls'])),
 	// Caption tracks and the active one (`null` is off). Empty hides the
 	// phone's picker, which is the usual case.
 	subtitleTracks: z.array(subtitleTrackSchema),
@@ -189,6 +189,17 @@ export const stateParamsSchema = z.object({
 	volume: z.number(),
 	// Which controls the app allows for this stream (a live one has no seeking).
 	// The phone hides the rest, the TV ignores their commands anyway.
+	// Set while a live stream plays, for the phone's live badge: the viewer
+	// count from the app and how far behind the edge the TV is, in seconds.
+	live: z
+		.object({ viewers: z.number().nullable(), latency: z.number().nullable() })
+		.nullable()
+		.default(null),
+	// Whether the stream has a chat and the TV shows it, for the phone's toggle.
+	chat: z.object({ available: z.boolean(), open: z.boolean() }).default({
+		available: false,
+		open: false
+	}),
 	controls: playerControlsStateSchema.default({
 		seek: true,
 		seekButtons: true,

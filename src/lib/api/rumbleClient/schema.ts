@@ -135,6 +135,21 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'AppChatBatch',
+				fields: [
+					{
+						name: 'json',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'AppDashboard',
 				fields: [
 					{
@@ -369,6 +384,18 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'AppLiveStatus',
+				fields: [
+					{
+						name: 'viewers',
+						type: { kind: 'SCALAR', name: 'Int', ofType: null, __proto__: null },
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'AppManagement',
 				fields: [
 					{
@@ -425,6 +452,24 @@ export const schema = {
 				name: 'AppPlaybackInfo',
 				fields: [
 					{
+						name: 'acodec',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'audioContainer',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'chat',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
 						name: 'controlPlayPause',
 						type: {
 							kind: 'NON_NULL',
@@ -473,16 +518,6 @@ export const schema = {
 						args: []
 					},
 					{
-						name: 'acodec',
-						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
-						args: []
-					},
-					{
-						name: 'audioContainer',
-						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
-						args: []
-					},
-					{
 						name: 'direct',
 						type: {
 							kind: 'NON_NULL',
@@ -495,6 +530,14 @@ export const schema = {
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'Float', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'live',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
 						},
 						args: []
 					},
@@ -2531,6 +2574,29 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'appLiveStatus',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'AppLiveStatus', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'appId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'sessionId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
 						name: 'appManagement',
 						type: {
 							kind: 'NON_NULL',
@@ -2942,6 +3008,29 @@ export const schema = {
 				kind: 'OBJECT',
 				name: 'Subscription',
 				fields: [
+					{
+						name: 'appChat',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'AppChatBatch', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'appId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							},
+							{
+								name: 'sessionId',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
 					{
 						name: 'appDashboards',
 						type: {

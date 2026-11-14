@@ -44,6 +44,12 @@ describe('quality strategy', () => {
 		expect(strategyFor(meta({ audioContainer: null }))).toBe('ffmpeg');
 	});
 
+	it('plays HLS through its own path, even though it has no separate audio', () => {
+		const hls = meta({ direct: true, videoContainer: 'hls', audioContainer: null });
+		expect(strategyFor(hls)).toBe('hls');
+		expect(qualityModeFor(hls, undefined)).toBe('hls');
+	});
+
 	it('keeps an MSE candidate unknown until its index was probed', () => {
 		expect(qualityModeFor(undefined, undefined)).toBeUndefined();
 		expect(qualityModeFor(meta(), undefined)).toBeUndefined();

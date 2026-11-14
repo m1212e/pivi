@@ -5,6 +5,7 @@
 // handles a card with no image). Links sent to the phone are held to https,
 // so an app can't hand the phone a javascript:, intent: or file: URL.
 import type { AppAction, DashboardContribution } from '#sdk/dashboard';
+import type { ChatMessage } from '#sdk/protocol';
 import type { AppScreen, UiNode } from '#sdk/ui';
 import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';
 
@@ -130,4 +131,17 @@ export function sanitizeScreen(screen: AppScreen, allows: UrlPolicy): AppScreen 
 	if (countNodes(screen.root) > MAX_SCREEN_NODES) return undefined;
 	const root = sanitizeNode(screen.root, allows);
 	return root && { screenId: screen.screenId, root };
+}
+
+/**
+ * Applied by runtime.ts to every chat batch. An emote whose image the host
+ * wouldn't let the app reach reads as its name instead.
+ */
+export function sanitizeChat(messages: ChatMessage[], allows: UrlPolicy): ChatMessage[] {
+	return messages.map((message) => ({
+		...message,
+		parts: message.parts.map((part) =>
+			part.type === 'emote' && !allows(part.url) ? { type: 'text', text: part.name } : part
+		)
+	}));
 }

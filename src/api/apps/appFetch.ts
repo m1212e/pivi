@@ -32,11 +32,25 @@ export async function fetchAppUrl(
 	url: string,
 	init: AppFetchInit = {}
 ): Promise<Response> {
+	return (await fetchAppUrlFollowed(app, url, init)).response;
+}
+
+/**
+ * fetchAppUrl that also says where the redirects ended, for content whose
+ * relative links resolve against its own location (HLS playlists).
+ */
+export async function fetchAppUrlFollowed(
+	app: AppInstance,
+	url: string,
+	init: AppFetchInit = {}
+): Promise<{ response: Response; url: string }> {
 	let current = url;
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
 		const response = await fetchPublic(current, init);
 		const location = response.headers.get('location');
-		if (response.status < 300 || response.status >= 400 || !location) return response;
+		if (response.status < 300 || response.status >= 400 || !location) {
+			return { response, url: current };
+		}
 
 		await response.body?.cancel();
 		const next = new URL(location, current).toString();

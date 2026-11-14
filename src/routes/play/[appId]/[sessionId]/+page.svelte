@@ -12,8 +12,10 @@
 	import { createPlayerEngine } from '#lib/playback/engine.svelte';
 	import {
 		clampVolume,
+		loadChatOpen,
 		loadSubtitleLanguage,
 		loadVolume,
+		saveChatOpen,
 		saveSubtitleLanguage,
 		saveVolume
 	} from '#lib/playback/preferences';
@@ -36,6 +38,7 @@
 	import { createSessionUrls, nextSessionHref } from '#lib/playback/urls';
 	import { browserStorage } from '#lib/storage';
 	import BottomOverlay from './BottomOverlay.svelte';
+	import ChatPanel from './ChatPanel.svelte';
 	import DiagnosticsPanel from './DiagnosticsPanel.svelte';
 	import ErrorScreen from './ErrorScreen.svelte';
 	import SkipSegmentBanner from './SkipSegmentBanner.svelte';
@@ -66,6 +69,8 @@
 		__args: { appId, sessionId, maxHeight: preferredHeight },
 		title: true,
 		duration: true,
+		live: true,
+		chat: true,
 		qualities: true,
 		controlSeek: true,
 		controlSeekButtons: true,
@@ -78,6 +83,8 @@
 	});
 	const duration = info?.duration ?? 0;
 	const title = info?.title ?? '';
+	const live = info?.live ?? false;
+	const chatAvailable = info?.chat ?? false;
 	// Empty for an app without a quality choice, then nothing is capped or offered.
 	// What the app allows, a control it doesn't mention stays on.
 	const allowed = {
@@ -98,6 +105,10 @@
 	let playerRoot = $state<HTMLElement>();
 	let quality = $state<QualityOption | undefined>(initialQuality);
 	let volume = $state(loadVolume(storage));
+	let chatOpen = $state(loadChatOpen(storage));
+	const showChat = $derived(chatAvailable && chatOpen);
+	// From the app, refreshed while a live stream plays.
+	let viewers = $state<number | null>(null);
 	// null means captions off.
 	let subtitleLanguage = $state<string | null>(loadSubtitleLanguage(storage));
 
@@ -173,6 +184,31 @@
 		if (meta && quality === target) engine.setupPlayback(meta, resumeAt);
 	}
 
+	function toggleChat() {
+		chatOpen = !chatOpen;
+		saveChatOpen(storage, chatOpen);
+	}
+
+	// Viewer counts move slowly, once a minute is plenty.
+	const LIVE_STATUS_INTERVAL_MS = 60_000;
+	async function refreshLiveStatus() {
+		try {
+			const status = await client.query.appLiveStatus({
+				__args: { appId, sessionId },
+				viewers: true
+			});
+			viewers = status?.viewers ?? null;
+		} catch {
+			// Keeps the last count, the badge just shows it a while longer.
+		}
+	}
+	$effect(() => {
+		if (!live) return;
+		void refreshLiveStatus();
+		const timer = setInterval(refreshLiveStatus, LIVE_STATUS_INTERVAL_MS);
+		return () => clearInterval(timer);
+	});
+
 	function selectSubtitle(language: string | null) {
 		subtitleLanguage = language;
 		saveSubtitleLanguage(storage, language);
@@ -186,7 +222,9 @@
 					playPause: () => allowed.playPause && engine.togglePlayPause(),
 					seekBack: () => allowed.seekButtons && engine.seekBy(-SEEK_STEP_SECONDS),
 					seekForward: () => allowed.seekButtons && engine.seekBy(SEEK_STEP_SECONDS),
-					toggleInfo: diagnostics.toggle
+					toggleInfo: diagnostics.toggle,
+					toggleChat: () => chatAvailable && toggleChat(),
+					goToLive: () => live && engine.goToLive()
 				})[action](),
 			onSeek: (seconds) => allowed.seek && engine.seek(seconds),
 			onQuality: selectQuality,
@@ -202,6 +240,8 @@
 		void quality;
 		void subtitleLanguage;
 		void diagnostics.open;
+		void showChat;
+		void viewers;
 		// Position too. RemoteBridge's timeupdate push runs before this page renders
 		// the new value, so the phone's progress bar would trail by a tick.
 		void engine.position;
@@ -219,7 +259,9 @@
 			subtitleTracks,
 			diagnosticsOpen: diagnostics.open,
 			volume,
-			controls: allowed
+			controls: allowed,
+			live: live ? { viewers, latency: engine.liveLatency } : null,
+			chat: { available: chatAvailable, open: showChat }
 		})
 	);
 
@@ -285,85 +327,99 @@
 <div
 	bind:this={playerRoot}
 	tabindex="-1"
-	class="fixed inset-0 bg-black outline-none"
+	class="fixed inset-0 flex bg-black outline-none"
 	style:view-transition-name="player-video"
 	{...bridgeAttributes}
 >
-	{#if engine.failed}
-		<ErrorScreen message={m.stream_stopped()} onBack={goBack} />
-	{:else}
-		<!-- No src here, setupPlayback sets it since the mode isn't known until it tries. -->
-		<video
-			bind:this={videoEl}
-			class="size-full object-contain"
-			{...engine.videoEvents}
-			onvolumechange={() => (volume = videoEl?.volume ?? 1)}
-			onended={onVideoEnded}
-		>
-			<!-- Independent of mode. Shaka never touches <track> children, and the effect
+	<!-- The video and its overlays share what chat leaves of the width. -->
+	<div class="relative h-full min-w-0 flex-1">
+		{#if engine.failed}
+			<ErrorScreen message={m.stream_stopped()} onBack={goBack} />
+		{:else}
+			<!-- No src here, setupPlayback sets it since the mode isn't known until it tries. -->
+			<video
+				bind:this={videoEl}
+				class="size-full object-contain"
+				{...engine.videoEvents}
+				onvolumechange={() => (volume = videoEl?.volume ?? 1)}
+				onended={onVideoEnded}
+			>
+				<!-- Independent of mode. Shaka never touches <track> children, and the effect
 			     above turns on the selected language. -->
-			{#each subtitleTracks as track (track.language)}
-				<track
-					kind="subtitles"
-					srclang={track.language}
-					label={track.label ?? track.language}
-					src={urls.subtitle(track.language)}
+				{#each subtitleTracks as track (track.language)}
+					<track
+						kind="subtitles"
+						srclang={track.language}
+						label={track.label ?? track.language}
+						src={urls.subtitle(track.language)}
+					/>
+				{/each}
+			</video>
+
+			{#if engine.buffering}
+				<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+					<LoaderCircle class="size-12 animate-spin text-white/80" />
+				</div>
+			{/if}
+
+			<TopOverlay
+				{title}
+				visible={controls.visible}
+				locked={controls.locked}
+				diagnosticsOpen={diagnostics.open}
+				onBack={goBack}
+				onToggleDiagnostics={diagnostics.toggle}
+			>
+				<DiagnosticsPanel
+					mode={engine.mode}
+					{quality}
+					meta={catalog.metaFor(quality)}
+					snapshot={diagnostics.snapshot}
+					position={engine.position}
+					{duration}
+					buffering={engine.buffering}
+					lastFallbackReason={engine.lastFallbackReason}
 				/>
-			{/each}
-		</video>
+			</TopOverlay>
 
-		{#if engine.buffering}
-			<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-				<LoaderCircle class="size-12 animate-spin text-white/80" />
-			</div>
-		{/if}
-
-		<TopOverlay
-			{title}
-			visible={controls.visible}
-			locked={controls.locked}
-			diagnosticsOpen={diagnostics.open}
-			onBack={goBack}
-			onToggleDiagnostics={diagnostics.toggle}
-		>
-			<DiagnosticsPanel
-				mode={engine.mode}
-				{quality}
-				meta={catalog.metaFor(quality)}
-				snapshot={diagnostics.snapshot}
+			<BottomOverlay
+				visible={controls.visible}
+				locked={controls.locked}
+				bind:volume
+				bind:playPauseButton
+				playing={engine.playing}
 				position={engine.position}
 				{duration}
-				buffering={engine.buffering}
-				lastFallbackReason={engine.lastFallbackReason}
+				{live}
+				{viewers}
+				liveLatency={engine.liveLatency}
+				onGoLive={engine.goToLive}
+				{chatAvailable}
+				chatOpen={showChat}
+				onToggleChat={toggleChat}
+				{subtitleTracks}
+				{subtitleLanguage}
+				{qualities}
+				{quality}
+				controls={allowed}
+				modeFor={catalog.modeFor}
+				onTogglePlay={engine.togglePlayPause}
+				onSeekBy={engine.seekBy}
+				onSeek={engine.seek}
+				onSubtitle={selectSubtitle}
+				onQuality={selectQuality}
 			/>
-		</TopOverlay>
 
-		<BottomOverlay
-			visible={controls.visible}
-			locked={controls.locked}
-			bind:volume
-			bind:playPauseButton
-			playing={engine.playing}
-			position={engine.position}
-			{duration}
-			{subtitleTracks}
-			{subtitleLanguage}
-			{qualities}
-			{quality}
-			controls={allowed}
-			modeFor={catalog.modeFor}
-			onTogglePlay={engine.togglePlayPause}
-			onSeekBy={engine.seekBy}
-			onSeek={engine.seek}
-			onSubtitle={selectSubtitle}
-			onQuality={selectQuality}
-		/>
+			<SkipSegmentBanner
+				segment={skip.pending}
+				skipActive={skip.active}
+				onToggle={skip.toggleActive}
+			/>
+		{/if}
+	</div>
 
-		<SkipSegmentBanner
-			segment={skip.pending}
-			skipActive={skip.active}
-			onToggle={skip.toggleActive}
-		/>
+	{#if showChat}
+		<ChatPanel {appId} {sessionId} />
 	{/if}
 </div>
 

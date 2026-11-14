@@ -3,9 +3,12 @@
 // for MSE (#lib/mse). Raw stream and subtitle URLs never leave the server,
 // the routes under routes/api/stream* proxy them.
 import { schemaBuilder } from '../rumble';
-import { getApp } from '../apps/manager';
+import { getApp, holdApp } from '../apps/manager';
 import { resolveStreamCached } from '../apps/streamCache';
 import { resolveSkipSegmentsCached } from '../apps/skipSegmentsCache';
+import { chatEventKey, chatPubSub } from '../apps/events';
+import { releaseWhenDone } from '../apps/usage';
+import type { ChatBatch, ChatMessage } from '#sdk/protocol';
 
 // Lets the player offer a subtitle menu. Without `url`, the player fetches a
 // track through routes/api/stream-subtitle by its language.
@@ -27,11 +30,14 @@ function toGraphqlSubtitleTracks(
 
 type ResolvedStream = Awaited<ReturnType<typeof resolveStreamCached>>;
 
-function toGraphqlPlaybackInfo(stream: ResolvedStream) {
+function toGraphqlPlaybackInfo(stream: ResolvedStream, chatFeature: boolean) {
 	const { title, duration, audioUrl, vcodec, acodec, videoContainer, audioContainer } = stream;
 	return {
 		title,
 		duration,
+		live: stream.live ?? false,
+		// Only when the app can deliver it, whatever the stream claims.
+		chat: chatFeature && (stream.chat ?? false),
 		direct: !audioUrl,
 		vcodec,
 		acodec: acodec ?? null,
@@ -70,6 +76,8 @@ const AppNextSessionRef = schemaBuilder
 type AppPlaybackInfo = {
 	title: string;
 	duration: number;
+	live: boolean;
+	chat: boolean;
 	direct: boolean;
 	vcodec: string;
 	acodec: string | null;
@@ -89,6 +97,10 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 	fields: (t) => ({
 		title: t.exposeString('title'),
 		duration: t.exposeFloat('duration'),
+		// Still broadcasting: the player starts at the live edge and has no end to show.
+		live: t.exposeBoolean('live'),
+		// The player offers a chat toggle, see the appChat subscription.
+		chat: t.exposeBoolean('chat'),
 		// Mirrors the streaming proxy's fast path check (no separate audio
 		// URL) so the player can show whether it plays from the source directly.
 		direct: t.exposeBoolean('direct'),
@@ -147,7 +159,7 @@ schemaBuilder.queryFields((t) => ({
 				app,
 				args.maxHeight ?? undefined
 			);
-			return toGraphqlPlaybackInfo(stream);
+			return toGraphqlPlaybackInfo(stream, app.manifest.features.includes('chat'));
 		}
 	}),
 	appNextSession: t.field({
@@ -172,5 +184,82 @@ schemaBuilder.queryFields((t) => ({
 			const app = await getApp(args.appId);
 			return resolveSkipSegmentsCached(args.appId, args.sessionId, app);
 		}
+	})
+}));
+
+// The live badge's figures. An object so the generated client resolves it to
+// plain data, see AppNextSessionRef.
+const AppLiveStatusRef = schemaBuilder
+	.objectRef<{ viewers: number | null }>('AppLiveStatus')
+	.implement({
+		fields: (t) => ({ viewers: t.exposeInt('viewers', { nullable: true }) })
+	});
+
+schemaBuilder.queryFields((t) => ({
+	appLiveStatus: t.field({
+		type: AppLiveStatusRef,
+		args: {
+			appId: t.arg.string({ required: true }),
+			sessionId: t.arg.string({ required: true })
+		},
+		resolve: async (_root, args) => {
+			const app = await getApp(args.appId);
+			const status = await app.resolveLiveStatus(args.sessionId);
+			return { viewers: status.viewers ?? null };
+		}
+	})
+}));
+
+// One chat batch as JSON, like AppScreenData: the messages are nested data
+// (text runs and emotes) the player renders as is, so a GraphQL type per part
+// would only repeat #sdk/protocol's ChatMessage.
+const AppChatBatchRef = schemaBuilder
+	.objectRef<{ json: string }>('AppChatBatch')
+	.implement({ fields: (t) => ({ json: t.exposeString('json') }) });
+
+// The backlog first, then every new batch. Wrapped so the iterator can't
+// outlive the subscription: closing it (the player hiding chat or leaving)
+// closes the app's chat once nobody else shows it.
+function chatEvents(
+	backlog: ChatMessage[],
+	source: AsyncIterable<ChatBatch>
+): AsyncIterable<ChatBatch> {
+	const inner = source[Symbol.asyncIterator]();
+	let sentBacklog = false;
+	return {
+		[Symbol.asyncIterator]() {
+			return {
+				next() {
+					if (sentBacklog) return inner.next();
+					sentBacklog = true;
+					return Promise.resolve({ done: false, value: { messages: backlog } });
+				},
+				async return(value?: unknown) {
+					return (await inner.return?.(value)) ?? { done: true, value: undefined };
+				}
+			};
+		}
+	};
+}
+
+schemaBuilder.subscriptionFields((t) => ({
+	appChat: t.field({
+		type: AppChatBatchRef,
+		args: {
+			appId: t.arg.string({ required: true }),
+			sessionId: t.arg.string({ required: true })
+		},
+		subscribe: async (_root, args) => {
+			const app = await getApp(args.appId);
+			// Subscribed before opening, so nothing sent in between is lost.
+			const source = chatPubSub.subscribe(chatEventKey(args.appId, args.sessionId));
+			const close = app.openChat(args.sessionId);
+			const release = holdApp(args.appId);
+			return releaseWhenDone(chatEvents(app.chatBacklog(args.sessionId), source), () => {
+				close();
+				release();
+			});
+		},
+		resolve: (batch: ChatBatch) => ({ json: JSON.stringify(batch) })
 	})
 }));

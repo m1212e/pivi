@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { Captions, Gauge, Layers, Server, Sparkles, Zap } from '@lucide/svelte';
+	import {
+		Captions,
+		Gauge,
+		Layers,
+		MessageSquare,
+		Radio,
+		Server,
+		Sparkles,
+		Zap
+	} from '@lucide/svelte';
 	import * as m from '#lib/paraglide/messages';
 	import Select from '#lib/components/Select.svelte';
 	import type { QualityMode, QualityOption } from '#lib/playback/quality';
@@ -12,8 +21,11 @@
 		quality,
 		modeFor,
 		locked,
+		chatAvailable,
+		chatOpen,
 		onSubtitle,
-		onQuality
+		onQuality,
+		onToggleChat
 	}: {
 		subtitleTracks: SubtitleTrack[];
 		/** null means captions off. */
@@ -23,8 +35,12 @@
 		quality: QualityOption | undefined;
 		modeFor: (option: QualityOption) => QualityMode | undefined;
 		locked: boolean;
+		/** The stream has a chat the app can deliver. */
+		chatAvailable: boolean;
+		chatOpen: boolean;
 		onSubtitle: (language: string | null) => void;
 		onQuality: (quality: QualityOption) => void;
+		onToggleChat: () => void;
 	} = $props();
 
 	const subtitleChoices = $derived(subtitleOptions(subtitleTracks));
@@ -45,6 +61,10 @@
 	{:else if mode === 'ffmpeg'}
 		<span title={m.quality_mode_ffmpeg()}>
 			<Server class="size-4 {onLight ? 'text-amber-600' : 'text-amber-400'}" />
+		</span>
+	{:else if mode === 'hls'}
+		<span title={m.quality_mode_hls()}>
+			<Radio class="size-4 {onLight ? 'text-violet-600' : 'text-violet-400'}" />
 		</span>
 	{/if}
 {/snippet}
@@ -96,6 +116,26 @@
 				disabled={locked}
 				option={qualityOption}
 			/>
+		</div>
+	{/if}
+
+	{#if chatAvailable}
+		<div class="flex flex-col items-center gap-2">
+			<span class="flex items-center gap-1.5 text-xs font-medium text-white/50">
+				<MessageSquare class="size-4" />
+				{m.chat()}
+			</span>
+			<button
+				type="button"
+				onclick={onToggleChat}
+				disabled={locked}
+				aria-pressed={chatOpen}
+				class="rounded-full px-4 py-2 text-xs font-medium shadow-lg ring-1 transition focus:ring-2 focus:ring-white focus:outline-none {chatOpen
+					? 'bg-white text-slate-950 ring-white'
+					: 'bg-white/12 text-white/90 ring-white/20 backdrop-blur-2xl hover:bg-white/20'}"
+			>
+				{chatOpen ? m.chat_hide() : m.chat_show()}
+			</button>
 		</div>
 	{/if}
 </div>

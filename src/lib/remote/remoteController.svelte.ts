@@ -80,6 +80,8 @@ const INITIAL_TV_STATE: TvState = {
 	subtitleLanguage: null,
 	diagnosticsOpen: false,
 	volume: 0,
+	live: null,
+	chat: { available: false, open: false },
 	controls: {
 		seek: true,
 		seekButtons: true,

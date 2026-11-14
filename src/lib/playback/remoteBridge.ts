@@ -6,7 +6,8 @@ import { clampVolume, isOfferedSubtitle } from './preferences';
 import { isOfferedQuality, type QualityMode, type QualityOption } from './quality';
 
 /** Transport buttons on the phone's player tab, dispatched by RemoteBridge as `DOM_EVENTS.playerAction`. */
-export type PlayerAction = 'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo';
+export type PlayerAction =
+	'playPause' | 'seekBack' | 'seekForward' | 'toggleInfo' | 'toggleChat' | 'goToLive';
 
 /** How the play page reacts to each phone command. */
 export type RemoteHandlers = {
@@ -70,6 +71,9 @@ type BridgeState = {
 	diagnosticsOpen: boolean;
 	volume: number;
 	controls: Record<string, boolean>;
+	// Null unless the stream is live.
+	live: { viewers: number | null; latency: number | null } | null;
+	chat: { available: boolean; open: boolean };
 };
 
 /** Attributes for the player's root element, the state RemoteBridge mirrors onto the phone. */
@@ -86,6 +90,14 @@ export function playerBridgeAttributes(state: BridgeState) {
 		'data-pivi-player-subtitle-tracks': JSON.stringify(state.subtitleTracks),
 		'data-pivi-player-diagnostics-open': state.diagnosticsOpen,
 		'data-pivi-player-volume': state.volume,
-		'data-pivi-player-controls': JSON.stringify(state.controls)
+		'data-pivi-player-controls': JSON.stringify(state.controls),
+		// Rounded, so the phone isn't pushed a new state for every fraction of a second.
+		'data-pivi-player-live': JSON.stringify(
+			state.live && {
+				viewers: state.live.viewers,
+				latency: state.live.latency === null ? null : Math.round(state.live.latency)
+			}
+		),
+		'data-pivi-player-chat': JSON.stringify(state.chat)
 	};
 }

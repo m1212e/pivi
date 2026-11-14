@@ -1,5 +1,6 @@
 // Keys on the app pubsub (pubsub.ts) that aren't tied to one app.
 import { createPubSub } from 'graphql-yoga';
+import type { ChatBatch } from '#sdk/protocol';
 import type { ForcedStopReason } from './runtime';
 import { appPubSub } from './pubsub';
 
@@ -35,3 +36,13 @@ export type AppForcedStop = { appId: string; appName: string; reason: ForcedStop
  * one moment, so there is no state for a resolver to read back afterwards.
  */
 export const forcedStopPubSub = createPubSub<{ 'apps:forcedStop': [AppForcedStop] }>();
+
+/**
+ * New chat lines per open chat, keyed `${appId}:chat:${sessionId}`. Carries
+ * the batch since a subscriber only wants what's new, the backlog it starts
+ * from comes from the app instance (handlers/playback.ts).
+ */
+export const chatPubSub = createPubSub<Record<string, [ChatBatch]>>();
+
+/** The chatPubSub key for one session's chat. */
+export const chatEventKey = (appId: string, sessionId: string) => `${appId}:chat:${sessionId}`;

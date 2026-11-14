@@ -5,6 +5,7 @@ import { readItem, writeItem, type KeyValueStorage } from '../storage';
 const VOLUME_KEY = 'pivi:player:volume';
 const SKIP_ACTIVE_KEY = 'pivi:player:skipActive';
 const SUBTITLE_KEY = 'pivi:player:subtitleLanguage';
+const CHAT_OPEN_KEY = 'pivi:player:chatOpen';
 
 /** Also guards volume values arriving from the phone. */
 export function clampVolume(value: number): number {
@@ -51,4 +52,14 @@ export function isOfferedSubtitle(
 	language: string | null
 ): boolean {
 	return language === null || tracks.some((t) => t.language === language);
+}
+
+/** Whether live chat shows next to a stream that has one. On until turned off once. */
+export function loadChatOpen(storage: KeyValueStorage | null): boolean {
+	return readItem(storage, CHAT_OPEN_KEY) !== 'false';
+}
+
+/** Called by the play page when the chat toggle flips. */
+export function saveChatOpen(storage: KeyValueStorage | null, open: boolean) {
+	writeItem(storage, CHAT_OPEN_KEY, String(open));
 }

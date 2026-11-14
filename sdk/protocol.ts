@@ -53,10 +53,20 @@ export const openOnPhoneNotification = new NotificationType<
 // resolved the stream, since the codec alone doesn't tell (vp9 comes as both
 // mp4 and webm).
 const containerSchema = z.enum(['mp4', 'webm']);
+// The video side can also be an HLS playlist (`.m3u8`), the format live
+// sources serve. It carries its own audio, so it comes without `audioUrl`.
+const videoContainerSchema = z.enum(['mp4', 'webm', 'hls']);
 
 // Rides along on ResolvedStream since extractors usually report caption URLs
 // with the stream. `url` stays server side and is only fetched through the
 // host's subtitle proxy. Only vtt, so the host never converts formats.
+// A busy chat runs at dozens of lines a second. Far more than one batch can
+// show is dropped by the host anyway.
+const MAX_CHAT_BATCH = 100;
+// Text runs and emotes of one line. A 500 character Twitch message can't
+// split into more than this.
+const MAX_CHAT_PARTS = 500;
+
 const subtitleTrackSchema = z.object({
 	language: tokenSchema,
 	// Falls back to `language` on the client when absent.
@@ -101,16 +111,27 @@ export type PlayerControls = z.infer<typeof playerControlsSchema>;
  * index: an mp4 must carry a `sidx` box and a webm a `Cues` element within its
  * first 2 MiB, as DASH-ready adaptive files do. A single `videoUrl` without
  * `audioUrl` is played as is and has no such requirement.
+ *
+ * With `videoContainer: 'hls'`, `videoUrl` is an HLS master or media playlist.
+ * The host proxies the playlist and everything it references, so every
+ * variant playlist and segment must be on a declared domain too. The player
+ * picks among the playlist's variants itself: `qualities` should list their
+ * heights, and `maxHeight` can be ignored.
  */
 export const resolvedStreamSchema = z.object({
 	videoUrl: urlSchema,
 	audioUrl: urlSchema.optional(),
 	vcodec: tokenSchema,
 	acodec: tokenSchema.optional(),
-	videoContainer: containerSchema,
+	videoContainer: videoContainerSchema,
 	audioContainer: containerSchema.optional(),
 	title: textSchema,
+	// 0 for a live stream, which has no end to measure to.
 	duration: z.number(),
+	// A stream still being broadcast. The player starts at the live edge and
+	// shows a live badge instead of the progress bar. Usually sent with seek
+	// controls switched off.
+	live: z.boolean().optional(),
 	// Video heights the app can serve through `maxHeight`, so the player offers
 	// exactly these. Absent or empty for an app without a quality choice, then
 	// the player shows no picker and never sends a cap.
@@ -120,7 +141,10 @@ export const resolvedStreamSchema = z.object({
 	// uses for an app with no handler registered.
 	subtitleTracks: z.array(subtitleTrackSchema).max(MAX_LIST_ITEMS).optional(),
 	// Absent means every control is available, see playerControlsSchema.
-	controls: playerControlsSchema.optional()
+	controls: playerControlsSchema.optional(),
+	// The app can show this stream's chat (the `chat` feature, see
+	// chatMessagesNotification). The player then offers a chat toggle.
+	chat: z.boolean().optional()
 });
 export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
 
@@ -173,6 +197,77 @@ export const resolveNextRequest = new RequestType<
 	void
 >('app/resolveNext');
 
+// What a live stream's player shows next to its live badge. Asked for every
+// minute or so while a `live` stream plays. Every field is optional, an app
+// with nothing to say answers with an empty object.
+export const resolveLiveStatusParamsSchema = z.object({ sessionId: z.string() });
+export const resolveLiveStatusResultSchema = z.object({
+	viewers: z.number().int().nonnegative().optional()
+});
+/** Feeds the live badge's viewer count. Only sent for `live` streams of `playback` apps. */
+export const resolveLiveStatusRequest = new RequestType<
+	z.infer<typeof resolveLiveStatusParamsSchema>,
+	z.infer<typeof resolveLiveStatusResultSchema>,
+	void
+>('app/resolveLiveStatus');
+
+// Live chat. The host opens a session's chat while a player shows it and
+// closes it when the last one stops, and the app pushes what arrives in
+// between in batches. Rendering is the host's, so messages are plain data:
+// text runs and emote images, never markup.
+const chatPartSchema = z.discriminatedUnion('type', [
+	z.object({ type: z.literal('text'), text: textSchema }),
+	// Shown as an inline image, `name` is its alt text. Same domain rules as
+	// any other app image, an emote the app may not reach shows as its name.
+	z.object({ type: z.literal('emote'), name: tokenSchema, url: urlSchema })
+]);
+const chatMessageSchema = z.object({
+	id: idSchema,
+	author: tokenSchema,
+	// A stable id for the author, so a removal by author (a timeout, a ban)
+	// can find their lines. Without it only removals by message id apply.
+	authorId: idSchema.optional(),
+	// The author's name color, a plain hex color like the manifest's.
+	color: z
+		.string()
+		.regex(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+		.optional(),
+	parts: z.array(chatPartSchema).max(MAX_CHAT_PARTS)
+});
+/** One chat line as the player shows it. */
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
+// Moderation: lines that must no longer be shown. Applied to the lines of
+// earlier batches, the app leaves affected lines out of the batch itself.
+const chatRemovalsSchema = z.object({
+	// Single messages a moderator deleted.
+	ids: z.array(idSchema).max(MAX_CHAT_BATCH).optional(),
+	// Everything by these authors (`authorId`), for a timeout or ban.
+	authorIds: z.array(idSchema).max(MAX_CHAT_BATCH).optional(),
+	// The whole chat was cleared.
+	all: z.boolean().optional()
+});
+/** What a batch takes away from the chat, see chatMessagesParamsSchema. */
+export type ChatRemovals = z.infer<typeof chatRemovalsSchema>;
+
+export const chatMessagesParamsSchema = z.object({
+	sessionId: idSchema,
+	messages: z.array(chatMessageSchema).max(MAX_CHAT_BATCH),
+	removed: chatRemovalsSchema.optional()
+});
+/** One chat update as the host passes it on: removals first, then the new lines. */
+export type ChatBatch = Omit<z.infer<typeof chatMessagesParamsSchema>, 'sessionId'>;
+/**
+ * New chat messages for an open chat, oldest first, and what moderators took
+ * away since the last batch (`removed`, applied before the new lines are
+ * added). Batch them (a few times a second at most), the host keeps only the
+ * latest ones anyway. Only from apps declaring the `chat` feature, and
+ * ignored for chats not open.
+ */
+export const chatMessagesNotification = new NotificationType<
+	z.infer<typeof chatMessagesParamsSchema>
+>('app/chatMessages');
+
 // Outbound network access isn't an RPC: it's the `network` permission, enforced
 // by the sandbox for exactly the manifest's declared domains. Likewise persistent and disposable state are the
 // `storage` and `cache` volumes mounted into the container, and logs are just
@@ -204,6 +299,16 @@ export const localeNotification = new NotificationType<z.infer<typeof activatePa
  * to apps declaring the `dashboard` feature, at most twice a minute.
  */
 export const refreshDashboardNotification = new NotificationType0('host/refreshDashboard');
+
+export const chatParamsSchema = z.object({ sessionId: z.string() });
+/** A player started showing this session's chat: connect and start sending `app/chatMessages`. */
+export const openChatNotification = new NotificationType<z.infer<typeof chatParamsSchema>>(
+	'host/openChat'
+);
+/** Nobody shows this session's chat anymore: disconnect. */
+export const closeChatNotification = new NotificationType<z.infer<typeof chatParamsSchema>>(
+	'host/closeChat'
+);
 
 /** Gives the app a chance to exit cleanly before the host kills it. */
 export const shutdownNotification = new NotificationType0('host/shutdown');

@@ -16,7 +16,7 @@ import { buildSandboxSpec } from './sandbox/spec';
 import { microsandboxBackend } from './sandbox/microsandbox';
 import { dbAppStore, type InstalledApp } from './store';
 import { dropStreamCache } from './streamCache';
-import { ANY_DASHBOARD_EVENT, forcedStopPubSub } from './events';
+import { ANY_DASHBOARD_EVENT, chatEventKey, chatPubSub, forcedStopPubSub } from './events';
 import { appPubSub } from './pubsub';
 import { onHostLocaleChanged } from './hostLocale';
 import type { AppProcessControl } from './deps';
@@ -78,6 +78,7 @@ async function spawnApp(row: InstalledApp): Promise<AppInstance> {
 			appPubSub.publish(kind === 'screen' ? `${appId}:screen:${screenId}` : `${appId}:${kind}`);
 			if (kind === 'dashboard') appPubSub.publish(ANY_DASHBOARD_EVENT);
 		},
+		onChat: (sessionId, batch) => chatPubSub.publish(chatEventKey(appId, sessionId), batch),
 		cpus: spec.cpus,
 		onOpenOnPhone: (url) =>
 			sendToPhones({ jsonrpc: '2.0', method: openUrlNotification.method, params: { url } }),

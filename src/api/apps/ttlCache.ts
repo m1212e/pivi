@@ -8,7 +8,9 @@ export type TtlCache<V> = {
 
 /**
  * For results that are slow to produce and safe to reuse for a while. Entries
- * expire lazily on read, so there is no timer to clean up.
+ * expire lazily, so there is no timer to clean up: on read, and on every
+ * write for all expired entries, since many keys are never read again (one
+ * per quality tier of every session played) and would otherwise pile up.
  */
 export function createTtlCache<V>(ttlMs: number): TtlCache<V> {
 	const entries = new Map<string, { value: V; expiresAt: number }>();
@@ -23,7 +25,11 @@ export function createTtlCache<V>(ttlMs: number): TtlCache<V> {
 			return hit.value;
 		},
 		set(key, value) {
-			entries.set(key, { value, expiresAt: Date.now() + ttlMs });
+			const now = Date.now();
+			for (const [other, entry] of entries) {
+				if (entry.expiresAt <= now) entries.delete(other);
+			}
+			entries.set(key, { value, expiresAt: now + ttlMs });
 		},
 		deletePrefix(prefix) {
 			for (const key of entries.keys()) {
