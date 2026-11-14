@@ -19,4 +19,5 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run lint
+      - run: bun run sdk:check
       - run: bunx vitest --run --project server

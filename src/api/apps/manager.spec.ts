@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DashboardContribution } from '#sdk/dashboard';
-import type { AppManifest } from '#sdk/manifest';
+import type { DashboardContribution } from '@pivi/sdk/dashboard';
+import type { AppManifest } from '@pivi/sdk/manifest';
 import type { AppInstance } from './runtime';
 import { IDLE_STOP_MS } from './usage';
 

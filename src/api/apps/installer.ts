@@ -4,7 +4,7 @@
 // what's stored is the user's answer, not the image's request.
 import { withAppLock } from './appLock';
 import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef';
-import type { PermissionKey, AppManifest } from '#sdk/manifest';
+import type { PermissionKey, AppManifest } from '@pivi/sdk/manifest';
 import type { AppDeps } from './deps';
 import { pinnedReference, resolveImage } from './registry';
 import {

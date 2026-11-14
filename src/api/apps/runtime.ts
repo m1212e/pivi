@@ -22,12 +22,21 @@ import {
 	type RequestParam,
 	type RequestType
 } from 'vscode-jsonrpc';
-import { ensureRal } from '#sdk/rpcRal';
-import { PushMessageReader, SinkMessageWriter } from '#sdk/rpcTransport';
-import { encodeMessage, LineSplitter } from '#sdk/ndjson';
-import { domainsAllow, type Feature, type PermissionKey, type AppManifest } from '#sdk/manifest';
-import type { DashboardContribution } from '#sdk/dashboard';
-import type { AppScreen, UiEvent } from '#sdk/ui';
+import {
+	ensureRal,
+	PushMessageReader,
+	SinkMessageWriter,
+	encodeMessage,
+	LineSplitter
+} from '@pivi/sdk/rpc';
+import {
+	domainsAllow,
+	type Feature,
+	type PermissionKey,
+	type AppManifest
+} from '@pivi/sdk/manifest';
+import type { DashboardContribution } from '@pivi/sdk/dashboard';
+import type { AppScreen, UiEvent } from '@pivi/sdk/ui';
 import {
 	activateNotification,
 	chatMessagesNotification,
@@ -58,9 +67,9 @@ import {
 	type ChatMessage,
 	type ResolvedStream,
 	type SkipSegment
-} from '#sdk/protocol';
-import { dashboardContributionSchema } from '#sdk/dashboard';
-import { appScreenSchema } from '#sdk/ui';
+} from '@pivi/sdk/protocol';
+import { dashboardContributionSchema } from '@pivi/sdk/dashboard';
+import { appScreenSchema } from '@pivi/sdk/ui';
 import { sanitizeChat, sanitizeDashboard, sanitizeScreen } from './sanitize';
 import { applyChatBatch } from '#lib/chat/removals';
 import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';

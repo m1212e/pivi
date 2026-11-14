@@ -1,5 +1,5 @@
 // The HLS counterpart of stream-track: serves a session's HLS playlist (see
-// #sdk/protocol's `videoContainer: 'hls'`) and everything it references, so
+// @pivi/sdk/protocol's `videoContainer: 'hls'`) and everything it references, so
 // the player (#lib/playback/hlsPlayer) never talks to the app's CDN itself.
 //
 // Without `?u=` this is the session's own playlist, `[file]` being just a

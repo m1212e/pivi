@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Lets sandboxed apps show an icon through UiNodeRenderer without shipping
-	// image assets: a host icon name or the `d` of a 24x24 path (#sdk/icons).
+	// image assets: a host icon name or the `d` of a 24x24 path (@pivi/sdk/icons).
 	import AppIcon from '#lib/components/apps/AppIcon.svelte';
-	import type { IconRef } from '#sdk/icons';
+	import type { IconRef } from '@pivi/sdk/icons';
 
 	let { path, size = 'normal' }: { path: IconRef; size?: 'normal' | 'large' } = $props();
 </script>

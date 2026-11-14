@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AppManifest } from '#sdk/manifest';
-import { encodeMessage } from '#sdk/ndjson';
-import { PROTOCOL_VERSION } from '#sdk/protocol';
+import type { AppManifest } from '@pivi/sdk/manifest';
+import { encodeMessage } from '@pivi/sdk/rpc';
+import { PROTOCOL_VERSION } from '@pivi/sdk/protocol';
 import { loadApp, urlAllowed } from './runtime';
 import type { RunningSandbox, SandboxHandlers } from './sandbox/types';
 

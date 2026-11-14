@@ -7,7 +7,7 @@
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
-	import { appActionSchema } from '#sdk/dashboard';
+	import { appActionSchema } from '@pivi/sdk/dashboard';
 	import { appActionHref } from '#lib/apps/actionHref';
 	import HeroBanner from '#lib/components/HeroBanner.svelte';
 	import HeroBannerEmpty from '#lib/components/HeroBannerEmpty.svelte';

@@ -13,7 +13,7 @@
 	import { stopSubscription } from '#lib/api/subscription';
 	import AppManagerPanel, { type AppActions } from '#lib/components/AppManagerPanel.svelte';
 	import { appsStateSchema, type AppsState } from '#lib/apps/management';
-	import type { PermissionKey } from '#sdk/manifest';
+	import type { PermissionKey } from '@pivi/sdk/manifest';
 
 	const FIELDS = {
 		apps: {

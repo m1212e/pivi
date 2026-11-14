@@ -1,7 +1,7 @@
 // The TV plays separate video and audio tracks through Shaka, which needs to
 // know where each file's segment index is. The protocol requires separate
 // tracks to carry one from the encoder (an mp4 `sidx` box or a webm `Cues`
-// element, see #sdk/protocol's resolvedStreamSchema), so this only locates its
+// element, see @pivi/sdk/protocol's resolvedStreamSchema), so this only locates its
 // byte range for `<SegmentBase indexRange>` instead of
 // building an index from the media itself (see #lib/mse/dualTrackPlayer).
 import { error } from '@sveltejs/kit';

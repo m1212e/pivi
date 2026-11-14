@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
-import { loadEnv } from 'vite';
+import { defaultClientConditions, defaultServerConditions, loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
@@ -27,6 +27,9 @@ export default defineConfig(({ mode, command }) => ({
 	// `vite build`. Only the build, since dev needs info level to print its URLs.
 	logLevel: command === 'build' ? 'warn' : 'info',
 	resolve: {
+		// @pivi/sdk's `pivi-source` condition points at its .ts sources, so dev, tests
+		// and the production build all read them and nothing has to build the SDK first.
+		conditions: ['pivi-source', ...defaultClientConditions],
 		alias: {
 			// See src/api/lib-address-shim.ts — @m1212e/rumble's `lib-address`
 			// dependency doesn't load under Vite's SSR module runner.
@@ -41,6 +44,8 @@ export default defineConfig(({ mode, command }) => ({
 		// the server loads at runtime anyway.
 		dedupe: ['graphql']
 	},
+	// Same for the server build, which has its own set of default conditions.
+	ssr: { resolve: { conditions: ['pivi-source', ...defaultServerConditions] } },
 	// clientCreator (see src/api/handlers/register.ts) rewrites the generated
 	// rumble client on every dev-server request that touches the GraphQL
 	// schema. Since that output lives inside the watched src/ tree, an
@@ -92,9 +97,9 @@ export default defineConfig(({ mode, command }) => ({
 				test: {
 					name: 'server',
 					environment: 'node',
-					// sdk/ and apps/ too: the app contract and the apps built on it are
+					// packages/ and apps/ too: the app contract and the apps built on it are
 					// tested with the host's.
-					include: ['{src,sdk,apps}/**/*.{test,spec}.{js,ts}'],
+					include: ['{src,packages,apps}/**/*.{test,spec}.{js,ts}'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', '**/node_modules/**']
 				}
 			}

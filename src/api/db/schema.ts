@@ -1,5 +1,5 @@
 import { boolean, jsonb, snakeCase, text, timestamp, unique } from 'drizzle-orm/pg-core';
-import type { PermissionKey, AppManifest } from '#sdk/manifest';
+import type { PermissionKey, AppManifest } from '@pivi/sdk/manifest';
 import type { AppImage } from '../apps/image';
 import type { AppSigner } from '../apps/signature';
 import { nanoid } from '../nanoid';

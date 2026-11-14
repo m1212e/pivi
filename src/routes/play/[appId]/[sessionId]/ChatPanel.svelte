@@ -5,7 +5,7 @@
 	import { stopSubscription } from '#lib/api/subscription';
 	import { applyChatBatch } from '#lib/chat/removals';
 	import type { ChatMode } from '#lib/playback/chatMode';
-	import type { ChatBatch, ChatMessage } from '#sdk/protocol';
+	import type { ChatBatch, ChatMessage } from '@pivi/sdk/protocol';
 
 	let {
 		appId,

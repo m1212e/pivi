@@ -8,9 +8,8 @@ import {
 	type NotificationType
 } from 'vscode-jsonrpc';
 import type { z } from 'zod';
-import { ensureRal } from '#sdk/rpcRal';
+import { ensureRal, PushMessageReader, SinkMessageWriter } from '@pivi/sdk/rpc';
 import { onNotification, sendNotification } from '../rpc';
-import { PushMessageReader, SinkMessageWriter } from '#sdk/rpcTransport';
 import { mirroredText, recordSent, type SentText } from '../textEntry';
 import {
 	backNotification,

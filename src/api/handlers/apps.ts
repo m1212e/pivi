@@ -236,7 +236,7 @@ schemaBuilder.mutationFields((t) => ({
 			// A text input's text.
 			value: t.arg.string({ required: false }),
 			// A toggle's new state. Separate from `value` so the app gets a real
-			// boolean, as #sdk/ui's UiEvent promises.
+			// boolean, as @pivi/sdk/ui's UiEvent promises.
 			checked: t.arg.boolean({ required: false })
 		},
 		resolve: async (_root, args) => {

@@ -4,7 +4,7 @@
 // stream, or `vod-<id>` (see vodSession) for a past video. The host proxies the playlist and its
 // segments (src/routes/api/stream-hls) and the player picks the variant, so
 // the app only reports which heights exist.
-import type { ResolvedStream } from '../../sdk/protocol';
+import type { ResolvedStream } from '@pivi/sdk/protocol';
 import { isSignedIn } from './auth';
 import { gql } from './gql';
 

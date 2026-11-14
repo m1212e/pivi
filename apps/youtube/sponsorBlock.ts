@@ -4,7 +4,7 @@
 // own -- this just hands its data to the generic skip-segment app
 // contract (sdk/protocol.ts's SkipSegment), so the player never needs to
 // know SponsorBlock exists.
-import type { SkipSegment } from '../../sdk/protocol';
+import type { SkipSegment } from '@pivi/sdk/protocol';
 
 const SPONSORBLOCK_API = 'https://sponsor.ajay.app/api/skipSegments';
 

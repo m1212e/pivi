@@ -29,3 +29,7 @@ test-results
 src/lib/paraglide
 project.inlang/cache/
 .fallow/
+
+# Built by tsdown, see packages/sdk
+/packages/*/dist
+/packages/*/schema

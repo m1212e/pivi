@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatMessage } from '#sdk/protocol';
+import type { ChatMessage } from '@pivi/sdk/protocol';
 import { applyChatBatch, applyChatRemovals } from './removals';
 
 const line = (id: string, authorId?: string): ChatMessage => ({

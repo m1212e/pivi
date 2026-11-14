@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseImageRef } from '#lib/apps/imageRef';
-import type { AppManifest } from '#sdk/manifest';
+import type { AppManifest } from '@pivi/sdk/manifest';
 import {
 	buildSandboxSpec,
 	volumeBelongsToApp,

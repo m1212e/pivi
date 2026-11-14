@@ -1,6 +1,6 @@
 // The single definition of the host/app JSON-RPC protocol, shared by the host
 // runtime and the TypeScript app SDK so neither side can drift. Apps in other
-// languages get the same methods as JSON Schema (protocolSchema.ts).
+// languages get the same methods as JSON Schema (schema.ts).
 //
 // Everything in sdk/ is the contract between pivi and its apps, and nothing
 // else: it imports only zod, vscode-jsonrpc and itself, never host code, so an

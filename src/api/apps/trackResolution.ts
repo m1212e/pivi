@@ -3,7 +3,7 @@
 import { error } from '@sveltejs/kit';
 import { getApp } from '#api/apps/manager';
 import { resolveStreamCached } from '#api/apps/streamCache';
-import type { ResolvedStream } from '#sdk/protocol';
+import type { ResolvedStream } from '@pivi/sdk/protocol';
 import { fetchAppUrl, type AppFetchInit } from './appFetch';
 import type { AppInstance } from './runtime';
 

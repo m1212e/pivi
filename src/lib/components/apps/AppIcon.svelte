@@ -1,8 +1,8 @@
 <script lang="ts">
-	// Draws an app's IconRef (#sdk/icons): the host's own Lucide icon when it
+	// Draws an app's IconRef (@pivi/sdk/icons): the host's own Lucide icon when it
 	// names one, otherwise the app's 24x24 path, filled like before.
 	import { hostIconComponent } from '#lib/apps/hostIcons';
-	import type { IconRef } from '#sdk/icons';
+	import type { IconRef } from '@pivi/sdk/icons';
 
 	let { icon, class: className = 'size-6' }: { icon: IconRef; class?: string } = $props();
 

@@ -24,7 +24,7 @@ export type PermissionKey = z.infer<typeof permissionKeySchema>;
 
 /**
  * What the app implements, so the host only calls methods an app declared
- * (protocolSchema.ts gates each method on one) instead of probing for them.
+ * (schema.ts gates each method on one) instead of probing for them.
  */
 export const featureSchema = z.enum([
 	// Publishes home-dashboard cards (Tier 1, see dashboard.ts).

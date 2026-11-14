@@ -1,6 +1,6 @@
 // Where an app action leads, on the host's side of the contract: apps name
-// what should happen (#sdk/dashboard's AppAction), the host decides the route.
-import type { AppAction } from '#sdk/dashboard';
+// what should happen (@pivi/sdk/dashboard's AppAction), the host decides the route.
+import type { AppAction } from '@pivi/sdk/dashboard';
 import { playHref, appScreenHref } from '../routes';
 
 /**

@@ -8,7 +8,7 @@ import { resolveStreamCached } from '../apps/streamCache';
 import { resolveSkipSegmentsCached } from '../apps/skipSegmentsCache';
 import { chatEventKey, chatPubSub } from '../apps/events';
 import { releaseWhenDone } from '../apps/usage';
-import type { ChatBatch, ChatMessage } from '#sdk/protocol';
+import type { ChatBatch, ChatMessage } from '@pivi/sdk/protocol';
 import { markAppUsed } from '../apps/appUsage';
 
 // Lets the player offer a subtitle menu. Without `url`, the player fetches a
@@ -107,12 +107,12 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 		direct: t.exposeBoolean('direct'),
 		vcodec: t.exposeString('vcodec'),
 		acodec: t.exposeString('acodec', { nullable: true }),
-		// Not reliably guessable from the codecs (see #sdk/protocol's containerSchema),
+		// Not reliably guessable from the codecs (see @pivi/sdk/protocol's containerSchema),
 		// so the player gets it from here.
 		videoContainer: t.exposeString('videoContainer'),
 		audioContainer: t.exposeString('audioContainer', { nullable: true }),
 		qualities: t.exposeIntList('qualities'),
-		// Which player controls the app allows, see #sdk/protocol's playerControlsSchema.
+		// Which player controls the app allows, see @pivi/sdk/protocol's playerControlsSchema.
 		controlSeek: t.exposeBoolean('controlSeek'),
 		controlSeekButtons: t.exposeBoolean('controlSeekButtons'),
 		controlPlayPause: t.exposeBoolean('controlPlayPause'),
@@ -127,7 +127,7 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 });
 
 // A stretch the player offers to skip, like a sponsor segment. Mirrors
-// #sdk/protocol's SkipSegment.
+// @pivi/sdk/protocol's SkipSegment.
 type AppSkipSegment = {
 	startSeconds: number;
 	endSeconds: number;
@@ -215,7 +215,7 @@ schemaBuilder.queryFields((t) => ({
 
 // One chat batch as JSON, like AppScreenData: the messages are nested data
 // (text runs and emotes) the player renders as is, so a GraphQL type per part
-// would only repeat #sdk/protocol's ChatMessage.
+// would only repeat @pivi/sdk/protocol's ChatMessage.
 const AppChatBatchRef = schemaBuilder
 	.objectRef<{ json: string }>('AppChatBatch')
 	.implement({ fields: (t) => ({ json: t.exposeString('json') }) });

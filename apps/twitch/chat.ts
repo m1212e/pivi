@@ -3,7 +3,7 @@
 // anonymous read-only login. One connection serves every open chat, each a
 // joined channel, and lines are passed on in batches (see chatMessages in
 // sdk/protocol.ts) so a busy chat doesn't send a message per line.
-import type { ChatBatch, ChatMessage, ChatRemovals } from '../../sdk/protocol';
+import type { ChatBatch, ChatMessage, ChatRemovals } from '@pivi/sdk/protocol';
 
 const GATEWAY = 'wss://irc-ws.chat.twitch.tv:443';
 const FLUSH_MS = 300;

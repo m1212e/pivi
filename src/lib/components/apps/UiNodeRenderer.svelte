@@ -6,8 +6,8 @@
 	import { resolve } from '$app/paths';
 	import TextInput from '#lib/components/TextInput.svelte';
 	import { inview } from 'svelte-inview';
-	import type { UiNode } from '#sdk/ui';
-	import type { AppAction } from '#sdk/dashboard';
+	import type { UiNode } from '@pivi/sdk/ui';
+	import type { AppAction } from '@pivi/sdk/dashboard';
 	import { appActionHref } from '#lib/apps/actionHref';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { graphQLErrorMessage } from '#lib/api/errors';

@@ -4,11 +4,11 @@
 		"rewriteRelativeImportExtensions": true,
 		"sourceMap": true,
 		"strict": true,
+		"customConditions": ["pivi-source"],
 		"paths": {
 			"#lib/*": ["./src/lib/*"],
-			"#api/*": ["./src/api/*"],
-			"#sdk/*": ["./sdk/*"]
+			"#api/*": ["./src/api/*"]
 		}
 	},
-	"include": ["src", "drizzle.config.ts", "apps", "sdk"]
+	"include": ["src", "drizzle.config.ts", "apps", "packages/*/src", "packages/*/test"]
 }

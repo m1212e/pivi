@@ -3,7 +3,7 @@
 // relay, a caption file is a few KB at most, so there's no segment index or
 // Range forwarding to do here, just a single proxied fetch. Generic over any
 // app, same as stream-track: it only ever touches the generic
-// ResolvedStream shape (see #sdk/protocol's SubtitleTrack).
+// ResolvedStream shape (see @pivi/sdk/protocol's SubtitleTrack).
 import { error } from '@sveltejs/kit';
 import { resolveStreamOrError } from '#api/apps/trackResolution';
 import { fetchAppUrl, readTextCapped } from '#api/apps/appFetch';

@@ -57,6 +57,8 @@ let
           ../package.json
           ../bun.lock
           ../.npmrc
+          # A workspace member: `bun install --frozen-lockfile` fails without its manifest.
+          ../packages/sdk/package.json
         ];
       };
 
@@ -138,7 +140,7 @@ stdenv.mkDerivation {
       ../vite.config.ts
       ../drizzle.config.ts
       ../src
-      ../sdk
+      ../packages
       ../static
       ../messages
       ../project.inlang

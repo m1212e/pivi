@@ -1,4 +1,4 @@
-import type { SkipSegment } from '#sdk/protocol';
+import type { SkipSegment } from '@pivi/sdk/protocol';
 import type { AppInstance } from './runtime';
 import { createTtlCache } from './ttlCache';
 

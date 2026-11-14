@@ -8,11 +8,11 @@
 # fetch, so the runtime is just bun and the bundle.
 FROM --platform=$BUILDPLATFORM oven/bun:1 AS build
 WORKDIR /build
-COPY apps/twitch/package.json apps/twitch/bun.lock ./
-RUN bun install --frozen-lockfile --production
-COPY sdk ./sdk
+COPY packages/sdk ./packages/sdk
 COPY apps/twitch ./apps/twitch
-RUN bun build ./apps/twitch/main.ts --target=bun --outfile=/out/main.js
+RUN cd apps/twitch && bun install --frozen-lockfile --production
+# pivi-source reads @pivi/sdk's TypeScript, so the SDK needn't be built first.
+RUN bun build ./apps/twitch/main.ts --target=bun --conditions pivi-source --outfile=/out/main.js
 
 FROM oven/bun:1
 WORKDIR /app

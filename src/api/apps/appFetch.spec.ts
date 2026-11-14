@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppManifest } from '#sdk/manifest';
+import type { AppManifest } from '@pivi/sdk/manifest';
 import { fetchAppUrl, readTextCapped } from './appFetch';
 import type { AppInstance } from './runtime';
 import { fetchPublic, UnsafeUrlError } from './urlGuard';

@@ -2,7 +2,7 @@
 // nothing but the remote (trackpad plus the phone's keyboard relay).
 // Mutations return once the work has started since an install can take
 // minutes, the outcome arrives through the subscription.
-import { permissionKeySchema } from '#sdk/manifest';
+import { permissionKeySchema } from '@pivi/sdk/manifest';
 import { schemaBuilder } from '../rumble';
 import { appManagement } from '../appManagement';
 import type { AppsState } from '../appManagementService';

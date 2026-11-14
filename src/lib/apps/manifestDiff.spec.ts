@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { diffManifests, domainCovered } from './manifestDiff';
-import type { AppManifest } from '#sdk/manifest';
+import type { AppManifest } from '@pivi/sdk/manifest';
 
 const manifest = (overrides: Partial<AppManifest> = {}): AppManifest => ({
 	id: 'demo',

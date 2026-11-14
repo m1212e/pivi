@@ -1,0 +1,58 @@
+name: SDK package
+
+# Checks that @pivi/sdk still builds into a correct package, and publishes it
+# when a tag `sdk-v<version>` is pushed. The version is the one in
+# packages/sdk/package.json, so a release is: bump it (a major bump whenever
+# PROTOCOL_VERSION changes), merge, then
+#
+#   git tag sdk-v0.1.0 && git push origin sdk-v0.1.0
+#
+# Publishing needs an NPM_TOKEN secret, and refuses while the package still
+# says `"private": true`.
+on:
+  pull_request:
+    paths: ['packages/sdk/**', '.github/workflows/sdk.yml']
+  push:
+    tags: ['sdk-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run sdk:check
+      - run: bunx vitest --run --project server packages/sdk
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: bun run sdk:build
+      - name: Check the tag matches the package
+        working-directory: packages/sdk
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          [ "sdk-v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+          [ "$(jq -r '.private // false' package.json)" = "false" ] || { echo "packages/sdk is still private"; exit 1; }
+      - name: Publish
+        working-directory: packages/sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public

@@ -1,6 +1,7 @@
 {
 	"name": "my-app",
 	"private": true,
+	"license": "Apache-2.0",
 	"version": "0.0.16",
 	"type": "module",
 	"scripts": {
@@ -16,6 +17,8 @@
 		"app:build": "bun scripts/apps.ts build",
 		"apps:build-all": "bun scripts/apps.ts build-all",
 		"apps:protocol": "bun scripts/apps.ts protocol",
+		"sdk:build": "bun run --cwd packages/sdk build",
+		"sdk:check": "bun run --cwd packages/sdk build && bun run --cwd packages/sdk lint:package",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"db:start": "docker compose up",
@@ -27,6 +30,7 @@
 		"db:studio": "drizzle-kit studio"
 	},
 	"devDependencies": {
+		"@pivi/sdk": "workspace:*",
 		"@eslint/js": "^10.0.1",
 		"@inlang/paraglide-js": "^3.2.2",
 		"@inlang/plugin-m-function-matcher": "2.4.3",
@@ -83,10 +87,12 @@
 		"ws": "^8.23.0",
 		"zod": "^4.6.7"
 	},
+	"workspaces": [
+		"packages/*"
+	],
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#api/*": "./src/api/*",
-		"#sdk/*": "./sdk/*"
+		"#api/*": "./src/api/*"
 	},
 	"dependencies": {
 		"@opentelemetry/api": "^1.10.0",

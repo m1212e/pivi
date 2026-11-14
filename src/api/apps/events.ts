@@ -1,6 +1,6 @@
 // Keys on the app pubsub (pubsub.ts) that aren't tied to one app.
 import { createPubSub } from 'graphql-yoga';
-import type { ChatBatch } from '#sdk/protocol';
+import type { ChatBatch } from '@pivi/sdk/protocol';
 import type { ForcedStopReason } from './runtime';
 import { appPubSub } from './pubsub';
 

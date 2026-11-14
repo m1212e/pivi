@@ -3,20 +3,20 @@
 # manifest as the dev.pivi.manifest label (see scripts/apps.ts).
 #
 # Stage 1 bundles the app and the protocol SDK it imports into one file, so
-# nothing has to be installed where it runs. Only sdk/ and this directory go
-# into the build: the app can't reach host code even by accident, since it
-# isn't there. The layout mirrors the repo so the app's relative imports of
-# ../../sdk resolve the same way in both, and dependencies are installed at
-# the root from this app's own lockfile so the SDK finds them too.
+# nothing has to be installed where it runs. Only packages/sdk and this directory
+# go into the build: the app can't reach host code even by accident, since it
+# isn't there. The layout mirrors the repo so the app's `file:../../packages/sdk`
+# dependency resolves the same way in both, and the app is installed from its
+# own lockfile.
 # The bundle is plain JS, so this stage runs natively even when CI builds the
 # arm64 image, instead of running bun under emulation.
 FROM --platform=$BUILDPLATFORM oven/bun:1 AS build
 WORKDIR /build
-COPY apps/youtube/package.json apps/youtube/bun.lock ./
-RUN bun install --frozen-lockfile --production
-COPY sdk ./sdk
+COPY packages/sdk ./packages/sdk
 COPY apps/youtube ./apps/youtube
-RUN bun build ./apps/youtube/main.ts --target=bun --outfile=/out/main.js
+RUN cd apps/youtube && bun install --frozen-lockfile --production
+# pivi-source reads @pivi/sdk's TypeScript, so the SDK needn't be built first.
+RUN bun build ./apps/youtube/main.ts --target=bun --conditions pivi-source --outfile=/out/main.js
 
 # Stage 2 is the runtime: bun, the bundle, and the yt-dlp the app shells out
 # to. yt-dlp is baked in because at runtime the sandbox only lets the app

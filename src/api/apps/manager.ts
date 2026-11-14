@@ -9,7 +9,7 @@
 // screen until it runs again. Opening the home screen boots it again for fresh
 // cards (refreshDashboards).
 import { parseImageRef } from '#lib/apps/imageRef';
-import type { DashboardContribution } from '#sdk/dashboard';
+import type { DashboardContribution } from '@pivi/sdk/dashboard';
 import { getActiveProfileUser, onActiveProfileChanged } from '../activeProfile';
 import { loadApp, type AppInstance } from './runtime';
 import { buildSandboxSpec } from './sandbox/spec';

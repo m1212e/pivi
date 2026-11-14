@@ -1,4 +1,4 @@
-import type { UiNode } from '#sdk/ui';
+import type { UiNode } from '@pivi/sdk/ui';
 
 type Container = Extract<UiNode, { type: 'container' }>;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AppManifest } from '#sdk/manifest';
+import type { AppManifest } from '@pivi/sdk/manifest';
 import { describeApp } from './appState';
 import type { InstalledApp } from './apps/store';
 

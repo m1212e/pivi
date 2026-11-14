@@ -7,27 +7,10 @@
 //
 // Everything personal (who is signed in, whom they follow) is asked of Twitch
 // when shown, never kept here: the token is the only thing stored.
-import {
-	activateNotification,
-	chatMessagesNotification,
-	closeChatNotification,
-	localeNotification,
-	openChatNotification,
-	openOnPhoneNotification,
-	PROTOCOL_VERSION,
-	publishDashboardNotification,
-	publishScreenNotification,
-	readyNotification,
-	refreshDashboardNotification,
-	resolveLiveStatusRequest,
-	resolveStreamRequest,
-	shutdownNotification,
-	uiEventNotification
-} from '../../sdk/protocol';
-import type { HomeCard } from '../../sdk/dashboard';
-import type { HostIcon } from '../../sdk/icons';
-import type { UiNode } from '../../sdk/ui';
-import { connection } from './connection';
+import type { HomeCard } from '@pivi/sdk/dashboard';
+import type { HostIcon } from '@pivi/sdk/icons';
+import type { UiNode } from '@pivi/sdk/ui';
+import { defineApp } from '@pivi/sdk/app';
 import { beginSignIn, isSignedIn, loadSession, signOut, type DeviceCodeAuth } from './auth';
 import { createChat } from './chat';
 import {
@@ -57,7 +40,7 @@ const SIDEBAR_WIDTH = '14rem';
 const DASHBOARD_CARDS = 15;
 const EMPTY_ERROR = "Couldn't load this right now.";
 
-// Host icons (#sdk/icons), drawn by the shell in its own style.
+// Host icons (@pivi/sdk/icons), drawn by the shell in its own style.
 const SECTIONS: { id: string; label: string; icon: HostIcon }[] = [
 	{ id: 'following', label: 'Following', icon: 'heart' },
 	{ id: 'browse', label: 'Live now', icon: 'radio' },
@@ -467,7 +450,7 @@ function accountEntries(): UiNode[] {
 }
 
 function publishScreen() {
-	connection.sendNotification(publishScreenNotification, {
+	app.publishScreen({
 		screenId: SCREEN_ID,
 		root: {
 			type: 'container',
@@ -496,7 +479,7 @@ function streamToCard(stream: LiveStream): HomeCard {
 // popular while nobody you follow is live.
 function publishDashboard() {
 	const streams = isSignedIn() && following?.length ? following : (browse ?? []);
-	connection.sendNotification(publishDashboardNotification, {
+	app.publishDashboard({
 		cards: streams.slice(0, DASHBOARD_CARDS).map(streamToCard)
 	});
 }
@@ -648,7 +631,7 @@ function onSignIn() {
 	beginSignIn((status) => {
 		// Only once per code, the button stays for sending it again.
 		if (status.status === 'pending' && status.userCode !== signInStatus?.userCode) {
-			connection.sendNotification(openOnPhoneNotification, { url: status.phoneUrl });
+			app.openOnPhone(status.phoneUrl);
 		}
 		signInStatus = status;
 		publishScreen();
@@ -739,51 +722,44 @@ function routeUiEvent(eventId: string, value: unknown) {
 
 let activated = false;
 
-function main() {
-	connection.sendNotification(readyNotification, { protocol: PROTOCOL_VERSION });
-
-	// Registered right after ready, before anything is awaited, so an activate
-	// that arrives straight away is never missed.
-	connection.onNotification(activateNotification, (params) => {
-		locale = params.locale;
-		activated = true;
-		void loadSession().then(onSessionChanged);
-	});
-
-	// Only number formatting depends on it, the next publish picks it up.
-	connection.onNotification(localeNotification, (params) => {
-		locale = params.locale;
-		if (activated) publishScreen();
-	});
-
-	// Live lists go stale within minutes, so the home screen always reloads them.
-	connection.onNotification(refreshDashboardNotification, () => {
-		if (activated) void loadDashboard();
-	});
-
-	connection.onNotification(uiEventNotification, (event) => {
-		if (event.screenId === SCREEN_ID) routeUiEvent(event.eventId, event.value);
-	});
-
-	connection.onNotification(shutdownNotification, () => process.exit(0));
-
+const app = defineApp((app) => {
 	// The session id is the channel login, see streamCard.
-	connection.onRequest(resolveStreamRequest, ({ sessionId }) => resolveStream(sessionId));
+	const chat = createChat((sessionId, batch) => app.sendChat(sessionId, batch));
 
-	connection.onRequest(resolveLiveStatusRequest, async ({ sessionId }) => {
-		try {
-			return { viewers: await viewerCount(sessionId) };
-		} catch (err) {
-			log('warn', `viewer count for ${sessionId} failed: ${String(err)}`);
-			return {};
-		}
-	});
+	return {
+		onActivate({ locale: tag }) {
+			locale = tag;
+			activated = true;
+			return loadSession().then(onSessionChanged);
+		},
 
-	const chat = createChat((sessionId, batch) =>
-		connection.sendNotification(chatMessagesNotification, { sessionId, ...batch })
-	);
-	connection.onNotification(openChatNotification, ({ sessionId }) => chat.open(sessionId));
-	connection.onNotification(closeChatNotification, ({ sessionId }) => chat.close(sessionId));
-}
+		// Only number formatting depends on it, the next publish picks it up.
+		onLocale({ locale: tag }) {
+			locale = tag;
+			if (activated) publishScreen();
+		},
 
-main();
+		// Live lists go stale within minutes, so the home screen always reloads them.
+		onRefreshDashboard() {
+			if (activated) void loadDashboard();
+		},
+
+		onUiEvent(event) {
+			if (event.screenId === SCREEN_ID) routeUiEvent(event.eventId, event.value);
+		},
+
+		resolveStream: ({ sessionId }) => resolveStream(sessionId),
+
+		async resolveLiveStatus({ sessionId }) {
+			try {
+				return { viewers: await viewerCount(sessionId) };
+			} catch (err) {
+				log('warn', `viewer count for ${sessionId} failed: ${String(err)}`);
+				return {};
+			}
+		},
+
+		onOpenChat: (sessionId) => chat.open(sessionId),
+		onCloseChat: (sessionId) => chat.close(sessionId)
+	};
+});

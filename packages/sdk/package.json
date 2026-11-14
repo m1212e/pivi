@@ -1,0 +1,87 @@
+{
+	"name": "@pivi/sdk",
+	"version": "0.1.0",
+	"description": "The contract between pivi and its apps: manifest, JSON-RPC protocol, declarative UI and the app-side runtime.",
+	"license": "Apache-2.0",
+	"type": "module",
+	"files": [
+		"dist",
+		"schema",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "tsdown && bun run schema",
+		"schema": "bun scripts/writeSchema.ts",
+		"lint:package": "publint && attw --pack . --profile esm-only"
+	},
+	"peerDependencies": {
+		"vscode-jsonrpc": ">=9.0.0",
+		"zod": "^4.0.0"
+	},
+	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.5",
+		"publint": "^0.3.25",
+		"tsdown": "^0.23.7",
+		"vscode-jsonrpc": "^10.0.0",
+		"zod": "^4.6.7"
+	},
+	"exports": {
+		".": {
+			"pivi-source": "./src/index.ts",
+			"default": "./dist/index.js"
+		},
+		"./app": {
+			"pivi-source": "./src/app.ts",
+			"default": "./dist/app.js"
+		},
+		"./dashboard": {
+			"pivi-source": "./src/dashboard.ts",
+			"default": "./dist/dashboard.js"
+		},
+		"./icons": {
+			"pivi-source": "./src/icons.ts",
+			"default": "./dist/icons.js"
+		},
+		"./limits": {
+			"pivi-source": "./src/limits.ts",
+			"default": "./dist/limits.js"
+		},
+		"./manifest": {
+			"pivi-source": "./src/manifest.ts",
+			"default": "./dist/manifest.js"
+		},
+		"./protocol": {
+			"pivi-source": "./src/protocol.ts",
+			"default": "./dist/protocol.js"
+		},
+		"./rpc": {
+			"pivi-source": "./src/rpc.ts",
+			"default": "./dist/rpc.js"
+		},
+		"./schema": {
+			"pivi-source": "./src/schema.ts",
+			"default": "./dist/schema.js"
+		},
+		"./ui": {
+			"pivi-source": "./src/ui.ts",
+			"default": "./dist/ui.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"exports": {
+			".": "./dist/index.js",
+			"./app": "./dist/app.js",
+			"./dashboard": "./dist/dashboard.js",
+			"./icons": "./dist/icons.js",
+			"./limits": "./dist/limits.js",
+			"./manifest": "./dist/manifest.js",
+			"./protocol": "./dist/protocol.js",
+			"./rpc": "./dist/rpc.js",
+			"./schema": "./dist/schema.js",
+			"./ui": "./dist/ui.js",
+			"./package.json": "./package.json"
+		}
+	}
+}

@@ -23,10 +23,10 @@ import {
 	resolveStreamRequest,
 	shutdownNotification,
 	uiEventNotification
-} from '../../sdk/protocol';
-import type { HomeCard } from '../../sdk/dashboard';
-import type { HostIcon } from '../../sdk/icons';
-import type { UiNode } from '../../sdk/ui';
+} from '@pivi/sdk/protocol';
+import type { HomeCard } from '@pivi/sdk/dashboard';
+import type { HostIcon } from '@pivi/sdk/icons';
+import type { UiNode } from '@pivi/sdk/ui';
 import { connection } from './connection';
 import { beginSignIn, isSignedIn, type DeviceCodeAuth } from './auth';
 import { fetchTvHomeFeed, fetchTvHomeMore } from './tvHomeFeed';
@@ -57,7 +57,7 @@ const SCREEN_ID = 'browse';
 // available width, so card size and look are decided in one place, VideoCard.
 const SIDEBAR_WIDTH = '14rem';
 const DASHBOARD_CARDS = 15;
-// Host icons (#sdk/icons), drawn by the shell in its own style.
+// Host icons (@pivi/sdk/icons), drawn by the shell in its own style.
 const LIBRARY_ICON: HostIcon = 'library';
 const ACCOUNT_ICON: HostIcon = 'user';
 

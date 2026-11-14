@@ -1,7 +1,7 @@
 // The install/update/permission logic, against a real (fake) registry and an
 // in-memory store, with the sandbox backend and process control recorded.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { PermissionKey, AppManifest } from '#sdk/manifest';
+import type { PermissionKey, AppManifest } from '@pivi/sdk/manifest';
 import type { AppDeps, AppProcessControl } from './deps';
 import {
 	FakeRegistry,

@@ -15,7 +15,7 @@
 	import { fade, fly, scale, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import type { AppsState } from '#lib/apps/management';
-	import type { PermissionKey } from '#sdk/manifest';
+	import type { PermissionKey } from '@pivi/sdk/manifest';
 	import { appIconDataUrl } from '#lib/apps/icon';
 	import { appAccentGradient } from '#lib/appAccent';
 	import HoldToConfirmButton from './HoldToConfirmButton.svelte';

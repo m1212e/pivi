@@ -1,7 +1,7 @@
-// Applies a chat batch's moderation removals (#sdk/protocol's ChatRemovals).
+// Applies a chat batch's moderation removals (@pivi/sdk/protocol's ChatRemovals).
 // Shared by the host's backlog (src/api/apps/runtime.ts) and the TV's chat
 // panel, so a removed line disappears from both the same way.
-import type { ChatBatch, ChatMessage } from '#sdk/protocol';
+import type { ChatBatch, ChatMessage } from '@pivi/sdk/protocol';
 
 /** `messages` without the lines `removed` takes away. */
 export function applyChatRemovals(

@@ -1,4 +1,4 @@
-// The host side of #sdk/icons: which Lucide icon each name an app may use
+// The host side of @pivi/sdk/icons: which Lucide icon each name an app may use
 // stands for. Typed against HOST_ICONS, so a name added there without an icon
 // here fails the type check.
 import {
@@ -56,7 +56,7 @@ import {
 	X
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
-import { isHostIcon, type HostIcon } from '#sdk/icons';
+import { isHostIcon, type HostIcon } from '@pivi/sdk/icons';
 
 const ICONS: Record<HostIcon, Component> = {
 	'arrow-left': ArrowLeft,

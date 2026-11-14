@@ -4,9 +4,9 @@
 // wouldn't let the app itself reach is blanked instead (the UI already
 // handles a card with no image). Links sent to the phone are held to https,
 // so an app can't hand the phone a javascript:, intent: or file: URL.
-import type { AppAction, DashboardContribution } from '#sdk/dashboard';
-import type { ChatMessage } from '#sdk/protocol';
-import type { AppScreen, UiNode } from '#sdk/ui';
+import type { AppAction, DashboardContribution } from '@pivi/sdk/dashboard';
+import type { ChatMessage } from '@pivi/sdk/protocol';
+import type { AppScreen, UiNode } from '@pivi/sdk/ui';
 import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';
 
 // Same check the host applies to the app's own requests, passed in so this
@@ -69,7 +69,7 @@ type NodeSanitizer<K extends UiNode['type']> = (
 const keep = <K extends UiNode['type']>(node: NodeOf<K>) => node;
 
 // One entry per node kind, and the type requires all of them, so adding a kind
-// to #sdk/ui is a type error here until someone decides what it needs.
+// to @pivi/sdk/ui is a type error here until someone decides what it needs.
 // `undefined` drops the node.
 const SANITIZERS: { [K in UiNode['type']]: NodeSanitizer<K> } = {
 	image: (node, allows) => ({ ...node, src: image(node.src, allows) }),

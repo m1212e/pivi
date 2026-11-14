@@ -11,7 +11,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
-import type { ResolvedStream, SubtitleTrack } from '../../sdk/protocol';
+import type { ResolvedStream, SubtitleTrack } from '@pivi/sdk/protocol';
 
 const BINARY = process.env.PIVI_YTDLP_BINARY ?? 'yt-dlp';
 

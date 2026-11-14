@@ -6,7 +6,7 @@
 	import { stopSubscription } from '#lib/api/subscription';
 	import LoadingSpinner from '#lib/components/LoadingSpinner.svelte';
 	import UiNodeRenderer from '#lib/components/apps/UiNodeRenderer.svelte';
-	import type { UiNode } from '#sdk/ui';
+	import type { UiNode } from '@pivi/sdk/ui';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import { appAuroraStyle } from '#lib/appAccent';
 

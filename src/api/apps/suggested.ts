@@ -6,7 +6,7 @@ import { PIVI_SUGGESTED_APPS } from '$app/env/private';
 import { formatImageRef, parseImageRef } from '#lib/apps/imageRef';
 import { resolveImage, type RegistryClient } from './registry';
 import { createTtlCache } from './ttlCache';
-import type { AppManifest } from '#sdk/manifest';
+import type { AppManifest } from '@pivi/sdk/manifest';
 
 export type SuggestedApp = {
 	id: string;

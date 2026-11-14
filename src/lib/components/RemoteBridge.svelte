@@ -12,9 +12,8 @@
 	import { resolve } from '$app/paths';
 	import { pairingSocketUrl } from '#lib/wsConfig';
 	import type { TvHello } from '#lib/remote/protocol';
-	import { ensureRal } from '#sdk/rpcRal';
+	import { ensureRal, PushMessageReader, SinkMessageWriter } from '@pivi/sdk/rpc';
 	import { createReconnector } from '#lib/remote/reconnect';
-	import { PushMessageReader, SinkMessageWriter } from '#sdk/rpcTransport';
 	import {
 		backNotification,
 		goHomeNotification,

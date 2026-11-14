@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AppManifest } from '#sdk/manifest';
+import type { AppManifest } from '@pivi/sdk/manifest';
 import { createAppManagement, type AppsState } from './appManagementService';
 import type { AppDeps } from './apps/deps';
 import {

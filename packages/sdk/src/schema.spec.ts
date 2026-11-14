@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProtocolDocument } from './protocolSchema';
+import { buildProtocolDocument } from './schema';
 
 describe('the app protocol document', () => {
 	it('gates every feature-dependent method on a declared feature', () => {
