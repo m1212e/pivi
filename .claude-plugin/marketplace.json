@@ -1,0 +1,16 @@
+{
+	"name": "pivi",
+	"owner": {
+		"name": "pivi"
+	},
+	"metadata": {
+		"description": "Tools for building pivi apps"
+	},
+	"plugins": [
+		{
+			"name": "pivi",
+			"source": "./packages/sdk",
+			"description": "Build apps that connect services to the pivi TV box"
+		}
+	]
+}

@@ -86,6 +86,21 @@ The protocol as a JSON Schema document is also shipped as
 `schema/protocol.schema.json`, for apps in other languages and for tools that
 want the whole contract in one file.
 
+## Building apps with an AI assistant
+
+The package ships a skill that teaches coding agents the whole contract: the workflow, the
+manifest rules, playback, screens, sign-in patterns, testing and packaging, plus a generated
+protocol reference. In Claude Code:
+
+```sh
+/plugin marketplace add m1212e/pivi
+/plugin install pivi@pivi
+```
+
+Other agents can read `node_modules/@pivi/sdk/skills/pivi-app/SKILL.md` directly, and the
+TypeScript sources (`node_modules/@pivi/sdk/src`) ship too, because their comments are the
+specification.
+
 ## Things worth knowing
 
 - **stdout is the protocol channel.** `defineApp` moves `console.log` to

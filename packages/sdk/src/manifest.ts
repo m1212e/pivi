@@ -96,7 +96,7 @@ const appIconSchema = z
 
 /**
  * Validates a manifest wherever one enters the system: the registry client
- * reading an image label, and scripts/apps.ts when building app images.
+ * reading an image label, and the tooling that builds app images.
  */
 export const appManifestSchema = z
 	.object({
@@ -146,5 +146,5 @@ export const appManifestSchema = z
 
 export type AppManifest = z.infer<typeof appManifestSchema>;
 
-/** The image label carrying the manifest JSON, written by scripts/apps.ts and read by the registry client. */
+/** The image label carrying the manifest JSON, written when an app image is built and read by the registry client. */
 export const MANIFEST_LABEL = 'dev.pivi.manifest';

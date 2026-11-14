@@ -80,7 +80,7 @@ export type UiNode =
 			// card grid need to wrap without pushing neighboring cards around.
 			lines?: number;
 	  }
-	// A glyph in a round badge. `path` is an IconRef (#sdk/icons): a host icon
+	// A glyph in a round badge. `path` is an IconRef (`@pivi/sdk/icons`): a host icon
 	// name like 'radio', or the `d` of a single 24x24 SVG path, so apps need
 	// no image assets.
 	| { type: 'icon'; path: IconRef; size?: 'normal' | 'large' }
@@ -147,7 +147,7 @@ export type UiNode =
 	// reaches the shared player route without a bespoke navigation path.
 	// `nav` renders a sidebar entry (full width, optional icon, highlighted
 	// when `selected`) instead of the default pill. `icon` is an IconRef
-	// (#sdk/icons): a host icon name like 'arrow-left', or the `d` of a single
+	// (`@pivi/sdk/icons`): a host icon name like 'arrow-left', or the `d` of a single
 	// 24x24 SVG path, so apps don't need to ship image assets.
 	| {
 			type: 'button';

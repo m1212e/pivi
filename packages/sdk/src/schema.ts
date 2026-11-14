@@ -1,6 +1,7 @@
 // The host/app protocol (protocol.ts) as a JSON document, so app authors outside
-// TypeScript have something to implement against. scripts/apps.ts publishes it
-// as app-protocol.schema.json with each release.
+// TypeScript have something to implement against. It is published
+// as app-protocol.schema.json with each release, and inside this package as
+// schema/protocol.schema.json.
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
 import { appScreenSchema, uiEventSchema } from './ui';
@@ -202,7 +203,7 @@ const METHODS: MethodSpec[] = [
 const toSchema = (schema: z.ZodType | undefined) =>
 	schema ? z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) : undefined;
 
-/** Called by scripts/apps.ts at release time to write the published protocol schema. */
+/** Used at release time (and by `bun run build` here) to write the published protocol schema. */
 export function buildProtocolDocument() {
 	return {
 		title: 'pivi app protocol',

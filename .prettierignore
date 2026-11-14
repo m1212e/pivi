@@ -13,3 +13,4 @@ project.inlang/
 .claude/settings.local.json
 /packages/*/dist
 /packages/*/schema
+/packages/*/skills/*/references

@@ -2,9 +2,9 @@
 // runtime and the TypeScript app SDK so neither side can drift. Apps in other
 // languages get the same methods as JSON Schema (schema.ts).
 //
-// Everything in sdk/ is the contract between pivi and its apps, and nothing
+// Everything in @pivi/sdk is the contract between pivi and its apps, and nothing
 // else: it imports only zod, vscode-jsonrpc and itself, never host code, so an
-// app can be built from this directory alone (see apps/youtube/Dockerfile).
+// app can be built from this package alone.
 import { NotificationType, NotificationType0, RequestType, RequestType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';

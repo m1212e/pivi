@@ -1,0 +1,6 @@
+{
+	"name": "pivi",
+	"description": "Build apps that connect services to the pivi TV box",
+	"version": "0.1.0",
+	"license": "Apache-2.0"
+}

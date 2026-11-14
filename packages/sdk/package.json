@@ -6,13 +6,19 @@
 	"type": "module",
 	"files": [
 		"dist",
+		"src",
+		"!src/**/*.spec.ts",
 		"schema",
+		"skills",
+		".claude-plugin",
 		"README.md",
-		"LICENSE"
+		"LICENSE",
+		"NOTICE"
 	],
 	"scripts": {
-		"build": "tsdown && bun run schema",
+		"build": "tsdown && bun run schema && bun run skill",
 		"schema": "bun scripts/writeSchema.ts",
+		"skill": "bun scripts/writeSkillReference.ts",
 		"lint:package": "publint && attw --pack . --profile esm-only"
 	},
 	"peerDependencies": {
