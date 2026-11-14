@@ -37,8 +37,8 @@ export default defineConfig(
 		}
 	},
 	// The app boundary. packages/sdk is the whole contract between pivi and its apps, so
-	// it may import nothing of the host's; apps get only @pivi/sdk (their image builds
-	// contain nothing else, see apps/youtube/Dockerfile).
+	// it may import nothing of the host's; apps get only @pivi/sdk (pivi-app bundles
+	// them with nothing else).
 	{
 		files: ['packages/sdk/src/**'],
 		rules: {

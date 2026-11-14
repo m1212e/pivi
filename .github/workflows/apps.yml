@@ -1,12 +1,17 @@
 name: App images
 
-# One image per directory under apps/. Pull requests only check that they still
-# build. Pushes to main and version tags publish to GHCR as
-# ghcr.io/<owner>/<repo>/pivi-<id>. Tags also move `latest`, which is what an
-# untagged suggested app follows.
+# The apps under apps/, published with the pivi-app CLI (packages/cli): each is
+# bundled into one file and added as one layer on its base image, no Docker
+# involved. Pull requests only check that they build. Pushes to main publish
+# ghcr.io/<owner>/<repo>/pivi-<id>:main, version tags publish :<version> and
+# :latest (what an untagged suggested app follows).
+#
+# The YouTube app's base (node + yt-dlp) is the one image built with Docker. It is
+# built only when the tag in apps/youtube/package.json (pivi.base) does not exist
+# yet, which is what bumping yt-dlp or Node in apps/youtube/base/Dockerfile does.
 on:
   pull_request:
-    paths: ['apps/**', 'packages/**', 'scripts/apps.ts', '.dockerignore']
+    paths: ['apps/**', 'packages/**', 'scripts/apps.ts', '.github/workflows/apps.yml']
   push:
     branches: [main]
     tags: ['v*']
@@ -19,6 +24,40 @@ permissions:
   contents: read
 
 jobs:
+  youtube-base:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - id: base
+        run: |
+          ref=$(jq -r .pivi.base apps/youtube/package.json)
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$ref" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.base.outputs.exists != 'true'
+        uses: docker/setup-qemu-action@v4
+      - if: steps.base.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@v4
+      - if: steps.base.outputs.exists != 'true' && github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.base.outputs.exists != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/youtube/base
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.base.outputs.ref }}
+          cache-from: type=gha,scope=youtube-base
+          cache-to: type=gha,mode=max,scope=youtube-base
+
   discover:
     runs-on: ubuntu-latest
     outputs:
@@ -30,7 +69,7 @@ jobs:
           echo "apps=$(find apps -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
   image:
-    needs: discover
+    needs: [discover, youtube-base]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,57 +78,30 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJSON(needs.discover.outputs.apps) }}
+    env:
+      APP: apps/${{ matrix.app }}
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: ${{ env.APP }}
 
-      # The host refuses an image whose manifest label doesn't validate, so the
-      # label comes from the same schema check the local build uses.
-      - id: manifest
-        run: |
-          manifest=$(bun --conditions pivi-source scripts/apps.ts manifest apps/${{ matrix.app }})
-          echo "id=$(jq -r .id <<<"$manifest")" >> "$GITHUB_OUTPUT"
-          echo "version=$(jq -r .version <<<"$manifest")" >> "$GITHUB_OUTPUT"
-          {
-            echo "label<<EOF"
-            echo "dev.pivi.manifest=$manifest"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      # The Pis are arm64 and the host picks its own platform out of the index,
-      # so an amd64-only image is "not published" as far as a TV is concerned.
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
+      # A pull request only builds. A base image the same pull request introduces
+      # is not published until it merges, so its YouTube build fails until then.
+      - if: github.event_name == 'pull_request'
+        run: bun run pivi-app build "$APP"
 
       - if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          flavor: |
-            latest=false
-          images: ghcr.io/${{ github.repository }}/pivi-${{ steps.manifest.outputs.id }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=${{ steps.manifest.outputs.version }},enable=${{ github.ref_type == 'tag' }}
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
-
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/${{ matrix.app }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: |
-            ${{ steps.meta.outputs.labels }}
-            ${{ steps.manifest.outputs.label }}
-          cache-from: type=gha,scope=app-${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=app-${{ matrix.app }}
+        env:
+          PIVI_REGISTRY_USERNAME: ${{ github.actor }}
+          PIVI_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/pivi-$(jq -r .id "$APP/manifest.json")"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # The manifest's version and latest.
+            bun run pivi-app publish "$APP" "$image"
+          else
+            bun run pivi-app publish "$APP" "$image:main"
+          fi

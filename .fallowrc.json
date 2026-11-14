@@ -4,7 +4,7 @@
 	// deploy/pivi-server.mjs is the production entry point (the systemd unit
 	// runs it directly; see DEPLOYMENT.md), so nothing imports it and the
 	// module graph can only see it as an unreachable file. Each app's main.ts is
-	// the entry its image runs (see apps/*/Dockerfile), and the release script
+	// the entry pivi-app bundles into its image, and the release script
 	// and the packages' build scripts are run directly too.
 	"entry": [
 		"src/index.{ts,tsx,js,jsx}",

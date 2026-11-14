@@ -7,7 +7,7 @@
 //   PIVI_SANDBOX_HOME=/tmp/msbh \
 //   npx vitest run --project server sandbox.e2e
 //
-// (Build and sign the image with `bun run app:build` and `cosign sign`; see
+// (Publish the image with `bun run apps:build-all` and sign it with `cosign sign`; see
 // docs/apps.md.) The image is expected to be the YouTube app.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';

@@ -1,7 +1,7 @@
 {
 	"id": "twitch",
 	"name": "Twitch",
-	"version": "0.5.1",
+	"version": "0.6.0",
 	"description": "Watch Twitch live streams and chat on the TV",
 	"protocol": 2,
 	"features": ["dashboard", "screen", "playback", "chat"],
