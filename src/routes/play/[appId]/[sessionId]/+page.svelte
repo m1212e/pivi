@@ -67,18 +67,35 @@
 		title: true,
 		duration: true,
 		qualities: true,
+		controlSeek: true,
+		controlSeekButtons: true,
+		controlPlayPause: true,
+		controlVolume: true,
+		controlSubtitles: true,
+		controlQuality: true,
 		...TIER_FIELDS,
 		subtitleTracks: { language: true, label: true, kind: true }
 	});
 	const duration = info?.duration ?? 0;
 	const title = info?.title ?? '';
 	// Empty for an app without a quality choice, then nothing is capped or offered.
-	const qualities = normalizeQualities(info?.qualities);
+	// What the app allows, a control it doesn't mention stays on.
+	const allowed = {
+		seek: info?.controlSeek ?? true,
+		seekButtons: info?.controlSeekButtons ?? true,
+		playPause: info?.controlPlayPause ?? true,
+		volume: info?.controlVolume ?? true,
+		subtitles: info?.controlSubtitles ?? true,
+		quality: info?.controlQuality ?? true
+	};
+	const qualities = allowed.quality ? normalizeQualities(info?.qualities) : [];
 	const initialQuality = startQuality(qualities, preferredHeight);
-	const subtitleTracks = $derived(toSubtitleTracks(info?.subtitleTracks));
+	const subtitleTracks = $derived(allowed.subtitles ? toSubtitleTracks(info?.subtitleTracks) : []);
 
 	let videoEl: HTMLVideoElement | undefined = $state();
 	let playPauseButton = $state<HTMLButtonElement>();
+	// Focus anchor for when the app hides play/pause, see focusTarget.
+	let playerRoot = $state<HTMLElement>();
 	let quality = $state<QualityOption | undefined>(initialQuality);
 	let volume = $state(loadVolume(storage));
 	// null means captions off.
@@ -125,7 +142,8 @@
 
 	const controls = createControlsVisibility({
 		getPlaying: () => engine.playing,
-		getFocusTarget: () => playPauseButton
+		// Never a button that locking disables, the browser would drop focus to <body>.
+		getFocusTarget: () => playPauseButton ?? playerRoot
 	});
 
 	// Start on the best tier confirmed for MSE, else the start tier. Always from 0,
@@ -165,15 +183,15 @@
 		bindRemotePlayerEvents({
 			onAction: (action) =>
 				({
-					playPause: engine.togglePlayPause,
-					seekBack: () => engine.seekBy(-SEEK_STEP_SECONDS),
-					seekForward: () => engine.seekBy(SEEK_STEP_SECONDS),
+					playPause: () => allowed.playPause && engine.togglePlayPause(),
+					seekBack: () => allowed.seekButtons && engine.seekBy(-SEEK_STEP_SECONDS),
+					seekForward: () => allowed.seekButtons && engine.seekBy(SEEK_STEP_SECONDS),
 					toggleInfo: diagnostics.toggle
 				})[action](),
-			onSeek: engine.seek,
+			onSeek: (seconds) => allowed.seek && engine.seek(seconds),
 			onQuality: selectQuality,
 			onSubtitle: selectSubtitle,
-			onVolume: (target) => (volume = clampVolume(target)),
+			onVolume: (target) => allowed.volume && (volume = clampVolume(target)),
 			getSubtitleTracks: () => subtitleTracks,
 			getQualities: () => qualities
 		})
@@ -200,7 +218,8 @@
 			subtitleLanguage,
 			subtitleTracks,
 			diagnosticsOpen: diagnostics.open,
-			volume
+			volume,
+			controls: allowed
 		})
 	);
 
@@ -222,8 +241,15 @@
 		}
 	});
 
-	// Focus something on arrival so a remote has a starting point.
-	$effect(() => playPauseButton?.focus());
+	// Focus something on arrival so a remote has a starting point: play/pause
+	// when the app allows it, else the first enabled button, else the player.
+	$effect(() =>
+		(
+			playPauseButton ??
+			playerRoot?.querySelector<HTMLElement>('button:not([disabled])') ??
+			playerRoot
+		)?.focus()
+	);
 
 	function goBack() {
 		history.back();
@@ -256,7 +282,13 @@
 <svelte:head><title>{title || m.playing()}</title></svelte:head>
 
 <!-- Named so the selected card grows into it, see +layout.svelte. -->
-<div class="fixed inset-0 bg-black" style:view-transition-name="player-video" {...bridgeAttributes}>
+<div
+	bind:this={playerRoot}
+	tabindex="-1"
+	class="fixed inset-0 bg-black outline-none"
+	style:view-transition-name="player-video"
+	{...bridgeAttributes}
+>
 	{#if engine.failed}
 		<ErrorScreen message={m.stream_stopped()} onBack={goBack} />
 	{:else}
@@ -318,6 +350,7 @@
 			{subtitleLanguage}
 			{qualities}
 			{quality}
+			controls={allowed}
 			modeFor={catalog.modeFor}
 			onTogglePlay={engine.togglePlayPause}
 			onSeekBy={engine.seekBy}

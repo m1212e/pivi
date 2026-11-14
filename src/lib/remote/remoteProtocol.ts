@@ -130,6 +130,15 @@ const subtitleTrackSchema = z.object({
 	kind: z.enum(['caption', 'transcription'])
 });
 
+const playerControlsStateSchema = z.object({
+	seek: z.boolean(),
+	seekButtons: z.boolean(),
+	playPause: z.boolean(),
+	volume: z.boolean(),
+	subtitles: z.boolean(),
+	quality: z.boolean()
+});
+
 // Snapshot of what the TV is showing, pushed so the phone can pick the matching
 // input surface (see remoteTabs.ts) and mirror player state. The player fields
 // are placeholders while `hasPlayer` is false.
@@ -177,7 +186,17 @@ export const stateParamsSchema = z.object({
 	// Mirrored so the phone's info toggle can't fall out of sync with the TV.
 	diagnosticsOpen: z.boolean(),
 	// 0..1, so the phone's volume slider starts where the TV's is.
-	volume: z.number()
+	volume: z.number(),
+	// Which controls the app allows for this stream (a live one has no seeking).
+	// The phone hides the rest, the TV ignores their commands anyway.
+	controls: playerControlsStateSchema.default({
+		seek: true,
+		seekButtons: true,
+		playPause: true,
+		volume: true,
+		subtitles: true,
+		quality: true
+	})
 });
 export const stateNotification = new NotificationType<z.infer<typeof stateParamsSchema>>(
 	'remote/state'

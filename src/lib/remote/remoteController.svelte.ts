@@ -79,7 +79,15 @@ const INITIAL_TV_STATE: TvState = {
 	subtitleTracks: [],
 	subtitleLanguage: null,
 	diagnosticsOpen: false,
-	volume: 0
+	volume: 0,
+	controls: {
+		seek: true,
+		seekButtons: true,
+		playPause: true,
+		volume: true,
+		subtitles: true,
+		quality: true
+	}
 };
 
 // Haptic feedback lengths in ms, so each kind of action feels distinct.

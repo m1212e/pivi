@@ -88,6 +88,12 @@ export type AppNextSession = {
 export type AppPlaybackInfo = {
 	acodec: String | null;
 	audioContainer: String | null;
+	controlPlayPause: Boolean;
+	controlQuality: Boolean;
+	controlSeek: Boolean;
+	controlSeekButtons: Boolean;
+	controlSubtitles: Boolean;
+	controlVolume: Boolean;
 	direct: Boolean;
 	duration: Float;
 	qualities: Int[];

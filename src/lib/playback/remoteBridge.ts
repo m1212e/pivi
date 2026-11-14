@@ -69,6 +69,7 @@ type BridgeState = {
 	subtitleTracks: readonly { language: string; label: string | null; kind: string }[];
 	diagnosticsOpen: boolean;
 	volume: number;
+	controls: Record<string, boolean>;
 };
 
 /** Attributes for the player's root element, the state RemoteBridge mirrors onto the phone. */
@@ -84,6 +85,7 @@ export function playerBridgeAttributes(state: BridgeState) {
 		'data-pivi-player-subtitle-language': state.subtitleLanguage ?? '',
 		'data-pivi-player-subtitle-tracks': JSON.stringify(state.subtitleTracks),
 		'data-pivi-player-diagnostics-open': state.diagnosticsOpen,
-		'data-pivi-player-volume': state.volume
+		'data-pivi-player-volume': state.volume,
+		'data-pivi-player-controls': JSON.stringify(state.controls)
 	};
 }

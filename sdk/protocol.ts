@@ -71,6 +71,27 @@ const subtitleTrackSchema = z.object({
 export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
 
 /**
+ * Which shared player controls an app wants shown for a stream, so a live
+ * stream can drop scrubbing and skip buttons. Every flag is optional and
+ * defaults to true, an app that sends none gets the full player. This only
+ * hides controls, the stream itself is unaffected.
+ */
+export const playerControlsSchema = z.object({
+	// The progress bar and dragging it, also the phone's seek slider.
+	seek: z.boolean().optional(),
+	// The skip back / forward buttons, also the phone's.
+	seekButtons: z.boolean().optional(),
+	// The play/pause button, also the phone's.
+	playPause: z.boolean().optional(),
+	volume: z.boolean().optional(),
+	// Hides the subtitle picker even when the stream carries tracks.
+	subtitles: z.boolean().optional(),
+	// Hides the quality picker even when `qualities` lists tiers.
+	quality: z.boolean().optional()
+});
+export type PlayerControls = z.infer<typeof playerControlsSchema>;
+
+/**
  * The generic answer to `app/resolveStream`, so the shared player and the
  * stream proxy never need to know an app's source. Audio is separate because
  * most sources serve video-only plus audio-only, which the proxy remuxes, and
@@ -97,7 +118,9 @@ export const resolvedStreamSchema = z.object({
 	// Absent (not just empty) for an app that has no subtitle source at
 	// all. Same "optional, treated as none" convention resolveSkipSegments
 	// uses for an app with no handler registered.
-	subtitleTracks: z.array(subtitleTrackSchema).max(MAX_LIST_ITEMS).optional()
+	subtitleTracks: z.array(subtitleTrackSchema).max(MAX_LIST_ITEMS).optional(),
+	// Absent means every control is available, see playerControlsSchema.
+	controls: playerControlsSchema.optional()
 });
 export type ResolvedStream = z.infer<typeof resolvedStreamSchema>;
 

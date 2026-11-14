@@ -6,12 +6,18 @@
 	let {
 		playing,
 		locked,
+		showSeekButtons = true,
+		showPlayPause = true,
 		playPauseButton = $bindable(),
 		onTogglePlay,
 		onSeekBy
 	}: {
 		playing: boolean;
 		locked: boolean;
+		/** False for a stream that can't be skipped through, like a live one. */
+		showSeekButtons?: boolean;
+		/** False when the app doesn't allow pausing, like a live stream. */
+		showPlayPause?: boolean;
 		/** The one control that stays usable while locked, so it also takes focus when the rest hides. */
 		playPauseButton?: HTMLButtonElement;
 		onTogglePlay: () => void;
@@ -23,37 +29,43 @@
 </script>
 
 <div class="flex flex-wrap items-center justify-center gap-3 justify-self-center">
-	<button
-		type="button"
-		onclick={() => onSeekBy(-SEEK_STEP_SECONDS)}
-		disabled={locked}
-		aria-label={m.seek_back()}
-		class={sideButtonClass}
-	>
-		<RotateCcw class="size-5" />
-		{SEEK_STEP_SECONDS}
-	</button>
-	<button
-		bind:this={playPauseButton}
-		type="button"
-		onclick={onTogglePlay}
-		aria-label={playing ? m.pause() : m.play()}
-		class="rounded-full bg-white p-3 text-slate-950 shadow-lg transition hover:bg-white/90 focus:outline-none"
-	>
-		{#if playing}
-			<Pause class="size-5" fill="currentColor" />
-		{:else}
-			<Play class="size-5" fill="currentColor" />
-		{/if}
-	</button>
-	<button
-		type="button"
-		onclick={() => onSeekBy(SEEK_STEP_SECONDS)}
-		disabled={locked}
-		aria-label={m.seek_forward()}
-		class={sideButtonClass}
-	>
-		{SEEK_STEP_SECONDS}
-		<RotateCw class="size-5" />
-	</button>
+	{#if showSeekButtons}
+		<button
+			type="button"
+			onclick={() => onSeekBy(-SEEK_STEP_SECONDS)}
+			disabled={locked}
+			aria-label={m.seek_back()}
+			class={sideButtonClass}
+		>
+			<RotateCcw class="size-5" />
+			{SEEK_STEP_SECONDS}
+		</button>
+	{/if}
+	{#if showPlayPause}
+		<button
+			bind:this={playPauseButton}
+			type="button"
+			onclick={onTogglePlay}
+			aria-label={playing ? m.pause() : m.play()}
+			class="rounded-full bg-white p-3 text-slate-950 shadow-lg transition hover:bg-white/90 focus:outline-none"
+		>
+			{#if playing}
+				<Pause class="size-5" fill="currentColor" />
+			{:else}
+				<Play class="size-5" fill="currentColor" />
+			{/if}
+		</button>
+	{/if}
+	{#if showSeekButtons}
+		<button
+			type="button"
+			onclick={() => onSeekBy(SEEK_STEP_SECONDS)}
+			disabled={locked}
+			aria-label={m.seek_forward()}
+			class={sideButtonClass}
+		>
+			{SEEK_STEP_SECONDS}
+			<RotateCw class="size-5" />
+		</button>
+	{/if}
 </div>

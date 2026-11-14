@@ -190,7 +190,15 @@
 		}[],
 		subtitleLanguage: null as string | null,
 		diagnosticsOpen: false,
-		volume: 0
+		volume: 0,
+		controls: {
+			seek: true,
+			seekButtons: true,
+			playPause: true,
+			volume: true,
+			subtitles: true,
+			quality: true
+		}
 	};
 
 	function numberAttr(value: string | undefined): number {
@@ -225,7 +233,8 @@
 			// Attributes can't hold null, so the player writes "" for subtitles off.
 			subtitleLanguage: data.piviPlayerSubtitleLanguage || null,
 			diagnosticsOpen: data.piviPlayerDiagnosticsOpen === 'true',
-			volume: numberAttr(data.piviPlayerVolume)
+			volume: numberAttr(data.piviPlayerVolume),
+			controls: jsonAttr(data.piviPlayerControls, NO_PLAYER_PROGRESS.controls)
 		};
 	}
 

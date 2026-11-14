@@ -38,7 +38,14 @@ function toGraphqlPlaybackInfo(stream: ResolvedStream) {
 		videoContainer,
 		audioContainer: audioContainer ?? null,
 		qualities: stream.qualities ?? [],
-		subtitleTracks: toGraphqlSubtitleTracks(stream.subtitleTracks)
+		subtitleTracks: toGraphqlSubtitleTracks(stream.subtitleTracks),
+		// Flags the app left out are on.
+		controlSeek: stream.controls?.seek ?? true,
+		controlSeekButtons: stream.controls?.seekButtons ?? true,
+		controlPlayPause: stream.controls?.playPause ?? true,
+		controlVolume: stream.controls?.volume ?? true,
+		controlSubtitles: stream.controls?.subtitles ?? true,
+		controlQuality: stream.controls?.quality ?? true
 	};
 }
 
@@ -70,6 +77,12 @@ type AppPlaybackInfo = {
 	audioContainer: string | null;
 	qualities: number[];
 	subtitleTracks: AppSubtitleTrack[];
+	controlSeek: boolean;
+	controlSeekButtons: boolean;
+	controlPlayPause: boolean;
+	controlVolume: boolean;
+	controlSubtitles: boolean;
+	controlQuality: boolean;
 };
 
 const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlaybackInfo').implement({
@@ -86,6 +99,13 @@ const AppPlaybackInfoRef = schemaBuilder.objectRef<AppPlaybackInfo>('AppPlayback
 		videoContainer: t.exposeString('videoContainer'),
 		audioContainer: t.exposeString('audioContainer', { nullable: true }),
 		qualities: t.exposeIntList('qualities'),
+		// Which player controls the app allows, see #sdk/protocol's playerControlsSchema.
+		controlSeek: t.exposeBoolean('controlSeek'),
+		controlSeekButtons: t.exposeBoolean('controlSeekButtons'),
+		controlPlayPause: t.exposeBoolean('controlPlayPause'),
+		controlVolume: t.exposeBoolean('controlVolume'),
+		controlSubtitles: t.exposeBoolean('controlSubtitles'),
+		controlQuality: t.exposeBoolean('controlQuality'),
 		subtitleTracks: t.field({
 			type: [AppSubtitleTrackRef],
 			resolve: (parent) => parent.subtitleTracks

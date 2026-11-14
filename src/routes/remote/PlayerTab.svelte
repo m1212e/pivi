@@ -69,72 +69,85 @@
 		class="flex items-center justify-center gap-4"
 		in:fly|global={{ y: 24, duration: 400, delay: 0 }}
 	>
-		<button
-			type="button"
-			onclick={() => remote.playerAction('seekBack')}
-			aria-label={m.seek_back()}
-			class={sideButtonClass}
-		>
-			<RotateCcw class="size-6" />
-		</button>
-		<button
-			type="button"
-			onclick={() => remote.playerAction('playPause')}
-			aria-label={m.play_pause()}
-			class="flex size-20 items-center justify-center rounded-full bg-white text-slate-950 shadow-lg transition hover:bg-white/90 focus:outline-none"
-		>
-			{#if tv.playing}
-				<Pause class="size-8" fill="currentColor" />
-			{:else}
-				<Play class="size-8" fill="currentColor" />
-			{/if}
-		</button>
-		<button
-			type="button"
-			onclick={() => remote.playerAction('seekForward')}
-			aria-label={m.seek_forward()}
-			class={sideButtonClass}
-		>
-			<RotateCw class="size-6" />
-		</button>
+		{#if tv.controls.seekButtons}
+			<button
+				type="button"
+				onclick={() => remote.playerAction('seekBack')}
+				aria-label={m.seek_back()}
+				class={sideButtonClass}
+			>
+				<RotateCcw class="size-6" />
+			</button>
+		{/if}
+		{#if tv.controls.playPause}
+			<button
+				type="button"
+				onclick={() => remote.playerAction('playPause')}
+				aria-label={m.play_pause()}
+				class="flex size-20 items-center justify-center rounded-full bg-white text-slate-950 shadow-lg transition hover:bg-white/90 focus:outline-none"
+			>
+				{#if tv.playing}
+					<Pause class="size-8" fill="currentColor" />
+				{:else}
+					<Play class="size-8" fill="currentColor" />
+				{/if}
+			</button>
+		{/if}
+		{#if tv.controls.seekButtons}
+			<button
+				type="button"
+				onclick={() => remote.playerAction('seekForward')}
+				aria-label={m.seek_forward()}
+				class={sideButtonClass}
+			>
+				<RotateCw class="size-6" />
+			</button>
+		{/if}
 	</div>
 
-	<div class="flex w-full items-center gap-3" in:fly|global={{ y: 24, duration: 400, delay: 70 }}>
-		<Volume2 class="size-5 shrink-0 text-white/60" aria-hidden="true" />
-		<!-- The default ('md') size, deliberately thicker than the seek bar
+	{#if tv.controls.volume}
+		<div class="flex w-full items-center gap-3" in:fly|global={{ y: 24, duration: 400, delay: 70 }}>
+			<Volume2 class="size-5 shrink-0 text-white/60" aria-hidden="true" />
+			<!-- The default ('md') size, deliberately thicker than the seek bar
 		     below, since volume is the control most worth hitting without looking. -->
-		<Slider
-			bind:value={scrubVolume}
-			liveValue={tv.volume}
-			onChange={remote.setVolume}
-			min={0}
-			max={1}
-			step={0.02}
-			orientation="horizontal"
-			label={m.volume()}
-		/>
-	</div>
+			<Slider
+				bind:value={scrubVolume}
+				liveValue={tv.volume}
+				onChange={remote.setVolume}
+				min={0}
+				max={1}
+				step={0.02}
+				orientation="horizontal"
+				label={m.volume()}
+			/>
+		</div>
+	{/if}
 
-	<div class="flex w-full items-center gap-3" in:fly|global={{ y: 24, duration: 400, delay: 140 }}>
-		<span class="w-10 text-right text-xs text-white/60 tabular-nums">
-			{formatTime(scrubPosition)}
-		</span>
-		<Slider
-			bind:value={scrubPosition}
-			liveValue={tv.position}
-			onCommit={remote.seek}
-			min={0}
-			max={tv.duration}
-			step={1}
-			orientation="horizontal"
-			label={m.seek()}
-			sensitivity={1500}
-			size="sm"
-		/>
-		<span class="w-10 text-xs text-white/60 tabular-nums">{formatTime(tv.duration)}</span>
-	</div>
+	{#if tv.controls.seek}
+		<div
+			class="flex w-full items-center gap-3"
+			in:fly|global={{ y: 24, duration: 400, delay: 140 }}
+		>
+			<span class="w-10 text-right text-xs text-white/60 tabular-nums">
+				{formatTime(scrubPosition)}
+			</span>
+			<Slider
+				bind:value={scrubPosition}
+				liveValue={tv.position}
+				onCommit={remote.seek}
+				min={0}
+				max={tv.duration}
+				step={1}
+				orientation="horizontal"
+				label={m.seek()}
+				sensitivity={1500}
+				size="sm"
+			/>
+			<span class="w-10 text-xs text-white/60 tabular-nums">{formatTime(tv.duration)}</span>
+		</div>
+	{/if}
 
-	{#if tv.qualityOptions.length > 1}
+	{#if tv.controls.quality && tv.qualityOptions.length > 1}
 		<div
 			class="flex flex-col items-center gap-2"
 			in:fly|global={{ y: 24, duration: 400, delay: 210 }}
@@ -157,7 +170,7 @@
 
 	<!-- Only once the TV has reported tracks. Most sessions have none, and an
 	     Off-only picker would be noise for no real choice. -->
-	{#if tv.subtitleTracks.length > 0}
+	{#if tv.controls.subtitles && tv.subtitleTracks.length > 0}
 		<div
 			class="flex flex-col items-center gap-2"
 			in:fly|global={{ y: 24, duration: 400, delay: 245 }}

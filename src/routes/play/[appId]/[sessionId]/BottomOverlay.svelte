@@ -18,6 +18,7 @@
 		subtitleLanguage,
 		qualities,
 		quality,
+		controls,
 		modeFor,
 		onTogglePlay,
 		onSeekBy,
@@ -36,6 +37,8 @@
 		subtitleLanguage: string | null;
 		qualities: readonly QualityOption[];
 		quality: QualityOption | undefined;
+		/** What the app allows for this stream, a hidden control leaves no gap. */
+		controls: { seek: boolean; seekButtons: boolean; playPause: boolean; volume: boolean };
 		modeFor: (option: QualityOption) => QualityMode | undefined;
 		onTogglePlay: () => void;
 		onSeekBy: (deltaSeconds: number) => void;
@@ -55,8 +58,19 @@
 	<!-- Three grid tracks instead of flex, so the playback controls stay
 	     centered whatever the side columns contain. -->
 	<div class="grid grid-cols-3 items-end gap-6">
-		<VolumeControl bind:volume {locked} />
-		<TransportControls bind:playPauseButton {playing} {locked} {onTogglePlay} {onSeekBy} />
+		<!-- Empty cell instead of nothing, so the transport controls stay centered. -->
+		<div class="justify-self-start">
+			{#if controls.volume}<VolumeControl bind:volume {locked} />{/if}
+		</div>
+		<TransportControls
+			bind:playPauseButton
+			{playing}
+			{locked}
+			showSeekButtons={controls.seekButtons}
+			showPlayPause={controls.playPause}
+			{onTogglePlay}
+			{onSeekBy}
+		/>
 		<TrackPickers
 			{subtitleTracks}
 			{subtitleLanguage}
@@ -69,5 +83,7 @@
 		/>
 	</div>
 
-	<ProgressBar {position} {duration} {locked} {onSeek} />
+	{#if controls.seek}
+		<ProgressBar {position} {duration} {locked} {onSeek} />
+	{/if}
 </div>
