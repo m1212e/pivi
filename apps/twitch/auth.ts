@@ -102,27 +102,64 @@ function postForm(path: string, form: Record<string, string>): Promise<Response>
 	});
 }
 
-async function refresh(): Promise<boolean> {
-	if (!tokens?.refreshToken) return false;
-	const response = await postForm('token', {
-		client_id: TV_CLIENT_ID,
-		grant_type: 'refresh_token',
-		refresh_token: tokens.refreshToken
-	});
-	if (!response.ok) return false;
-	await save(toTokens((await response.json()) as TokenResponse));
-	return true;
+type RefreshResult = 'ok' | 'invalid' | 'transient';
+
+let refreshing: Promise<RefreshResult> | undefined;
+
+/**
+ * Renews the tokens. 'invalid' only when Twitch definitively refused the
+ * refresh token (400/401, e.g. invalid_grant), 'transient' for network errors,
+ * timeouts and 5xx, which keep the session for a later retry. Single-flight:
+ * concurrent callers share one request, so a rotated refresh token is never
+ * sent twice.
+ */
+function refresh(): Promise<RefreshResult> {
+	refreshing ??= runRefresh().finally(() => (refreshing = undefined));
+	return refreshing;
+}
+
+async function runRefresh(): Promise<RefreshResult> {
+	const current = tokens;
+	if (!current?.refreshToken) return current ? 'invalid' : 'transient';
+	let response: Response;
+	try {
+		response = await postForm('token', {
+			client_id: TV_CLIENT_ID,
+			grant_type: 'refresh_token',
+			refresh_token: current.refreshToken
+		});
+	} catch {
+		return 'transient';
+	}
+	if (response.status === 400 || response.status === 401) return 'invalid';
+	if (!response.ok) return 'transient';
+	let body: TokenResponse;
+	try {
+		body = (await response.json()) as TokenResponse;
+	} catch {
+		return 'transient';
+	}
+	if (typeof body.access_token !== 'string') return 'transient';
+	// Signed out (or signed in anew) while the request ran: don't resurrect.
+	if (tokens !== current) return tokens ? 'ok' : 'invalid';
+	const next = toTokens(body);
+	// Twitch may leave the refresh token out when it didn't rotate it.
+	next.refreshToken ??= current.refreshToken;
+	next.scopes ??= current.scopes;
+	await save(next);
+	return 'ok';
 }
 
 /**
  * The token to send, refreshed first when it's about to run out. Undefined
- * when signed out, or when the session can't be renewed anymore, which signs
- * out.
+ * when signed out, or when Twitch refused to renew the session, which signs
+ * out. A transient refresh failure keeps the session and the current token,
+ * the next call retries.
  */
 export async function accessToken(): Promise<string | undefined> {
 	if (!tokens) return undefined;
 	if (tokens.expiresAt && Date.now() > tokens.expiresAt - EXPIRY_MARGIN_MS) {
-		if (!(await refresh().catch(() => false))) await save(undefined);
+		if ((await refresh()) === 'invalid') await save(undefined);
 	}
 	return tokens?.accessToken;
 }
@@ -130,10 +167,12 @@ export async function accessToken(): Promise<string | undefined> {
 /**
  * Called when Twitch rejected the token anyway (revoked, or expired without
  * an expiry we knew of). True when a refresh got a new one to retry with.
+ * Signs out only when the refresh was definitively refused.
  */
 export async function recoverFromRejection(): Promise<boolean> {
-	if (await refresh().catch(() => false)) return true;
-	await save(undefined);
+	const result = await refresh();
+	if (result === 'ok') return true;
+	if (result === 'invalid') await save(undefined);
 	return false;
 }
 
