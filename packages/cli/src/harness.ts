@@ -20,11 +20,6 @@ export type HarnessOptions = {
 	dir: string;
 	/** The entry file, relative to `dir`. */
 	entry?: string;
-	/**
-	 * A command to run the entry's source with instead (e.g. `bun run`). By default the
-	 * app is bundled with tsdown and the bundle runs on node, exactly as in the image.
-	 */
-	runtime?: string[];
 	/** Extra export conditions for bundling, e.g. `pivi-source` inside the pivi repository. */
 	conditions?: string[];
 	locale?: string;
@@ -117,15 +112,13 @@ export class Harness {
 		};
 	}
 
-	/** The process to start: the bundle on node, or the source with a custom runtime. */
+	/** The process to start: the app bundled with tsdown, exactly as the image gets it, on node. */
 	private async command(): Promise<string[]> {
-		const entry = this.options.entry ?? 'main.ts';
-		if (this.options.runtime) return [...this.options.runtime, join(this.dir, entry)];
-		const bundle = await bundleTo(this.dir, join(this.dir, '.pivi-dev', 'build'), {
-			entry,
+		const bundle = await bundleTo(this.dir, join(this.dir, '.pivi-dev', 'bundle'), {
+			entry: this.options.entry,
 			conditions: this.options.conditions
 		});
-		return [process.execPath.includes('node') ? process.execPath : 'node', bundle];
+		return [process.execPath.endsWith('node') ? process.execPath : 'node', bundle];
 	}
 
 	async start() {
@@ -150,7 +143,13 @@ export class Harness {
 			}
 		});
 		this.child = child;
-		child.on('error', (error) => this.problem(`could not start the app: ${error.message}`));
+		child.on('error', (error) =>
+			this.problem(
+				(error as NodeJS.ErrnoException).code === 'ENOENT'
+					? `${command} is not installed: pivi-app dev runs the app on node`
+					: `could not start the app: ${error.message}`
+			)
+		);
 		child.on('exit', (code, signal) => {
 			this.emit(`app exited (${signal ?? code})`);
 			for (const [id, p] of this.pending) {
@@ -173,6 +172,9 @@ export class Harness {
 				READY_TIMEOUT_MS
 			).unref();
 			child.once('exit', () => fail(new Error('the app exited before it was ready')));
+			child.once('error', (error) =>
+				fail(new Error(`could not start ${command}: ${error.message}`))
+			);
 		});
 		await readyPromise;
 		this.activated = true;
@@ -356,7 +358,8 @@ export class Harness {
 
 	async stop() {
 		const child = this.child;
-		if (child && child.exitCode === null) {
+		// A process that never started (node is missing) has no pid and never exits.
+		if (child && child.exitCode === null && child.pid !== undefined) {
 			this.send({ method: 'host/shutdown' });
 			child.stdin?.end();
 			await new Promise<void>((done) => {

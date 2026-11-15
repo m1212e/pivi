@@ -2,18 +2,16 @@
 // package.json, so a project's build is reproducible without flags:
 //
 //   "pivi": {
-//     "base": "ghcr.io/me/my-base:1",            image to build on (default node:26-alpine)
 //     "platforms": ["linux/amd64", "linux/arm64"],
 //     "entry": "main.ts",
 //     "conditions": ["pivi-source"]               export conditions for bundling
 //   }
 //
-// Command line flags win over these.
+// The image itself is described by the project's Containerfile. Flags win over these.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type AppConfig = {
-	base?: string;
 	platforms?: string[];
 	entry?: string;
 	conditions?: string[];
@@ -42,7 +40,6 @@ export function readAppConfig(dir: string): AppConfig {
 	}
 	const section = pkg.pivi ?? {};
 	return {
-		base: string(section.base, 'base'),
 		platforms: strings(section.platforms, 'platforms'),
 		entry: string(section.entry, 'entry'),
 		conditions: strings(section.conditions, 'conditions')

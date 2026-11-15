@@ -1,14 +1,10 @@
 name: App images
 
-# The apps under apps/, published with the pivi-app CLI (packages/cli): each is
-# bundled into one file and added as one layer on its base image, no Docker
-# involved. Pull requests only check that they build. Pushes to main publish
-# ghcr.io/<owner>/<repo>/pivi-<id>:main, version tags publish :<version> and
-# :latest (what an untagged suggested app follows).
-#
-# The YouTube app's base (node + yt-dlp) is the one image built with Docker. It is
-# built only when the tag in apps/youtube/package.json (pivi.base) does not exist
-# yet, which is what bumping yt-dlp or Node in apps/youtube/base/Dockerfile does.
+# The apps under apps/, built and published with the pivi-app CLI (packages/cli):
+# each is bundled with tsdown and built from its Containerfile with buildah, for
+# linux/amd64 and linux/arm64. Pull requests only check that they build. Pushes
+# to main publish ghcr.io/<owner>/<repo>/pivi-<id>:main, version tags publish
+# :<version> and :latest (what an untagged suggested app follows).
 on:
   pull_request:
     paths: ['apps/**', 'packages/**', 'scripts/apps.ts', '.github/workflows/apps.yml']
@@ -24,40 +20,6 @@ permissions:
   contents: read
 
 jobs:
-  youtube-base:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-      - id: base
-        run: |
-          ref=$(jq -r .pivi.base apps/youtube/package.json)
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          if docker buildx imagetools inspect "$ref" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.base.outputs.exists != 'true'
-        uses: docker/setup-qemu-action@v4
-      - if: steps.base.outputs.exists != 'true'
-        uses: docker/setup-buildx-action@v4
-      - if: steps.base.outputs.exists != 'true' && github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - if: steps.base.outputs.exists != 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: apps/youtube/base
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.base.outputs.ref }}
-          cache-from: type=gha,scope=youtube-base
-          cache-to: type=gha,mode=max,scope=youtube-base
-
   discover:
     runs-on: ubuntu-latest
     outputs:
@@ -69,7 +31,7 @@ jobs:
           echo "apps=$(find apps -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
   image:
-    needs: [discover, youtube-base]
+    needs: discover
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -80,15 +42,18 @@ jobs:
         app: ${{ fromJSON(needs.discover.outputs.apps) }}
     env:
       APP: apps/${{ matrix.app }}
+      # The runner has podman too: build with buildah, as the generated projects do.
+      PIVI_BUILDER: buildah
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+      # RUN steps in a Containerfile (YouTube's yt-dlp) run under QEMU for arm64.
+      - uses: docker/setup-qemu-action@v4
+      - run: buildah --version
       - run: bun install --frozen-lockfile
       - run: bun install --frozen-lockfile
         working-directory: ${{ env.APP }}
 
-      # A pull request only builds. A base image the same pull request introduces
-      # is not published until it merges, so its YouTube build fails until then.
       - if: github.event_name == 'pull_request'
         run: bun run pivi-app build "$APP"
 

@@ -31,6 +31,9 @@
 	//
 	// And the two @inlang plugins, which project.inlang/settings.json loads by
 	// path (`modules`), never by import.
+	// System tools the pivi-app CLI runs, not npm packages: buildah or podman build
+	// app images and skopeo signs them (packages/cli/src/image).
+	"ignoreBinaries": ["buildah", "podman", "skopeo"],
 	"ignoreDependencies": [
 		"pg",
 		"@inlang/plugin-message-format",

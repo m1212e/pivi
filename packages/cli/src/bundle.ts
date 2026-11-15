@@ -1,8 +1,6 @@
 // Bundles an app into the single JavaScript file its image runs: main.ts, the
 // SDK and every dependency, as one ESM file for Node. Built with tsdown, so what
 // `pivi-app dev` runs and what pivi runs come out of the same build.
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { build } from 'tsdown';
 
@@ -55,14 +53,4 @@ export async function bundleTo(
 		}
 	});
 	return join(outDir, 'main.mjs');
-}
-
-/** The bundle as bytes, for the image layer. */
-export async function bundleApp(dir: string, options: BundleOptions = {}): Promise<Buffer> {
-	const out = mkdtempSync(join(tmpdir(), 'pivi-bundle-'));
-	try {
-		return readFileSync(await bundleTo(dir, out, options));
-	} finally {
-		rmSync(out, { recursive: true, force: true });
-	}
 }

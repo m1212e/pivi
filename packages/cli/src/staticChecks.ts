@@ -51,20 +51,18 @@ function checkFiles(root: string, entry: string, manifest: AppManifest): Finding
 		);
 	}
 	if (!existsSync(join(root, entry))) findings.push(error(`entry file ${entry} not found`));
-	// A Dockerfile is optional (pivi-app build needs none), but one that copies the
-	// project into its build should not take local installs along.
-	if (existsSync(join(root, 'Dockerfile'))) {
-		// The build context may be a parent directory (a monorepo), so look upwards a little.
-		const ignoreFiles = [root, resolve(root, '..'), resolve(root, '../..')]
-			.map((d) => join(d, '.dockerignore'))
-			.filter((f) => existsSync(f));
-		if (!ignoreFiles.some((f) => /node_modules/.test(readFileSync(f, 'utf8')))) {
-			findings.push(
-				warning(
-					'.dockerignore should list node_modules so local installs do not leak into the image'
-				)
-			);
-		}
+	// The project's Containerfile takes the whole directory as build context unless an
+	// ignore file keeps node_modules (and everything but the bundle) out.
+	const ownFile = ['Containerfile', 'Dockerfile'].some((name) => existsSync(join(root, name)));
+	const ignoreFiles = ['.containerignore', '.dockerignore']
+		.map((name) => join(root, name))
+		.filter((f) => existsSync(f));
+	if (ownFile && !ignoreFiles.some((f) => /node_modules|^\*$/m.test(readFileSync(f, 'utf8')))) {
+		findings.push(
+			warning(
+				'.containerignore should keep node_modules out of the build context (pivi-app init writes one)'
+			)
+		);
 	}
 	return findings;
 }
@@ -95,8 +93,19 @@ function checkHabits(source: string): Finding[] {
 			warning('writing to stdout corrupts the protocol channel, log to stderr instead')
 		);
 	}
-	if (/\bBun\.[a-zA-Z]|from ['"]bun(:[a-z]+)?['"]/.test(source)) {
-		findings.push(warning('Bun APIs are used, but the image runs the app on Node: use Node APIs'));
+	// The image runs the app on node, so Bun's and Deno's own APIs would crash there.
+	const runtimeOnly = [
+		[/\bBun\.[a-zA-Z]|from ['"]bun(:[a-z]+)?['"]/, 'Bun'],
+		[/\bDeno\.[a-zA-Z]|from ['"](jsr|npm):/, 'Deno']
+	] as const;
+	for (const [pattern, runtime] of runtimeOnly) {
+		if (pattern.test(source)) {
+			findings.push(
+				warning(
+					`${runtime}-only APIs are used, but the app runs on node: use web standards and node: built-ins`
+				)
+			);
+		}
 	}
 	if (/['"`]\/(storage|cache)(\/|['"`])/.test(source)) {
 		findings.push(

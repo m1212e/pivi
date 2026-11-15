@@ -51,11 +51,6 @@ export function formatReference(ref: ImageRef): string {
 	return `${name}:${ref.tag ?? 'latest'}`;
 }
 
-/** The host the API is served from: Docker Hub's API lives on another name than its references. */
-export function apiHost(registry: string): string {
-	return registry === DOCKER_HUB ? 'registry-1.docker.io' : registry;
-}
-
 /** Registries on this machine are spoken to over plain http, like docker does for localhost. */
 export function isLocal(registry: string): boolean {
 	const host = registry.replace(/:\d+$/, '');

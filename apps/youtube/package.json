@@ -2,7 +2,7 @@
 	"name": "pivi-app-youtube",
 	"private": true,
 	"type": "module",
-	"description": "Dependencies of the YouTube app, pinned by this directory's own bun.lock. pivi-app bundles them into the app; the image's base (pivi.base, built from base/Dockerfile) adds yt-dlp.",
+	"description": "Dependencies of the YouTube app, pinned by this directory's own bun.lock. pivi-app bundles them into the app; the Containerfile adds yt-dlp.",
 	"dependencies": {
 		"@pivi/sdk": "file:../../packages/sdk",
 		"vscode-jsonrpc": "^10.0.0",
@@ -10,7 +10,6 @@
 		"zod": "^4.5.4"
 	},
 	"pivi": {
-		"base": "ghcr.io/m1212e/pivi/pivi-youtube-base:2026.10.26-node26",
 		"conditions": [
 			"pivi-source"
 		]

@@ -9,8 +9,9 @@ export type DevOptions = {
 	watch?: boolean;
 	enforce?: boolean;
 	locale?: string;
-	runtime?: string[];
 	conditions?: string[];
+	/** Serve a visual preview of the published screens on this port (0: any free one). */
+	preview?: number;
 };
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -21,7 +22,6 @@ function createHarness(dir: string, options: DevOptions): Harness | undefined {
 			dir,
 			entry: options.entry,
 			locale: options.locale,
-			runtime: options.runtime,
 			conditions: options.conditions,
 			enforceNetwork: options.enforce,
 			onEvent: (line) => console.log(line)
@@ -111,5 +111,10 @@ export async function dev(dir: string, options: DevOptions): Promise<number> {
 
 	if (options.exec.length > 0) return runOnce(harness, options.exec);
 	if (options.watch) watchSources(harness, dir);
+	if (options.preview !== undefined) {
+		const { startPreview } = await import('../preview');
+		const preview = await startPreview(harness, options.preview);
+		console.log(`Preview: ${preview.url}`);
+	}
 	return repl(harness);
 }

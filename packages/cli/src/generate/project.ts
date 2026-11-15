@@ -1,3 +1,4 @@
+import { containerfile, containerignore } from '../image/containerfile';
 import type { InitOptions } from './options';
 
 const json = (value: unknown) => `${JSON.stringify(value, null, '\t')}\n`;
@@ -153,7 +154,9 @@ defineApp((app) => {
 `;
 }
 
-const manifestSpec = `import { expect, test } from 'bun:test';
+// Imports from vitest: `bun test` maps those onto its own runner, and the same file runs
+// under vitest on Node, so the tests use no Bun-only API.
+const manifestSpec = `import { expect, test } from 'vitest';
 import { appManifestSchema } from '@pivi/sdk/manifest';
 import manifest from './manifest.json';
 
@@ -170,6 +173,8 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 		'main.ts': mainFile(o),
 		'service.ts': serviceFile(o),
 		'manifest.spec.ts': manifestSpec,
+		Containerfile: containerfile(),
+		'.containerignore': containerignore,
 		'.gitignore': 'node_modules\n.pivi-dev\ndist\n',
 		'package.json': json({
 			name: `pivi-app-${o.id}`,
@@ -186,7 +191,12 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 				publish: 'pivi-app publish'
 			},
 			dependencies: { '@pivi/sdk': o.sdkSpec, 'vscode-jsonrpc': '^10.0.0', zod: '^4.6.7' },
-			devDependencies: { '@pivi/cli': o.cliSpec, '@types/bun': 'latest', typescript: '^7.0.2' }
+			devDependencies: {
+				'@pivi/cli': o.cliSpec,
+				'@types/node': '^26.6.6',
+				typescript: '^7.0.2',
+				vitest: '^5.1.0'
+			}
 		}),
 		'tsconfig.json': json({
 			compilerOptions: {
@@ -197,7 +207,8 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 				noEmit: true,
 				skipLibCheck: true,
 				resolveJsonModule: true,
-				types: ['bun']
+				// Node's types, not Bun's: the image runs the app on Node, so a Bun API is a type error.
+				types: ['node']
 			},
 			include: ['*.ts', 'manifest.json']
 		})

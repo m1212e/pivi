@@ -4,7 +4,7 @@
 // extraction logic, which is exactly the kind of native tool the "Reuse
 // strategy for apps" decision calls for.
 //
-// The binary is part of the app's base image (see base/Dockerfile), not downloaded at
+// The binary is part of the app's image (see Containerfile), not downloaded at
 // runtime: the sandbox only lets this app reach the domains its manifest
 // lists, and fetching a release from GitHub on first play isn't one of them.
 // PIVI_YTDLP_BINARY overrides where it's found.
@@ -214,7 +214,7 @@ export async function resolveStream(videoId: string, maxHeight?: number): Promis
 		formatSelector(maxHeight),
 		'-j',
 		// Without a JS runtime + the challenge-solver component (yt-dlp-ejs, in
-		// the base image), yt-dlp can't decode YouTube's current signature
+		// the image), yt-dlp can't decode YouTube's current signature
 		// cipher/"n" challenge and silently hands back URLs that look fine but
 		// 403 on the CDN. The app already runs on node, so node doubles as that
 		// runtime instead of requiring a separate deno install.

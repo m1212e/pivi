@@ -178,7 +178,7 @@ against a fake pivi host, so most problems show up before the TV does:
 
 - `pivi-app validate`: static checks of the manifest and the code: invalid manifest, features
   without code (and code without the feature), hosts spelled out in the source that
-  `network.domains` does not allow, writes to stdout, a missing `.dockerignore` next to a Dockerfile.
+  `network.domains` does not allow, writes to stdout, a a Containerfile without an ignore file, runtime-only APIs.
 - `pivi-app dev`: bundles the app exactly as the image does and runs it on Node, speaks the
   protocol to it and validates **every message in both directions** with the SDK schemas, the way
   the host does. It then gives you a prompt (`help` lists
@@ -192,7 +192,11 @@ against a fake pivi host, so most problems show up before the TV does:
     which were blocked, `problems` everything the host would reject or drop. This catches the
     classic "blank cards, nothing plays" cause, a host missing from the manifest.
   - `pivi-app dev --exec "stream abc" --exec domains` runs commands once and exits non-zero when
-    anything is wrong, which is what an agent or CI should use. `--watch` restarts on changes.
+    anything is wrong, which is what CI should use. `--watch` restarts on changes, `--preview`
+    shows the screens in a browser and lets you click through them.
+  - **Agents**: `pivi-app mcp` serves all of this as MCP tools (`validate`, `start`, `status`,
+    `screen`, `event`, `stream`, `domains`, `problems`, `logs`, `build`). Projects from
+    `pivi-app init` register it in `.mcp.json`.
   - `/storage` and `/cache` do not exist locally: `PIVI_STORAGE_DIR` and `PIVI_CACHE_DIR` point at
     `.pivi-dev/`, but only for permissions the manifest requests, as in the sandbox. Storage
     survives restarts, so a sign-in stays signed in while you iterate.
@@ -213,40 +217,52 @@ printf '%s\n' \
 
 `packages/sdk/test/demoApp.ts` and `src/app.spec.ts` show the pattern in a test.
 
+## Runtime
+
+Apps run on **Node** (`node:26-alpine`, the project's `Containerfile`), and `pivi-app dev` runs
+the same bundle on Node. So app code uses **web standards** (`fetch`, `WebSocket`, `URL`,
+`TextEncoder`, `crypto.subtle`) and **`node:` built-ins** (`node:fs`, `node:path`,
+`node:child_process`, `process`). Never `Bun.*`, `bun:*` modules, `Deno.*` or `jsr:`/`npm:`
+specifiers: `pivi-app validate` warns about them. Bun as a tool (`bun install`, `bun test`,
+`bun run`) is fine; tests import from `vitest`, which `bun test` understands too. Node trusts
+the sandbox's TLS interception on its own.
+
+Another runtime is possible by editing the Containerfile's `FROM` and `ENTRYPOINT` by hand, but
+`pivi-app dev` keeps testing on Node.
+
 ## Packaging
 
-`pivi-app` builds the image itself, no Docker needed: it bundles `main.ts`, the SDK and every
-dependency into one file with tsdown (`/app/main.mjs`), and puts it as one layer on top of
-`node:26-alpine` for linux/amd64 and linux/arm64 (pivi runs on Raspberry Pis). **The app runs on
-Node**, so use Node APIs, not Bun's (`validate` warns about `Bun.*`). Node trusts the sandbox's
-TLS interception on its own (microsandbox sets `NODE_EXTRA_CA_CERTS`). The manifest goes into the image's `dev.pivi.manifest`
-label, which pivi reads before pulling anything so the user can approve the permissions.
+The image is described by the project's **`Containerfile`** (`pivi-app init` writes it): the
+app's bundle on Node. `pivi-app build` and `publish` bundle `main.ts`, the SDK and every
+dependency into one file with tsdown (`.pivi-dev/bundle/main.mjs`, copied to `/app/main.mjs`)
+and build the image with **buildah** (or podman) for linux/amd64 and linux/arm64 (pivi runs on
+Raspberry Pis). The manifest is added as the image's `dev.pivi.manifest` label, which pivi reads
+before pulling anything so the user can approve the permissions.
 
 ```sh
 pivi-app publish ghcr.io/me/my-app        # tags <manifest version> and latest
 pivi-app publish registry.example.com/me/my-app:dev --tag latest
-pivi-app build                            # only build, as an OCI layout in .pivi-dev/image
+pivi-app build                            # only build, into a local manifest list
+pivi-app keygen && pivi-app publish ghcr.io/me/my-app --sign pivi-signing.private
 ```
 
 - Any OCI registry works (ghcr.io, GitLab, Gitea/Forgejo, Docker Hub, a self-hosted registry).
-  Credentials: `PIVI_REGISTRY_USERNAME` and `PIVI_REGISTRY_PASSWORD`, or `docker login`.
-- The build validates the app first and refuses one the host would refuse. The same input gives
-  the same digest, so publishing an unchanged app uploads nothing.
-- `--base` picks another base image, `--platform` other platforms.
+  Credentials: `PIVI_REGISTRY_USERNAME` and `PIVI_REGISTRY_PASSWORD`, or buildah's own login
+  (`buildah login`, docker's config, credential helpers).
+- The build validates the app first and refuses one the host would refuse. `--timestamp 0` makes
+  the same input give the same digest.
+- Anything else the app needs in its image (a system package, a binary like yt-dlp) goes into
+  the Containerfile as `RUN` steps. Building those for the other architecture needs QEMU
+  (`qemu-user-static`); a Containerfile with only `COPY` needs none.
+- **Signing**: `pivi-app keygen` creates a key pair, `publish --sign <key>` (or
+  `PIVI_SIGNING_KEY`) signs with skopeo in cosign's format. Give users the `.pub` file: pivi asks
+  for it at install and then accepts updates only signed by the same key.
 - Projects from `pivi-app init` have `bun run image` and `bun run publish -- <ref>`, and their CI
-  (GitHub, GitLab or Gitea/Forgejo) publishes on a version tag.
+  (GitHub, GitLab or Gitea/Forgejo) publishes on a version tag. In a container runner buildah
+  needs a privileged runner, or seccomp unconfined plus `/dev/fuse` (the CI files say how).
 
 Install the app in pivi on the **Apps** page by entering the printed reference. It is then
-pinned by digest. Updating means publishing a new version. A signed app (cosign key-based
-signatures) can only be updated by the same signer.
-
-An app that needs more than Node in its image (a system package, a binary like yt-dlp) needs its
-own Dockerfile instead. Build that with the manifest as the label:
-
-```sh
-docker buildx build --platform linux/amd64,linux/arm64 \
-  --label "dev.pivi.manifest=$(pivi-app manifest)" -t registry.example.com/me/my-app:1.0.0 --push .
-```
+pinned by digest. Updating means publishing a new version, which pivi picks up within the hour.
 
 ## Pitfalls
 

@@ -1,17 +1,25 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { bundleApp } from '../bundle';
-import { findPublishCredentials } from '../oci/auth';
-import { RegistryClient } from '../oci/client';
-import { buildImage, DEFAULT_BASE, type BuiltImage, type Platform } from '../oci/image';
-import { writeLayout } from '../oci/layout';
-import { pushImage } from '../oci/push';
-import { formatReference, parseReference } from '../oci/reference';
+import { MANIFEST_LABEL } from '@pivi/sdk/manifest';
+import { bundleTo } from '../bundle';
+import {
+	buildImage,
+	DEFAULT_PLATFORMS,
+	exportLayout,
+	findTool,
+	pushImage,
+	type Credentials,
+	type Platform,
+	type Tool
+} from '../image/builder';
+import { containerfile, containerignore } from '../image/containerfile';
+import { formatReference, parseReference } from '../image/reference';
+import { generateKeyPair, signImage, signingKeyFromEnv } from '../image/sign';
 import { readManifest } from '../project';
 import { checkProject } from '../staticChecks';
 
 export type ImageOptions = {
 	entry?: string;
-	base?: string;
 	platforms?: Platform[];
 	conditions?: string[];
 };
@@ -27,46 +35,78 @@ export function parsePlatforms(value: string | undefined): Platform[] | undefine
 	});
 }
 
-/** Validates the app (an image the host would refuse is not worth building), bundles it and assembles the image. */
-async function assemble(
-	dir: string,
-	options: ImageOptions,
-	baseClient?: RegistryClient
-): Promise<{ image: BuiltImage; id: string; version: string }> {
-	const errors = checkProject(dir, options.entry).filter((f) => f.level === 'error');
-	if (errors.length)
-		throw new Error(`The app is not valid:\n  ${errors.map((e) => e.message).join('\n  ')}`);
-	const result = readManifest(dir);
-	if (!result.ok) throw new Error(result.errors.join('\n'));
-
-	console.log(`Bundling ${options.entry ?? 'main.ts'}…`);
-	const bundle = await bundleApp(dir, { entry: options.entry, conditions: options.conditions });
-	console.log(
-		`Assembling on ${options.base ?? DEFAULT_BASE} for ${(options.platforms ?? []).map((p) => p.architecture).join(', ') || 'amd64, arm64'}…`
-	);
-	const image = await buildImage({
-		bundle,
-		manifestLabel: JSON.stringify(result.manifest),
-		base: options.base,
-		platforms: options.platforms,
-		baseClient
-	});
-	return { image, id: result.manifest.id, version: result.manifest.version };
+/** The project's own Containerfile (or Dockerfile), or the default one. */
+function chooseContainerfile(dir: string) {
+	for (const name of ['Containerfile', 'Dockerfile']) {
+		if (existsSync(join(dir, name))) return { file: join(dir, name), ignorefile: undefined };
+	}
+	const generated = join(dir, '.pivi-dev');
+	mkdirSync(generated, { recursive: true });
+	writeFileSync(join(generated, 'Containerfile'), containerfile());
+	writeFileSync(join(generated, 'containerignore'), containerignore);
+	return { file: join(generated, 'Containerfile'), ignorefile: join(generated, 'containerignore') };
 }
 
-/** `pivi-app build`: the image as an OCI layout directory, without pushing it anywhere. */
+/**
+ * Validates the app (an image the host would refuse is not worth building), bundles it
+ * and builds the image for every platform into a local manifest list.
+ */
+async function buildLocal(
+	dir: string,
+	options: ImageOptions
+): Promise<{ tool: Tool; name: string; version: string }> {
+	const root = resolve(dir);
+	const errors = checkProject(root, options.entry).filter((f) => f.level === 'error');
+	if (errors.length)
+		throw new Error(`The app is not valid:\n  ${errors.map((e) => e.message).join('\n  ')}`);
+	const result = readManifest(root);
+	if (!result.ok) throw new Error(result.errors.join('\n'));
+	const tool = findTool();
+
+	console.log(`Bundling ${options.entry ?? 'main.ts'} with tsdown…`);
+	await bundleTo(root, join(root, '.pivi-dev', 'bundle'), {
+		entry: options.entry,
+		conditions: options.conditions
+	});
+
+	const { id, version } = result.manifest;
+	const name = `pivi-${id}:${version}`;
+	const { file, ignorefile } = chooseContainerfile(root);
+	const platforms = options.platforms ?? DEFAULT_PLATFORMS;
+	console.log(
+		`Building ${name} with ${tool} for ${platforms.map((p) => p.architecture).join(', ')}…`
+	);
+	buildImage(tool, {
+		name,
+		context: root,
+		containerfile: file,
+		ignorefile,
+		platforms,
+		labels: { [MANIFEST_LABEL]: JSON.stringify(result.manifest) }
+	});
+	return { tool, name, version };
+}
+
+/** `pivi-app build`: the image as a local manifest list, and optionally an OCI layout. */
 export async function build(
 	dir: string,
 	options: ImageOptions & { out?: string }
 ): Promise<number> {
-	const { image, id, version } = await assemble(dir, options);
-	const out = resolve(options.out ?? join(dir, '.pivi-dev', 'image'));
-	console.log('Writing the OCI layout (downloads the base layers once, then they are cached)…');
-	await writeLayout(image, out, `pivi-${id}:${version}`);
-	console.log(
-		`\n✓ ${out}\n  index ${image.index.digest}\n  base  ${formatReference(image.base)}@${image.baseDigest}`
-	);
+	const { tool, name } = await buildLocal(dir, options);
+	if (options.out) {
+		exportLayout(tool, name, resolve(options.out));
+		console.log(`\n✓ ${name}, written as an OCI layout to ${resolve(options.out)}`);
+	} else {
+		console.log(`\n✓ ${name} (a local manifest list: \`${tool} manifest inspect ${name}\`)`);
+	}
 	return 0;
+}
+
+/** Credentials for the registry published to, from the environment. Otherwise buildah's own login. */
+function publishCredentials(): Credentials | undefined {
+	const username = process.env.PIVI_REGISTRY_USERNAME;
+	const password = process.env.PIVI_REGISTRY_PASSWORD;
+	return username && password ? { username, password } : undefined;
 }
 
 /**
@@ -76,7 +116,7 @@ export async function build(
 export async function publish(
 	dir: string,
 	reference: string | undefined,
-	options: ImageOptions & { tags?: string[] }
+	options: ImageOptions & { tags?: string[]; sign?: string }
 ): Promise<number> {
 	if (!reference) {
 		console.error(
@@ -84,27 +124,36 @@ export async function publish(
 		);
 		return 2;
 	}
-	const explicitTag = /:[^/]+$/.test(reference) || reference.includes('@');
-	// A base image in the registry published to (a private one, say) is read with
-	// the same credentials as the push.
-	const registry = parseReference(reference).registry;
-	const base = parseReference(options.base ?? DEFAULT_BASE);
-	const baseClient =
-		base.registry === registry
-			? new RegistryClient(registry, findPublishCredentials(registry))
-			: undefined;
-	const { image, version } = await assemble(dir, options, baseClient);
+	const explicitTag = /:[^/]+$/.test(reference);
+	const { tool, name, version } = await buildLocal(dir, options);
 	const target = parseReference(explicitTag ? reference : `${reference}:${version}`);
-	const tags = [...(options.tags ?? []), ...(explicitTag ? [] : ['latest'])];
-	console.log(`Pushing to ${target.registry}/${target.repository}…`);
-	const { digest, references } = await pushImage(image, {
-		target,
-		baseClient,
-		tags,
-		onProgress: (message) => console.log(`  ${message}`)
-	});
-	console.log(`\n✓ published ${digest}`);
-	for (const ref of references) console.log(`  ${ref}`);
-	console.log(`\nInstall it in pivi with: ${references[0]}`);
+	const tags = [
+		...new Set([target.tag!, ...(options.tags ?? []), ...(explicitTag ? [] : ['latest'])])
+	];
+	const credentials = publishCredentials();
+	let digest = '';
+	for (const tag of tags) {
+		console.log(`Pushing ${formatReference({ ...target, tag })}…`);
+		digest = pushImage(tool, name, { ...target, tag }, credentials);
+	}
+	const signing = signingKeyFromEnv(options.sign);
+	if (signing) {
+		console.log('Signing…');
+		signImage({ ...target, tag: tags[0] }, signing, credentials);
+	}
+	console.log(`\n✓ published ${digest}${signing ? ', signed' : ''}`);
+	for (const tag of tags) console.log(`  ${formatReference({ ...target, tag })}`);
+	console.log(`\nInstall it in pivi with: ${formatReference({ ...target, tag: tags[0] })}`);
+	return 0;
+}
+
+/** `pivi-app keygen [prefix]`: a key pair for signing, `<prefix>.private` and `<prefix>.pub`. */
+export function keygen(prefix = 'pivi-signing'): number {
+	generateKeyPair(prefix, process.env.PIVI_SIGNING_PASSPHRASE);
+	console.log(`\nKeep ${prefix}.private secret (and its passphrase). Publish with:`);
+	console.log(`  pivi-app publish <ref> --sign ${prefix}.private`);
+	console.log(
+		`Give users ${prefix}.pub: pivi asks for it at install and accepts updates only signed by it.`
+	);
 	return 0;
 }

@@ -1,6 +1,6 @@
 {
 	"name": "@pivi/sdk",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "The contract between pivi and its apps: manifest, JSON-RPC protocol, declarative UI and the app-side runtime.",
 	"license": "Apache-2.0",
 	"repository": {
