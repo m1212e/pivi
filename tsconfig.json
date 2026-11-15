@@ -10,12 +10,5 @@
 			"#api/*": ["./src/api/*"]
 		}
 	},
-	"include": [
-		"src",
-		"drizzle.config.ts",
-		"apps",
-		"packages/*/src",
-		"packages/*/test",
-		"packages/*/scripts"
-	]
+	"include": ["src", "drizzle.config.ts", "packages/*/src", "packages/*/test", "packages/*/scripts"]
 }

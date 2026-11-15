@@ -1,9 +1,0 @@
-# The image pivi runs: the app's bundle (.pivi-dev/bundle/main.mjs, built by
-# `pivi-app build` with tsdown) on Node.
-# Build it with `pivi-app build` or `pivi-app publish`, which bundle the app first and
-# add manifest.json as the dev.pivi.manifest label. Add RUN steps for anything else the
-# app needs in the image (a system package, a binary).
-FROM docker.io/library/node:26-alpine
-COPY .pivi-dev/bundle/main.mjs /app/main.mjs
-WORKDIR /app
-ENTRYPOINT ["node", "/app/main.mjs"]

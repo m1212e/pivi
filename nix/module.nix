@@ -19,6 +19,13 @@ let
       cfg.database.url
     else
       "postgres:///${cfg.database.name}?host=/run/postgresql";
+
+  # The repository's pivi.toml is the source of the defaults; the service gets
+  # its own file, written from the options (src/api/config.ts reads it).
+  defaults = lib.importTOML ../pivi.toml;
+  configFile = (pkgs.formats.toml { }).generate "pivi.toml" {
+    apps.suggested = cfg.suggestedApps;
+  };
 in
 {
   options.services.pivi = {
@@ -91,10 +98,8 @@ in
 
     suggestedApps = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [
-        "ghcr.io/m1212e/pivi/pivi-youtube"
-        "ghcr.io/m1212e/pivi/pivi-twitch"
-      ];
+      default = defaults.apps.suggested;
+      defaultText = lib.literalExpression "apps.suggested from the repository's pivi.toml";
       example = [ "ghcr.io/example/pivi-app:1.2.0" ];
       description = ''
         App images offered for one-tap install on the TV's apps screen. Only
@@ -368,7 +373,7 @@ in
         PIVI_HOST = "127.0.0.1";
         PIVI_PORT = toString cfg.port;
         PIVI_REMOTE_PORT = toString cfg.remote.port;
-        PIVI_SUGGESTED_APPS = lib.concatStringsSep " " cfg.suggestedApps;
+        PIVI_CONFIG = toString configFile;
       }
       // lib.optionalAttrs cfg.wifi.provisioning {
         # Pinned rather than found on PATH: the unit's PATH is minimal, and a

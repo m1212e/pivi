@@ -10,14 +10,12 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
 
-  # Local OCI registry for app development -- lets suggested/test app
-  # images (see src/api/apps/suggested.ts) be built and pushed without a
-  # real registry account. Plain HTTP is fine since registry.ts only trusts
+  # Local OCI registry for app development: `pivi-app publish localhost:5055/<app>`
+  # pushes an app here without a real registry account. Plain HTTP is fine since registry.ts only trusts
   # localhost that way.
   registry:
     image: registry:2
     ports:
-      # Port mirrors DEV_REGISTRY in src/lib/apps/devRegistry.ts
       - 127.0.0.1:5055:5000
     volumes:
       - registrydata:/var/lib/registry

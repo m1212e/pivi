@@ -10,9 +10,9 @@ export const variables = defineEnvVars({
 		description: 'The Hostname to be for pairing',
 		schema: (value) => value || null
 	},
-	PIVI_SUGGESTED_APPS: {
+	PIVI_CONFIG: {
 		description:
-			'App images offered for one-tap install, separated by spaces or commas. What each one is (name, icon, description) is read from its own manifest.',
+			'Path of the configuration file (see pivi.toml). Defaults to pivi.toml in the working directory.',
 		schema: (value) => value || null
 	},
 	ORIGIN: {

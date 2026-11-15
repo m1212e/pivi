@@ -16,15 +16,15 @@ remote control, and runs the player. This keeps every app looking and behaving l
 Read these instead of guessing. Paths are relative to the SDK package: `node_modules/@pivi/sdk/`
 in an app project, `packages/sdk/` in the pivi repository.
 
-| Need                                                | Read                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------- |
-| Every message, its feature gate and its exact shape | `skills/pivi-app/references/protocol.md`                                  |
-| What each field means, constraints and caveats      | `src/protocol.ts`, `src/manifest.ts` (the comments are the specification) |
-| Every UI node you can put on a screen               | `src/ui.ts`, the `UiNode` type                                            |
-| Home cards and actions                              | `src/dashboard.ts`                                                        |
-| Size caps applied to everything you send            | `src/limits.ts`                                                           |
-| Host icon names                                     | `src/icons.ts`                                                            |
-| A complete real app                                 | `apps/twitch` in the pivi repository (about 2,000 lines)                  |
+| Need                                                | Read                                                                                       |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Every message, its feature gate and its exact shape | `skills/pivi-app/references/protocol.md`                                                   |
+| What each field means, constraints and caveats      | `src/protocol.ts`, `src/manifest.ts` (the comments are the specification)                  |
+| Every UI node you can put on a screen               | `src/ui.ts`, the `UiNode` type                                                             |
+| Home cards and actions                              | `src/dashboard.ts`                                                                         |
+| Size caps applied to everything you send            | `src/limits.ts`                                                                            |
+| Host icon names                                     | `src/icons.ts`                                                                             |
+| A complete real app                                 | [github.com/m1212e/pivi-twitch](https://github.com/m1212e/pivi-twitch) (about 2,000 lines) |
 
 ## Workflow
 
@@ -185,7 +185,7 @@ the user first; it is rate limited, so send it once).
 - Refresh shortly before expiry and once on a 401. Share one in-flight refresh promise so
   concurrent callers don't reuse a rotated refresh token. Clear the session only on a definitive
   refusal (400, 401, `invalid_grant`), never on a network error.
-  `apps/twitch/auth.ts` is a complete implementation.
+  `auth.ts` in [pivi-twitch](https://github.com/m1212e/pivi-twitch) is a complete implementation.
 - Show personal data only from live responses. Do not store more than the tokens.
 
 ## Testing

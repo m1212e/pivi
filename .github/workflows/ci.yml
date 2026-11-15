@@ -17,10 +17,6 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      # Each app installs from its own lockfile (that is what its image builds
-      # from), and the type check and the tests cover apps/ too.
-      - name: Install the apps' dependencies
-        run: for app in apps/*/; do (cd "$app" && bun install --frozen-lockfile); done
       # src/lib/paraglide is generated (by the Vite plugin during dev and build) and
       # gitignored, so a fresh checkout has none of the messages and runtime that
       # half the app imports. Compile it before anything type-checks or tests.

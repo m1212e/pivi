@@ -37,8 +37,7 @@ export default defineConfig(
 		}
 	},
 	// The app boundary. packages/sdk is the whole contract between pivi and its apps, so
-	// it may import nothing of the host's; apps get only @pivi/sdk (pivi-app bundles
-	// them with nothing else).
+	// it may import nothing of the host's.
 	{
 		files: ['packages/sdk/src/**'],
 		rules: {
@@ -50,22 +49,6 @@ export default defineConfig(
 							// A regex, since a leading `#` is a comment in `group`'s gitignore syntax.
 							regex: '^(#lib|#api|\\$lib|\\$app)/|^\\.\\./',
 							message: '@pivi/sdk is the app contract and must not depend on host code.'
-						}
-					]
-				}
-			]
-		}
-	},
-	{
-		files: ['apps/**'],
-		rules: {
-			'no-restricted-imports': [
-				'error',
-				{
-					patterns: [
-						{
-							regex: '^(#lib|#api|\\$lib|\\$app)/|/src/',
-							message: 'Apps may only use the SDK (@pivi/sdk).'
 						}
 					]
 				}

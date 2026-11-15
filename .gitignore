@@ -23,8 +23,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
-# Downloaded at runtime (apps/youtube/stream.ts)
-/.cache
 # Paraglide
 src/lib/paraglide
 project.inlang/cache/

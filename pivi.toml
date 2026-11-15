@@ -1,0 +1,8 @@
+# pivi's configuration (schema: src/api/config.ts). The server reads the file
+# PIVI_CONFIG names, or pivi.toml in its working directory. The NixOS module
+# takes its defaults from this file and writes its own from the module options.
+
+[apps]
+# Offered for one-tap install on the TV's apps screen. Only image references:
+# each app's name, icon and description come from its own manifest.
+suggested = ["ghcr.io/m1212e/pivi-youtube", "ghcr.io/m1212e/pivi-twitch"]

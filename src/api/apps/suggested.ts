@@ -1,11 +1,11 @@
 // Apps offered in the install form (AppManagerPanel.svelte) so the user can
 // tap one instead of typing an image ref on a TV remote. Which ones is
-// configuration (PIVI_SUGGESTED_APPS), and what each one is comes from its own
+// configuration (pivi.toml's apps.suggested), and what each one is comes from its own
 // manifest in the registry, so the host carries no details of any app.
-import { PIVI_SUGGESTED_APPS } from '$app/env/private';
 import { formatImageRef, parseImageRef } from '@pivi/sdk/image';
 import { resolveImage, type RegistryClient } from './registry';
 import { createTtlCache } from './ttlCache';
+import { config } from '../config';
 import type { AppManifest } from '@pivi/sdk/manifest';
 
 export type SuggestedApp = {
@@ -51,9 +51,9 @@ async function describe(image: string, registry: RegistryClient): Promise<Sugges
 
 /** The configured list, normalized and without entries that aren't image refs. */
 function configuredImages(): string[] {
-	return (PIVI_SUGGESTED_APPS ?? '').split(/[\s,]+/).flatMap((entry) => {
+	return config().apps.suggested.flatMap((entry) => {
 		try {
-			return entry ? [formatImageRef(parseImageRef(entry))] : [];
+			return [formatImageRef(parseImageRef(entry))];
 		} catch {
 			console.warn(`[apps] ignoring suggested app "${entry}": not an image reference`);
 			return [];

@@ -64,7 +64,7 @@ defineApp((app) => ({
 The manifest ships as the image label `dev.pivi.manifest`, the user approves its
 permissions before the app ever runs, and the sandbox enforces exactly the
 domains it lists. Declare a feature for every handler you add, the host only
-sends what the manifest declares. `apps/twitch` in the pivi repository is a
+sends what the manifest declares. [pivi-twitch](https://github.com/m1212e/pivi-twitch) is a
 complete, real example.
 
 ## Entry points

@@ -3,14 +3,12 @@
 	"$schema": "./node_modules/fallow/schema.json",
 	// deploy/pivi-server.mjs is the production entry point (the systemd unit
 	// runs it directly; see DEPLOYMENT.md), so nothing imports it and the
-	// module graph can only see it as an unreachable file. Each app's main.ts is
-	// the entry pivi-app bundles into its image, and the release script
-	// and the packages' build scripts are run directly too.
+	// module graph can only see it as an unreachable file. The packages' build
+	// scripts are run directly too.
 	"entry": [
 		"src/index.{ts,tsx,js,jsx}",
 		"src/main.{ts,tsx,js,jsx}",
 		"deploy/pivi-server.mjs",
-		"apps/*/main.ts",
 		"packages/*/scripts/*.ts"
 	],
 	"ignoreFindings": ["src/lib/api/rumbleClient/**"],
