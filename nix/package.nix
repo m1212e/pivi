@@ -116,8 +116,8 @@ let
     name = "node-modules";
     production = false;
     hash = {
-      x86_64-linux = "sha256-8BongxFTTgJe01LrIUaSTwK/O6WkV0+rM8QVW6boSCA=";
-      aarch64-linux = "sha256-GVmY9vXguCK/w1I19zI+tfFRYgB/6DhHUVGPtBG9/hE=";
+      x86_64-linux = "sha256-BYB6T2/xW0jkDe/gui7eitAbQ504SmqmT5hZF2ZcNXk=";
+      aarch64-linux = "sha256-52Otwibs5Hlz2D/GYNomUOvn5TVjUHgIHko1rP2DoBE=";
     };
   };
 
@@ -128,8 +128,8 @@ let
     name = "node-modules-production";
     production = true;
     hash = {
-      x86_64-linux = "sha256-jhzBR2cBOvjuSI1bGZGYuLf82yBq+qzSOY64o1zo7So=";
-      aarch64-linux = "sha256-wrst49rFVNwptNrr2+9gqivn2uNxrd/ruSeDzOMpCYc=";
+      x86_64-linux = "sha256-6H3jKr2FUXT/oknFgCR+3CdJ5g0reIlucUoeEj3JzEk=";
+      aarch64-linux = "sha256-5+nlJ+UY4z/D6H4N/PaVusI914y6HLPVERw8Nka9cT8=";
     };
   };
 in
