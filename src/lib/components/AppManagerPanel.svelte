@@ -537,6 +537,43 @@
 	</li>
 {/snippet}
 
+<!-- Top-level, its own complexity unit: installs in flight, then the installed apps. -->
+{#snippet appList()}
+	{#if apps.installs.length > 0}
+		<h3 class="text-sm font-medium text-white/70">{m.apps_installs_heading()}</h3>
+		<ul class="flex flex-col gap-3">
+			{#each apps.installs as install (install.id)}
+				{@render pendingInstall(install)}
+			{/each}
+		</ul>
+	{/if}
+	{#if apps.apps.length === 0 && apps.installs.length === 0}
+		<p class="text-center text-sm text-white/40" transition:fade={{ duration: 200 }}>
+			{m.apps_none()}
+		</p>
+	{:else if apps.apps.length > 0}
+		<ul class="flex flex-col gap-3">
+			{#each apps.apps as app, i (i)}
+				{@render installed(app)}
+			{/each}
+		</ul>
+		<button
+			type="button"
+			disabled={apps.busy !== null}
+			onclick={actions.checkUpdates}
+			class="mt-2 flex items-center justify-center gap-2 bg-white/12 text-white/85 ring-1 ring-white/25 hover:bg-white/20 {buttonBase}"
+		>
+			<RefreshCw class="size-4" />
+			{m.apps_check_updates()}
+		</button>
+		{#if checkSummaryText}
+			<p class="text-center text-xs text-white/50" transition:fade={{ duration: 150 }}>
+				{checkSummaryText}
+			</p>
+		{/if}
+	{/if}
+{/snippet}
+
 <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
 	<div class="flex min-w-0 flex-col gap-5 lg:w-xl lg:shrink-0">
 		{#if busyLabel}
@@ -569,39 +606,7 @@
 	</div>
 
 	<div class="flex min-w-0 flex-1 flex-col gap-3">
-		{#if apps.installs.length > 0}
-			<h3 class="text-sm font-medium text-white/70">{m.apps_installs_heading()}</h3>
-			<ul class="flex flex-col gap-3">
-				{#each apps.installs as install (install.id)}
-					{@render pendingInstall(install)}
-				{/each}
-			</ul>
-		{/if}
-		{#if apps.apps.length === 0 && apps.installs.length === 0}
-			<p class="text-center text-sm text-white/40" transition:fade={{ duration: 200 }}>
-				{m.apps_none()}
-			</p>
-		{:else if apps.apps.length > 0}
-			<ul class="flex flex-col gap-3">
-				{#each apps.apps as app, i (i)}
-					{@render installed(app)}
-				{/each}
-			</ul>
-			<button
-				type="button"
-				disabled={apps.busy !== null}
-				onclick={actions.checkUpdates}
-				class="mt-2 flex items-center justify-center gap-2 bg-white/12 text-white/85 ring-1 ring-white/25 hover:bg-white/20 {buttonBase}"
-			>
-				<RefreshCw class="size-4" />
-				{m.apps_check_updates()}
-			</button>
-			{#if checkSummaryText}
-				<p class="text-center text-xs text-white/50" transition:fade={{ duration: 150 }}>
-					{checkSummaryText}
-				</p>
-			{/if}
-		{/if}
+		{@render appList()}
 	</div>
 
 	{#if visibleSuggested.length > 0}

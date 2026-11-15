@@ -46,38 +46,50 @@ export function pullProgressTracker() {
 		};
 	};
 
-	return (event: RawPullEvent): PullProgress | undefined => {
+	// One handler per event kind, each returning whether the event changed
+	// anything worth showing.
+	const onResolved = (event: RawPullEvent) => {
+		layerCount = event.layerCount;
+		totalFromManifest = event.totalDownloadBytes ?? null;
+		phase = 'downloading';
+		return true;
+	};
+	const onLayerProgress = (event: RawPullEvent) => {
 		const layer = event.layerIndex ?? -1;
-		switch (event.kind) {
-			case 'resolved':
-				layerCount = event.layerCount;
-				totalFromManifest = event.totalDownloadBytes ?? null;
-				phase = 'downloading';
-				break;
-			case 'layerDownloadProgress':
-				phase = phase === 'resolving' ? 'downloading' : phase;
-				downloaded.set(layer, event.downloadedBytes ?? 0);
-				if (event.totalBytes != null) layerTotals.set(layer, event.totalBytes);
-				break;
-			case 'layerDownloadComplete':
-				downloaded.set(layer, event.downloadedBytes ?? downloaded.get(layer) ?? 0);
-				layerTotals.set(layer, event.downloadedBytes ?? layerTotals.get(layer) ?? 0);
-				complete.add(layer);
-				// Layers unpack while others still download, so it only counts as
-				// unpacking once nothing is left to fetch.
-				if (layerCount !== undefined && complete.size >= layerCount) phase = 'unpacking';
-				break;
-			case 'stitchMergingTrees':
-			case 'stitchWritingFsmeta':
-			case 'stitchWritingVmdk':
-			case 'stitchComplete':
-			case 'complete':
-				if (phase === 'unpacking') return undefined;
-				phase = 'unpacking';
-				break;
-			default:
-				return undefined;
-		}
-		return snapshot();
+		if (phase === 'resolving') phase = 'downloading';
+		downloaded.set(layer, event.downloadedBytes ?? 0);
+		if (event.totalBytes != null) layerTotals.set(layer, event.totalBytes);
+		return true;
+	};
+	const onLayerComplete = (event: RawPullEvent) => {
+		const layer = event.layerIndex ?? -1;
+		const bytes = event.downloadedBytes;
+		downloaded.set(layer, bytes ?? downloaded.get(layer) ?? 0);
+		layerTotals.set(layer, bytes ?? layerTotals.get(layer) ?? 0);
+		complete.add(layer);
+		// Layers unpack while others still download, so it only counts as
+		// unpacking once nothing is left to fetch.
+		if (layerCount !== undefined && complete.size >= layerCount) phase = 'unpacking';
+		return true;
+	};
+	const onUnpacking = () => {
+		if (phase === 'unpacking') return false;
+		phase = 'unpacking';
+		return true;
+	};
+	const handlers: Record<string, (event: RawPullEvent) => boolean> = {
+		resolved: onResolved,
+		layerDownloadProgress: onLayerProgress,
+		layerDownloadComplete: onLayerComplete,
+		stitchMergingTrees: onUnpacking,
+		stitchWritingFsmeta: onUnpacking,
+		stitchWritingVmdk: onUnpacking,
+		stitchComplete: onUnpacking,
+		complete: onUnpacking
+	};
+
+	return (event: RawPullEvent): PullProgress | undefined => {
+		const handle = Object.hasOwn(handlers, event.kind) ? handlers[event.kind] : undefined;
+		return handle?.(event) ? snapshot() : undefined;
 	};
 }

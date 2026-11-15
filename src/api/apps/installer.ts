@@ -24,7 +24,7 @@ export class AppError extends Error {}
  * The tag now points at a different build than the one the user reviewed, so
  * what they approved (permissions, domains) may not be what would be installed.
  */
-export class ReviewOutdatedError extends AppError {
+class ReviewOutdatedError extends AppError {
 	constructor() {
 		super('The app changed since it was reviewed. Review it again before installing');
 	}
