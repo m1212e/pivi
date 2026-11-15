@@ -8,6 +8,8 @@ import type { AppAction, DashboardContribution } from '@pivi/sdk/dashboard';
 import type { ChatMessage } from '@pivi/sdk/protocol';
 import type { AppScreen, UiNode } from '@pivi/sdk/ui';
 import { isPhoneSafeUrl } from '#lib/remote/remoteProtocol';
+import { MAX_SCREEN_NODES } from '@pivi/sdk/limits';
+import { countUiNodes } from '@pivi/sdk/ui';
 
 // Same check the host applies to the app's own requests, passed in so this
 // module stays free of network concerns.
@@ -17,7 +19,6 @@ type UrlPolicy = (url: string) => boolean;
  * More nodes than any real screen needs. The message size cap alone would
  * still let an app make every subscriber re-render a huge tree on each publish.
  */
-export const MAX_SCREEN_NODES = 5_000;
 
 // An action the host can't safely follow is dropped rather than rewritten,
 // so a node never points somewhere the app didn't ask for.
@@ -113,22 +114,12 @@ function sanitizeNode(node: UiNode, allows: UrlPolicy): UiNode | undefined {
 	return sanitize(node as NodeOf<UiNode['type']>, allows);
 }
 
-function countNodes(node: UiNode): number {
-	const children =
-		node.type === 'container' || node.type === 'shelf'
-			? node.children
-			: node.type === 'list'
-				? node.items
-				: [];
-	return children.reduce((sum, child) => sum + countNodes(child), 1);
-}
-
 /**
  * Applied by runtime.ts to every screen an app publishes, before the TV renders
  * it. Undefined when the screen is too large to accept at all.
  */
 export function sanitizeScreen(screen: AppScreen, allows: UrlPolicy): AppScreen | undefined {
-	if (countNodes(screen.root) > MAX_SCREEN_NODES) return undefined;
+	if (countUiNodes(screen.root) > MAX_SCREEN_NODES) return undefined;
 	const root = sanitizeNode(screen.root, allows);
 	return root && { screenId: screen.screenId, root };
 }

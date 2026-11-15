@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isLocal, type ImageRef } from './reference';
+import { isLocalRegistry, type ImageRef } from '@pivi/sdk/image';
 
 export type Tool = 'buildah' | 'podman';
 export type Platform = { os: 'linux'; architecture: 'amd64' | 'arm64' };
@@ -106,7 +106,7 @@ export function pushImage(
 		const destination = `docker://${target.registry}/${target.repository}:${target.tag}`;
 		const args = pushArguments(name, destination, {
 			credentials,
-			insecure: isLocal(target.registry)
+			insecure: isLocalRegistry(target.registry)
 		});
 		run(tool, [...args.slice(0, 3), '--digestfile', digestFile, ...args.slice(3)]);
 		return readFileSync(digestFile, 'utf8').trim();

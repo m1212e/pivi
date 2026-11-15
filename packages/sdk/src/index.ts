@@ -4,6 +4,7 @@
 export * from './dashboard';
 export * from './icons';
 export * from './limits';
+export * from './locale';
 export * from './manifest';
 export * from './protocol';
 export * from './ui';

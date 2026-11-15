@@ -1,5 +1,7 @@
 import { containerfile, containerignore } from '../image/containerfile';
-import type { InitOptions } from './options';
+import { DEV_DIR } from '../paths';
+import { sdkPeerDependencies, type InitOptions } from './options';
+import { PROTOCOL_VERSION } from '@pivi/sdk/protocol';
 
 const json = (value: unknown) => `${JSON.stringify(value, null, '\t')}\n`;
 
@@ -10,7 +12,7 @@ function manifestFile(o: InitOptions) {
 		name: o.name,
 		version: '0.1.0',
 		description: o.description,
-		protocol: 2,
+		protocol: PROTOCOL_VERSION,
 		features: o.features,
 		permissions,
 		network: { domains: o.domains },
@@ -35,7 +37,7 @@ ${
 	o.storage
 		? `
 // Persistent state lives in /storage (permission "storage"): per profile, kept across restarts.
-// storagePath() also works under \`pivi-app dev\`, which points it at .pivi-dev/storage.
+// storagePath() also works under \`pivi-app dev\`, which points it at a local folder.
 // Keep as little as possible, a sign-in's tokens for example.
 type Session = { accessToken: string; refreshToken?: string; expiresAt?: number };
 const SESSION_FILE = storagePath('session.json');
@@ -175,11 +177,11 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 		'manifest.spec.ts': manifestSpec,
 		Containerfile: containerfile(),
 		'.containerignore': containerignore,
-		'.gitignore': 'node_modules\n.pivi-dev\ndist\n',
+		'.gitignore': `node_modules\n${DEV_DIR}\ndist\n`,
 		'package.json': json({
 			name: `pivi-app-${o.id}`,
+			// No version: the app's version is manifest.json's.
 			private: true,
-			version: '0.1.0',
 			type: 'module',
 			scripts: {
 				dev: 'pivi-app dev',
@@ -190,7 +192,7 @@ export function projectFiles(o: InitOptions): Record<string, string> {
 				image: 'pivi-app build',
 				publish: 'pivi-app publish'
 			},
-			dependencies: { '@pivi/sdk': o.sdkSpec, 'vscode-jsonrpc': '^10.0.0', zod: '^4.6.7' },
+			dependencies: { '@pivi/sdk': o.sdkSpec, ...sdkPeerDependencies() },
 			devDependencies: {
 				'@pivi/cli': o.cliSpec,
 				'@types/node': '^26.6.6',

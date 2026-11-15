@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseImageRef } from '#lib/apps/imageRef';
+import { parseImageRef } from '@pivi/sdk/image';
 import type { AppManifest } from '@pivi/sdk/manifest';
 import { FakeRegistry, publishAppImage } from './fixtures';
 import { pinnedReference, RegistryClient, RegistryError, resolveImage } from './registry';

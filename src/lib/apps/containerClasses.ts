@@ -12,7 +12,10 @@ const OPTIONAL_CLASSES: [keyof Container, string][] = [
 	['center', 'items-center text-center']
 ];
 
-const JUSTIFY: Record<string, string> = { between: ' justify-between', around: ' justify-around' };
+const JUSTIFY: Record<NonNullable<Container['justify']>, string> = {
+	between: ' justify-between',
+	around: ' justify-around'
+};
 
 // Flags are optional booleans on the node, so each maps to a class chunk.
 function optionalClasses(n: Container): string {
@@ -31,12 +34,12 @@ function columnClasses(n: Container, extra: string): string {
 	const base = n.center ? 'justify-center gap-8 min-h-[70vh]' : 'gap-3';
 	const justify = n.justify && !n.center ? JUSTIFY[n.justify] : '';
 	const fill = justify && n.sticky ? ' h-[calc(100vh-10rem)]' : '';
-	return `flex flex-col ${base}${justify ?? ''}${fill}${extra}`;
+	return `flex flex-col ${base}${justify}${fill}${extra}`;
 }
 
 function rowClasses(n: Container, extra: string): string {
 	const align = n.alignStart ? 'items-start' : 'items-center';
-	return `flex flex-row ${align} gap-3${JUSTIFY[n.justify ?? ''] ?? ''}${extra}`;
+	return `flex flex-row ${align} gap-3${n.justify ? JUSTIFY[n.justify] : ''}${extra}`;
 }
 
 // A real grid, so rows of differently shaped cards (a round channel among

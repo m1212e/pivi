@@ -178,6 +178,88 @@ export type UiNode =
 	  }
 	| { type: 'list'; items: UiNode[] };
 
+/** Every kind of UI node, for code that has to handle each one (renderers, sanitizers). */
+export const UI_NODE_TYPES = [
+	'container',
+	'text',
+	'icon',
+	'spinner',
+	'skeleton',
+	'mediaCard',
+	'shelf',
+	'hero',
+	'image',
+	'button',
+	'toggle',
+	'textInput',
+	'list'
+] as const satisfies readonly UiNode['type'][];
+// And the other way: a node kind missing from the list is a type error here.
+type MissingNodeType = Exclude<UiNode['type'], (typeof UI_NODE_TYPES)[number]>;
+const allNodeTypesListed: [MissingNodeType] extends [never] ? true : MissingNodeType = true;
+void allNodeTypesListed;
+
+type KeysOfAny<T> = T extends unknown ? keyof T : never;
+/** The fields through which a node fires a UI event back to the app, derived from UiNode. */
+export type UiEventField = Extract<KeysOfAny<UiNode>, `on${string}`>;
+/** The same as a list, checked against the type both ways. */
+export const UI_EVENT_FIELDS = [
+	'onSelect',
+	'onChange',
+	'onInput',
+	'onSubmit',
+	'onReachEnd'
+] as const satisfies readonly UiEventField[];
+type MissingEventField = Exclude<UiEventField, (typeof UI_EVENT_FIELDS)[number]>;
+const allEventFieldsListed: [MissingEventField] extends [never] ? true : MissingEventField = true;
+void allEventFieldsListed;
+
+/** The event ids a node fires, by field. */
+export function uiNodeEvents(node: UiNode): Partial<Record<UiEventField, string>> {
+	const events: Partial<Record<UiEventField, string>> = {};
+	for (const field of UI_EVENT_FIELDS) {
+		if (field in node) {
+			const value = (node as Partial<Record<UiEventField, string>>)[field];
+			if (value) events[field] = value;
+		}
+	}
+	return events;
+}
+
+/**
+ * A node's child nodes. Exhaustive by type: a new node kind has to say whether it has
+ * children, so counting and walking a screen can never silently skip a subtree.
+ */
+export function uiNodeChildren(node: UiNode): readonly UiNode[] {
+	switch (node.type) {
+		case 'container':
+		case 'shelf':
+			return node.children;
+		case 'list':
+			return node.items;
+		case 'text':
+		case 'icon':
+		case 'spinner':
+		case 'skeleton':
+		case 'mediaCard':
+		case 'hero':
+		case 'image':
+		case 'button':
+		case 'toggle':
+		case 'textInput':
+			return [];
+		default: {
+			const unknown: never = node;
+			return unknown;
+		}
+	}
+}
+
+/** All nodes of a tree, the root included. */
+export function countUiNodes(node: UiNode): number {
+	return 1 + uiNodeChildren(node).reduce((sum, child) => sum + countUiNodes(child), 0);
+}
+
 // The renderer puts `width` into an inline style, so it has to be a bare length:
 // anything more (`1px; position: fixed`) would let an app style the shell.
 const cssLengthSchema = z

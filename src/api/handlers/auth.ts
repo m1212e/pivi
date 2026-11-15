@@ -1,6 +1,7 @@
 import { GraphQLError } from 'graphql';
 import { ZodError } from 'zod';
 import { AuthError, loginWithPin, logout, registerWithPin } from '../auth';
+import { getLocale } from '#lib/paraglide/runtime';
 import { schemaBuilder } from '../rumble';
 import { credentialsSchema } from '../validation';
 
@@ -25,7 +26,7 @@ schemaBuilder.mutationFields((t) => ({
 		resolve: async (_root, args) => {
 			try {
 				const input = credentialsSchema.parse(args);
-				await registerWithPin(input.username, input.pin);
+				await registerWithPin(input.username, input.pin, getLocale());
 				return true;
 			} catch (err) {
 				throw toGraphQLError(err, 'Could not create profile');

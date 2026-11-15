@@ -44,6 +44,20 @@ export const featureSchema = z.enum([
 ]);
 export type Feature = z.infer<typeof featureSchema>;
 
+/** What each feature means, for tools that offer the choice (`pivi-app init`). */
+export const FEATURE_DESCRIPTIONS: Record<Feature, string> = {
+	dashboard: 'cards on the home screen',
+	screen: 'its own pages (browse, search, settings)',
+	playback: 'plays video',
+	skipSegments: 'sponsor and intro skipping',
+	chat: 'live chat beside a stream'
+};
+
+/** An app id: lowercase letters, digits and dashes, starting with a letter or digit. */
+export const APP_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+/** The longest one-line description an app may have. */
+export const MAX_DESCRIPTION_LENGTH = 140;
+
 const LABEL = '[a-z0-9]([a-z0-9-]*[a-z0-9])?';
 const DOMAIN_PATTERN = new RegExp(`^(\\*\\.)?${LABEL}(\\.${LABEL})+$`, 'i');
 
@@ -100,11 +114,11 @@ const appIconSchema = z
  */
 export const appManifestSchema = z
 	.object({
-		id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Lowercase letters, digits and dashes only'),
+		id: z.string().regex(APP_ID_PATTERN, 'Lowercase letters, digits and dashes only'),
 		name: z.string(),
 		version: z.string(),
 		// One line saying what the app is, shown where it's offered for install.
-		description: z.string().max(140).optional(),
+		description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
 		// Version of the host<->app protocol (protocol.ts) this app speaks, so
 		// the host can refuse one it can't talk to instead of failing oddly.
 		protocol: z.number().int().positive(),

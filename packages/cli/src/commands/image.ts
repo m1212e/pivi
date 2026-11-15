@@ -13,8 +13,9 @@ import {
 	type Tool
 } from '../image/builder';
 import { containerfile, containerignore } from '../image/containerfile';
-import { formatReference, parseReference } from '../image/reference';
+import { formatImageRef, parseImageRef } from '@pivi/sdk/image';
 import { generateKeyPair, signImage, signingKeyFromEnv } from '../image/sign';
+import { BUNDLE_DIR, DEV_DIR } from '../paths';
 import { readManifest } from '../project';
 import { checkProject } from '../staticChecks';
 
@@ -40,7 +41,7 @@ function chooseContainerfile(dir: string) {
 	for (const name of ['Containerfile', 'Dockerfile']) {
 		if (existsSync(join(dir, name))) return { file: join(dir, name), ignorefile: undefined };
 	}
-	const generated = join(dir, '.pivi-dev');
+	const generated = join(dir, DEV_DIR);
 	mkdirSync(generated, { recursive: true });
 	writeFileSync(join(generated, 'Containerfile'), containerfile());
 	writeFileSync(join(generated, 'containerignore'), containerignore);
@@ -64,7 +65,7 @@ async function buildLocal(
 	const tool = findTool();
 
 	console.log(`Bundling ${options.entry ?? 'main.ts'} with tsdown…`);
-	await bundleTo(root, join(root, '.pivi-dev', 'bundle'), {
+	await bundleTo(root, join(root, BUNDLE_DIR), {
 		entry: options.entry,
 		conditions: options.conditions
 	});
@@ -126,14 +127,14 @@ export async function publish(
 	}
 	const explicitTag = /:[^/]+$/.test(reference);
 	const { tool, name, version } = await buildLocal(dir, options);
-	const target = parseReference(explicitTag ? reference : `${reference}:${version}`);
+	const target = parseImageRef(explicitTag ? reference : `${reference}:${version}`);
 	const tags = [
 		...new Set([target.tag!, ...(options.tags ?? []), ...(explicitTag ? [] : ['latest'])])
 	];
 	const credentials = publishCredentials();
 	let digest = '';
 	for (const tag of tags) {
-		console.log(`Pushing ${formatReference({ ...target, tag })}…`);
+		console.log(`Pushing ${formatImageRef({ ...target, tag })}…`);
 		digest = pushImage(tool, name, { ...target, tag }, credentials);
 	}
 	const signing = signingKeyFromEnv(options.sign);
@@ -142,8 +143,8 @@ export async function publish(
 		signImage({ ...target, tag: tags[0] }, signing, credentials);
 	}
 	console.log(`\n✓ published ${digest}${signing ? ', signed' : ''}`);
-	for (const tag of tags) console.log(`  ${formatReference({ ...target, tag })}`);
-	console.log(`\nInstall it in pivi with: ${formatReference({ ...target, tag: tags[0] })}`);
+	for (const tag of tags) console.log(`  ${formatImageRef({ ...target, tag })}`);
+	console.log(`\nInstall it in pivi with: ${formatImageRef({ ...target, tag: tags[0] })}`);
 	return 0;
 }
 

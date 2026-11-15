@@ -1,6 +1,6 @@
 {
 	"name": "@pivi/sdk",
-	"version": "0.2.2",
+	"version": "0.3.0",
 	"description": "The contract between pivi and its apps: manifest, JSON-RPC protocol, declarative UI and the app-side runtime.",
 	"license": "Apache-2.0",
 	"repository": {
@@ -54,9 +54,17 @@
 			"pivi-source": "./src/icons.ts",
 			"default": "./dist/icons.js"
 		},
+		"./image": {
+			"pivi-source": "./src/image.ts",
+			"default": "./dist/image.js"
+		},
 		"./limits": {
 			"pivi-source": "./src/limits.ts",
 			"default": "./dist/limits.js"
+		},
+		"./locale": {
+			"pivi-source": "./src/locale.ts",
+			"default": "./dist/locale.js"
 		},
 		"./manifest": {
 			"pivi-source": "./src/manifest.ts",
@@ -90,7 +98,9 @@
 			"./app": "./dist/app.js",
 			"./dashboard": "./dist/dashboard.js",
 			"./icons": "./dist/icons.js",
+			"./image": "./dist/image.js",
 			"./limits": "./dist/limits.js",
+			"./locale": "./dist/locale.js",
 			"./manifest": "./dist/manifest.js",
 			"./protocol": "./dist/protocol.js",
 			"./rpc": "./dist/rpc.js",

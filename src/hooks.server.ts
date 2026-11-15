@@ -2,24 +2,31 @@ import { dev } from '$app/env';
 import { redirect } from '@sveltejs/kit';
 import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { getActiveProfileUser } from '#api/activeProfile';
-import { noteBrowserLocale } from '#api/apps/hostLocale';
+import { noteHostLocale } from '#api/apps/hostLocale';
+import { activeProfileLocale } from '#api/profileLocale';
 import { handlePairing } from '#api/pairingHook';
-import { getTextDirection } from '#lib/paraglide/runtime';
+import { defineCustomServerStrategy, getTextDirection } from '#lib/paraglide/runtime';
 import { paraglideMiddleware } from '#lib/paraglide/server';
 import { API_PREFIX, APPS_PREFIX, REMOTE_PREFIX, ROUTES, isPlayPath } from '#lib/routes';
 
 // Only the TV's own pages say what language apps should use, not the paired
 // phone's remote page or API calls.
-const handleHostLocale: Handle = ({ event, resolve }) => {
-	const { pathname } = event.url;
-	if (!pathname.startsWith(REMOTE_PREFIX) && !pathname.startsWith(API_PREFIX)) {
-		noteBrowserLocale(event.request.headers.get('accept-language'));
-	}
-	return resolve(event);
-};
+const isTvPage = (pathname: string) =>
+	!pathname.startsWith(REMOTE_PREFIX) && !pathname.startsWith(API_PREFIX);
+
+// The logged in profile's language wins on the TV. The phone remote keeps its
+// own browser's language: it may be someone else's phone.
+defineCustomServerStrategy('custom-profile', {
+	getLocale: (request) =>
+		request && isTvPage(new URL(request.url).pathname) ? activeProfileLocale() : undefined
+});
 
 const handleParaglide: Handle = ({ event, resolve }) =>
 	paraglideMiddleware(event.request, ({ request, locale }) => {
+		// Apps follow the language this page is shown in (see hostLocale.ts).
+		if (isTvPage(event.url.pathname)) {
+			noteHostLocale(locale, event.request.headers.get('accept-language'));
+		}
 		// `event.request` is read-only in the type system, but paraglide needs
 		// the de-localized request swapped in before `resolve` runs downstream.
 		(event as { request: Request }).request = request;
@@ -112,7 +119,6 @@ const handleActiveProfile: Handle = async ({ event, resolve }) => {
 export const handle: Handle = sequence(
 	handleLanBoundary,
 	handleSecurityHeaders,
-	handleHostLocale,
 	handleParaglide,
 	handlePairing,
 	handleActiveProfile

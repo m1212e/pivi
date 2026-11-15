@@ -183,6 +183,17 @@ export const schema = {
 				interfaces: []
 			},
 			{
+				kind: 'ENUM',
+				name: 'AppFeature',
+				enumValues: [
+					{ name: 'chat' },
+					{ name: 'dashboard' },
+					{ name: 'playback' },
+					{ name: 'screen' },
+					{ name: 'skipSegments' }
+				]
+			},
+			{
 				kind: 'OBJECT',
 				name: 'AppForcedStop',
 				fields: [
@@ -233,7 +244,7 @@ export const schema = {
 								kind: 'LIST',
 								ofType: {
 									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+									ofType: { name: 'AppFeature', kind: 'ENUM', ofType: null, __proto__: null }
 								}
 							}
 						},
@@ -315,7 +326,7 @@ export const schema = {
 								kind: 'LIST',
 								ofType: {
 									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+									ofType: { name: 'AppFeature', kind: 'ENUM', ofType: null, __proto__: null }
 								}
 							}
 						},
@@ -1946,7 +1957,7 @@ export const schema = {
 								kind: 'LIST',
 								ofType: {
 									kind: 'NON_NULL',
-									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+									ofType: { name: 'AppFeature', kind: 'ENUM', ofType: null, __proto__: null }
 								}
 							}
 						},
@@ -2424,6 +2435,22 @@ export const schema = {
 							},
 							{
 								name: 'permission',
+								type: {
+									kind: 'NON_NULL',
+									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+								}
+							}
+						]
+					},
+					{
+						name: 'setProfileLocale',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: [
+							{
+								name: 'locale',
 								type: {
 									kind: 'NON_NULL',
 									ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
@@ -3241,6 +3268,11 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'locale',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
 						name: 'pinHash',
 						type: {
 							kind: 'NON_NULL',
@@ -3281,6 +3313,11 @@ export const schema = {
 					},
 					{
 						name: 'image',
+						type: { kind: 'ENUM', name: 'SortingParameter', ofType: null, __proto__: null },
+						defaultValue: void 0
+					},
+					{
+						name: 'locale',
 						type: { kind: 'ENUM', name: 'SortingParameter', ofType: null, __proto__: null },
 						defaultValue: void 0
 					},
@@ -3370,6 +3407,16 @@ export const schema = {
 					},
 					{
 						name: 'image',
+						type: {
+							kind: 'INPUT_OBJECT',
+							name: 'StringWhereInputArgument',
+							ofType: null,
+							__proto__: null
+						},
+						defaultValue: void 0
+					},
+					{
+						name: 'locale',
 						type: {
 							kind: 'INPUT_OBJECT',
 							name: 'StringWhereInputArgument',

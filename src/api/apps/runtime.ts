@@ -29,14 +29,19 @@ import {
 	encodeMessage,
 	LineSplitter
 } from '@pivi/sdk/rpc';
-import {
-	domainsAllow,
-	type Feature,
-	type PermissionKey,
-	type AppManifest
-} from '@pivi/sdk/manifest';
+import { domainsAllow, type PermissionKey, type AppManifest } from '@pivi/sdk/manifest';
 import type { DashboardContribution } from '@pivi/sdk/dashboard';
 import type { AppScreen, UiEvent } from '@pivi/sdk/ui';
+import { supportsMethod } from '@pivi/sdk/schema';
+import {
+	CHAT_BACKLOG,
+	HOST_TIMEOUTS,
+	MAX_MESSAGE_BYTES,
+	MAX_MESSAGES_PER_SECOND,
+	MAX_SCREEN_BYTES,
+	MAX_SCREENS,
+	OPEN_ON_PHONE_INTERVAL_MS
+} from '@pivi/sdk/limits';
 import {
 	activateNotification,
 	chatMessagesNotification,
@@ -161,10 +166,7 @@ export type LoadAppOptions = {
 // killed, so an app can't sit in the background mining or spinning. A minute
 // at 80% is far past any legitimate background work like refreshing a feed.
 const DEFAULT_WATCHDOG: WatchdogSettings = {
-	readyMs: 60_000,
-	resolveStreamMs: 45_000,
-	requestMs: 15_000,
-	pingMs: 5_000,
+	...HOST_TIMEOUTS,
 	cpuSampleMs: 5_000,
 	cpuWindowMs: 60_000,
 	cpuLimit: 0.8
@@ -173,26 +175,12 @@ const DEFAULT_WATCHDOG: WatchdogSettings = {
 const SHUTDOWN_GRACE_MS = 2_000;
 // Per log line, see createStderrLogger.
 const MAX_LOG_LINE = 2_000;
-// Distinct screens an app may keep published, so it can't grow host memory by
-// publishing under ever new ids.
-const MAX_SCREENS = 32;
-// What all of an app's published screens may add up to, serialized. The
-// per-screen node and string caps alone would still allow MAX_SCREENS times
-// the largest message.
-const MAX_SCREEN_BYTES = 8 << 20;
-// One protocol message from the app. Far below the SDK's own default, since
-// the host reads every running app's output and a screen never gets near it.
-// Far above anything a real app sends (a screen update is a handful per second).
-const MAX_MESSAGES_PER_SECOND = 5000;
+// The limits an app runs into (screens, message size, rates, timeouts) are part
+// of the contract and live in @pivi/sdk/limits, so `pivi-app dev` applies them too.
 
-const MAX_MESSAGE_BYTES = 4 << 20;
-// Every link pops up a prompt on the phone, so an app can't keep spamming it.
-const OPEN_ON_PHONE_INTERVAL_MS = 5_000;
-// Chat lines kept per open chat, about a screen and a half.
-const CHAT_BACKLOG = 150;
-
-function hasFeature(manifest: AppManifest, feature: Feature): boolean {
-	return manifest.features.includes(feature);
+/** Whether the app takes part in `message`, by the SDK's table of which feature each method needs. */
+function supportsFor(manifest: AppManifest) {
+	return (message: { method: string }) => supportsMethod(manifest.features, message);
 }
 
 /**
@@ -287,6 +275,7 @@ function wireNotifications(
 	onReady: (protocol: number) => void
 ) {
 	const { manifest, granted, onUpdate, onOpenOnPhone } = options;
+	const supports = supportsFor(manifest);
 	const allows = (url: string) => urlAllowed(manifest, granted, url);
 	const drop = (what: string) =>
 		console.warn(`[app:${manifest.id}] ignored ${what}: not declared in its manifest`);
@@ -297,7 +286,7 @@ function wireNotifications(
 	});
 
 	connection.onNotification(publishDashboardNotification, (raw) => {
-		if (!hasFeature(manifest, 'dashboard')) return drop('a dashboard');
+		if (!supports(publishDashboardNotification)) return drop('a dashboard');
 		const parsed = dashboardContributionSchema.safeParse(raw);
 		if (!parsed.success) return;
 		published.dashboard = sanitizeDashboard(parsed.data, allows);
@@ -305,7 +294,7 @@ function wireNotifications(
 	});
 
 	connection.onNotification(publishScreenNotification, (raw) => {
-		if (!hasFeature(manifest, 'screen')) return drop('a screen');
+		if (!supports(publishScreenNotification)) return drop('a screen');
 		const parsed = appScreenSchema.safeParse(raw);
 		if (!parsed.success) return;
 		const screen = sanitizeScreen(parsed.data, allows);
@@ -330,7 +319,7 @@ function wireNotifications(
 	});
 
 	connection.onNotification(chatMessagesNotification, (raw) => {
-		if (!hasFeature(manifest, 'chat')) return drop('chat messages');
+		if (!supports(chatMessagesNotification)) return drop('chat messages');
 		const parsed = chatMessagesParamsSchema.safeParse(raw);
 		if (!parsed.success) return;
 		const chat = published.chats.get(parsed.data.sessionId);
@@ -345,7 +334,7 @@ function wireNotifications(
 
 	let lastOpenOnPhone = -Infinity;
 	connection.onNotification(openOnPhoneNotification, (raw) => {
-		if (!hasFeature(manifest, 'screen')) return drop('a link for the phone');
+		if (!supports(openOnPhoneNotification)) return drop('a link for the phone');
 		const parsed = openOnPhoneParamsSchema.safeParse(raw);
 		if (!parsed.success || !isPhoneSafeUrl(parsed.data.url)) return;
 		const now = Date.now();
@@ -364,6 +353,7 @@ function wireNotifications(
  */
 export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 	const { manifest, granted } = options;
+	const supports = supportsFor(manifest);
 	const watchdog = { ...DEFAULT_WATCHDOG, ...options.watchdog };
 	// Checked again here, not just at install: an app installed under an older
 	// host can't even say `ready` in a protocol this one speaks, so it would
@@ -583,24 +573,24 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		},
 
 		refreshDashboard() {
-			if (hasFeature(manifest, 'dashboard')) {
+			if (supports(refreshDashboardNotification)) {
 				connection.sendNotification(refreshDashboardNotification);
 			}
 		},
 
 		sendUiEvent(event) {
-			if (hasFeature(manifest, 'screen')) connection.sendNotification(uiEventNotification, event);
+			if (supports(uiEventNotification)) connection.sendNotification(uiEventNotification, event);
 		},
 
 		async resolveStream(sessionId, maxHeight) {
-			if (!hasFeature(manifest, 'playback')) throw new Error('This app cannot play media');
+			if (!supports(resolveStreamRequest)) throw new Error('This app cannot play media');
 			return resolvedStreamSchema.parse(
 				await request(resolveStreamRequest, { sessionId, maxHeight }, watchdog.resolveStreamMs)
 			);
 		},
 
 		async resolveSkipSegments(sessionId) {
-			if (!hasFeature(manifest, 'skipSegments')) return [];
+			if (!supports(resolveSkipSegmentsRequest)) return [];
 			try {
 				const result = await request(resolveSkipSegmentsRequest, { sessionId }, watchdog.requestMs);
 				return resolveSkipSegmentsResultSchema.parse(result).segments;
@@ -611,7 +601,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		},
 
 		async resolveNext(sessionId, context) {
-			if (!hasFeature(manifest, 'playback')) return undefined;
+			if (!supports(resolveNextRequest)) return undefined;
 			try {
 				const result = await request(
 					resolveNextRequest,
@@ -627,7 +617,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		},
 
 		async resolveLiveStatus(sessionId) {
-			if (!hasFeature(manifest, 'playback')) return {};
+			if (!supports(resolveLiveStatusRequest)) return {};
 			try {
 				const result = await request(resolveLiveStatusRequest, { sessionId }, watchdog.requestMs);
 				return resolveLiveStatusResultSchema.parse(result);
@@ -638,7 +628,7 @@ export async function loadApp(options: LoadAppOptions): Promise<AppInstance> {
 		},
 
 		openChat(sessionId) {
-			if (!hasFeature(manifest, 'chat')) return () => {};
+			if (!supports(openChatNotification)) return () => {};
 			const chat = published.chats.get(sessionId) ?? { refs: 0, messages: [] };
 			published.chats.set(sessionId, chat);
 			if (chat.refs++ === 0) connection.sendNotification(openChatNotification, { sessionId });

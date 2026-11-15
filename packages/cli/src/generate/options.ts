@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { featureSchema, type Feature } from '@pivi/sdk/manifest';
+import { APP_ID_PATTERN, featureSchema, type Feature } from '@pivi/sdk/manifest';
 
 /** This CLI's package.json, found from src/ in the repo or from dist/ once published. */
 function ownPackage(): { version: string; peerDependencies: Record<string, string> } {
@@ -24,9 +25,18 @@ function defaultSpecs() {
 	return { sdk: pkg.peerDependencies['@pivi/sdk']!, cli: `^${pkg.version}` };
 }
 
-export type CiPlatform = 'github' | 'gitlab' | 'gitea' | 'none';
-export const CI_PLATFORMS: CiPlatform[] = ['github', 'gitlab', 'gitea', 'none'];
-export type AgentFiles = 'claude' | 'agents' | 'none';
+/** The SDK's own peer dependencies (zod, vscode-jsonrpc), which a new app installs next to it. */
+export function sdkPeerDependencies(): Record<string, string> {
+	const sdk = createRequire(import.meta.url)('@pivi/sdk/package.json') as {
+		peerDependencies: Record<string, string>;
+	};
+	return sdk.peerDependencies;
+}
+
+export const CI_PLATFORMS = ['github', 'gitlab', 'gitea', 'none'] as const;
+export type CiPlatform = (typeof CI_PLATFORMS)[number];
+export const AGENT_FILES = ['claude', 'agents', 'none'] as const;
+export type AgentFiles = (typeof AGENT_FILES)[number];
 
 export type InitOptions = {
 	id: string;
@@ -45,7 +55,8 @@ export type InitOptions = {
 };
 
 export const FEATURES = featureSchema.options;
-export const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+/** What a new app implements unless told otherwise. */
+export const DEFAULT_FEATURES: readonly Feature[] = ['dashboard', 'screen', 'playback'];
 
 export const titleCase = (id: string) =>
 	id
@@ -56,10 +67,10 @@ export const titleCase = (id: string) =>
 
 /** Fills in defaults and refuses what the manifest schema would. */
 export function normalizeOptions(partial: Partial<InitOptions> & { id: string }): InitOptions {
-	if (!ID_PATTERN.test(partial.id)) {
+	if (!APP_ID_PATTERN.test(partial.id)) {
 		throw new Error(`Invalid id "${partial.id}": lowercase letters, digits and dashes only`);
 	}
-	const features = partial.features ?? ['dashboard', 'screen', 'playback'];
+	const features = partial.features ?? [...DEFAULT_FEATURES];
 	for (const f of features) {
 		if (!FEATURES.includes(f))
 			throw new Error(`Unknown feature "${f}". Choose from ${FEATURES.join(', ')}`);

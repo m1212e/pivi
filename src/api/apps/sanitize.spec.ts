@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardContribution } from '@pivi/sdk/dashboard';
 import type { AppScreen } from '@pivi/sdk/ui';
-import { MAX_SCREEN_NODES, sanitizeDashboard, sanitizeScreen } from './sanitize';
+import { MAX_SCREEN_NODES } from '@pivi/sdk/limits';
+import { sanitizeDashboard, sanitizeScreen } from './sanitize';
 
 const allows = (url: string) => url.startsWith('https://img.example.com/');
 

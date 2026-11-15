@@ -3,7 +3,7 @@
 // configuration (PIVI_SUGGESTED_APPS), and what each one is comes from its own
 // manifest in the registry, so the host carries no details of any app.
 import { PIVI_SUGGESTED_APPS } from '$app/env/private';
-import { formatImageRef, parseImageRef } from '#lib/apps/imageRef';
+import { formatImageRef, parseImageRef } from '@pivi/sdk/image';
 import { resolveImage, type RegistryClient } from './registry';
 import { createTtlCache } from './ttlCache';
 import type { AppManifest } from '@pivi/sdk/manifest';

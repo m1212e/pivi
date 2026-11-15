@@ -1,5 +1,18 @@
 // What a person types at `pivi-app dev` (or passes to --exec), and what an MCP
 // server would expose: each command returns text, so every front end shares it.
+import {
+	closeChatNotification,
+	localeNotification,
+	openChatNotification,
+	pingRequest,
+	refreshDashboardNotification,
+	resolveLiveStatusRequest,
+	resolveNextRequest,
+	resolveSkipSegmentsRequest,
+	resolveStreamRequest,
+	uiEventNotification,
+	type RequestType
+} from '@pivi/sdk/protocol';
 import { Harness } from './harness';
 import { probeStream } from './probe';
 import { renderDashboard, renderUiTree } from './uiTree';
@@ -79,7 +92,11 @@ async function event(harness: Harness, { rest, tail }: Args) {
 	const [screenId, eventId] = rest;
 	if (!screenId || !eventId) return 'Usage: event <screenId> <eventId> [value]';
 	const value = eventValue(tail(2));
-	harness.notify('host/uiEvent', { screenId, eventId, ...(value === undefined ? {} : { value }) });
+	harness.notify(uiEventNotification, {
+		screenId,
+		eventId,
+		...(value === undefined ? {} : { value })
+	});
 	await harness.settle(800);
 	return `sent. Screens: ${screenIds(harness).join(', ')}`;
 }
@@ -90,7 +107,7 @@ async function stream(harness: Harness, { arg }: Args) {
 	const sessionId = arg(0);
 	if (!sessionId) return 'Usage: stream <sessionId> [maxHeight]';
 	const maxHeight = arg(1) ? Number(arg(1)) : undefined;
-	const reply = await harness.request('app/resolveStream', {
+	const reply = await harness.request(resolveStreamRequest, {
 		sessionId,
 		...(maxHeight ? { maxHeight } : {})
 	});
@@ -102,12 +119,15 @@ async function stream(harness: Harness, { arg }: Args) {
 }
 
 /** next, skip and live: a host request about one session, answered as JSON. */
-function sessionRequest(method: string, usage: string, withContext = false): Command {
+function sessionRequest<P, R>(
+	type: RequestType<P, R, void>,
+	usage: string,
+	toParams: (sessionId: string, context?: string) => P
+): Command {
 	return async (harness, { arg, tail }) => {
 		const sessionId = arg(0);
 		if (!sessionId) return `Usage: ${usage}`;
-		const context = withContext ? tail(1) : undefined;
-		const reply = await harness.request(method, { sessionId, ...(context ? { context } : {}) });
+		const reply = await harness.request(type, toParams(sessionId, tail(1)));
 		return reply.error ? `error: ${reply.error.message}` : json(reply.result);
 	};
 }
@@ -116,13 +136,13 @@ async function chat(harness: Harness, { rest }: Args) {
 	const [action, sessionId] = rest;
 	if ((action !== 'open' && action !== 'close') || !sessionId)
 		return 'Usage: chat open|close <sessionId>';
-	harness.notify(action === 'open' ? 'host/openChat' : 'host/closeChat', { sessionId });
+	harness.notify(action === 'open' ? openChatNotification : closeChatNotification, { sessionId });
 	await harness.settle(1500);
 	return `sent. ${harness.chat.length} chat batches received so far (see chatlog)`;
 }
 
 async function refresh(harness: Harness) {
-	harness.notify('host/refreshDashboard');
+	harness.notify(refreshDashboardNotification);
 	await harness.settle(1500);
 	return harness.dashboard.current
 		? `${harness.dashboard.current.cards.length} cards`
@@ -131,21 +151,21 @@ async function refresh(harness: Harness) {
 
 async function ping(harness: Harness) {
 	const started = Date.now();
-	const reply = await harness.request('host/ping');
+	const reply = await harness.request(pingRequest);
 	return reply.error ? `error: ${reply.error.message}` : `pong in ${Date.now() - started} ms`;
 }
 
 async function call(harness: Harness, { arg, tail }: Args) {
 	const method = arg(0);
 	if (!method) return 'Usage: call <method> [json]';
-	const reply = await harness.request(method, parseJson(tail(1)));
+	const reply = await harness.requestByName(method, parseJson(tail(1)));
 	return reply.error ? `error: ${reply.error.message}` : json(reply.result);
 }
 
 async function send(harness: Harness, { arg, tail }: Args) {
 	const method = arg(0);
 	if (!method) return 'Usage: send <method> [json]';
-	harness.notify(method, parseJson(tail(1)));
+	harness.notifyByName(method, parseJson(tail(1)));
 	await harness.settle(800);
 	return 'sent';
 }
@@ -191,15 +211,22 @@ const COMMANDS: Record<string, Command> = {
 	screen,
 	event,
 	stream,
-	next: sessionRequest('app/resolveNext', 'next <sessionId> [context]', true),
-	skip: sessionRequest('app/resolveSkipSegments', 'skip <sessionId>'),
-	live: sessionRequest('app/resolveLiveStatus', 'live <sessionId>'),
+	next: sessionRequest(resolveNextRequest, 'next <sessionId> [context]', (sessionId, context) => ({
+		sessionId,
+		...(context ? { context } : {})
+	})),
+	skip: sessionRequest(resolveSkipSegmentsRequest, 'skip <sessionId>', (sessionId) => ({
+		sessionId
+	})),
+	live: sessionRequest(resolveLiveStatusRequest, 'live <sessionId>', (sessionId) => ({
+		sessionId
+	})),
 	chat,
 	chatlog: (h) => (h.chat.length ? json(h.chat.slice(-5)) : 'No chat messages yet.'),
 	refresh,
 	locale: (h, { arg }) => {
 		if (!arg(0)) return 'Usage: locale <bcp47 tag>';
-		h.notify('host/locale', { locale: arg(0) });
+		h.notify(localeNotification, { locale: arg(0)! });
 		return 'sent';
 	},
 	ping,

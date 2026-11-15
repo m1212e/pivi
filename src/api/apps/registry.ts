@@ -10,7 +10,7 @@
 // a man in the middle can't hand over something other than what was named.
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { formatImageRef, registryApiHost, type ImageRef } from '#lib/apps/imageRef';
+import { formatImageRef, isLocalRegistry, registryApiHost, type ImageRef } from '@pivi/sdk/image';
 import { MANIFEST_LABEL, appManifestSchema, type AppManifest } from '@pivi/sdk/manifest';
 import { SUPPORTED_PROTOCOLS } from '@pivi/sdk/protocol';
 
@@ -39,15 +39,6 @@ function hostPlatform(): Platform {
 
 function sha256Digest(bytes: Uint8Array): string {
 	return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
-}
-
-/**
- * A registry on this machine is spoken to in plain HTTP, since that's how a
- * development registry normally runs. microsandbox.ts pulls from it the same way.
- */
-export function isLocalRegistry(registry: string): boolean {
-	const host = registry.replace(/:\d+$/, '');
-	return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 }
 
 function schemeFor(registry: string): 'http' | 'https' {

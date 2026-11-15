@@ -2,6 +2,7 @@ import { watch } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { executeCommand } from '../commands';
 import { Harness } from '../harness';
+import { DEV_DIR } from '../paths';
 
 export type DevOptions = {
 	entry?: string;
@@ -71,8 +72,10 @@ function watchSources(harness: Harness, dir: string) {
 		restarting = false;
 	};
 	watch(dir, { recursive: true }, (_event, file) => {
-		if (!file || /node_modules|\.pivi-dev|\.git/.test(file) || !/\.(ts|js|json)$/.test(file))
-			return;
+		const ignored = ['node_modules', DEV_DIR, '.git'].some((dir) =>
+			file?.split(/[\\/]/).includes(dir)
+		);
+		if (!file || ignored || !/\.(ts|js|json)$/.test(file)) return;
 		clearTimeout(timer);
 		timer = setTimeout(() => void restart(file), 300);
 	});
@@ -112,7 +115,7 @@ export async function dev(dir: string, options: DevOptions): Promise<number> {
 	if (options.exec.length > 0) return runOnce(harness, options.exec);
 	if (options.watch) watchSources(harness, dir);
 	if (options.preview !== undefined) {
-		const { startPreview } = await import('../preview');
+		const { startPreview } = await import('../preview/server');
 		const preview = await startPreview(harness, options.preview);
 		console.log(`Preview: ${preview.url}`);
 	}

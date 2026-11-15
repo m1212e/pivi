@@ -94,8 +94,11 @@ handler without its feature is dead code, and a feature without its handler is a
 import { defineApp } from '@pivi/sdk/app';
 
 defineApp((app) => ({
-	onActivate({ locale }) {
+	onActivate() {
 		// Start loading and publishing here. Earlier publishes are dropped.
+	},
+	onLocale() {
+		// The user switched language: republish what shows text.
 	},
 	resolveStream: async ({ sessionId, maxHeight }) => ({
 		videoUrl: await findUrl(sessionId),
@@ -114,6 +117,20 @@ defineApp((app) => ({
   logged for `onActivate`.
 - `host/ping` is answered for you. Keep the event loop free: an app that stops answering after
   a request timeout is killed, so do not block it with long synchronous work.
+
+## Language
+
+`app.locale` is the user's language as a canonical BCP 47 tag (`de-DE`, `en`, `pt-BR`): the
+language pivi's own UI is shown in, with the region the browser prefers for it. It is set before
+`onActivate` runs and updated before `onLocale`, which the host sends when the user switches.
+
+- Pick your translations with `pickLocale(app.locale, ['en', 'de'], 'en')` from
+  `@pivi/sdk/locale`: an exact match, else the same language, else the fallback.
+- Pass `app.locale` to services that take a language (`hl=`, `Accept-Language`) and to
+  `Intl.DateTimeFormat`/`Intl.NumberFormat`, so dates and numbers read the way the user expects.
+- Republish the dashboard and open screens in `onLocale`; nothing re-renders by itself.
+- `pivi-app dev --locale de-DE` (and the `start` MCP tool's `locale`) start the app in another
+  language, `locale de` at the dev prompt switches it while running.
 
 ## Playback
 

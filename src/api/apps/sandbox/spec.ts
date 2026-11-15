@@ -4,7 +4,7 @@
 // the spec, and the backend can't grant what it isn't told about.
 import { createHash } from 'node:crypto';
 import type { PermissionKey, AppManifest } from '@pivi/sdk/manifest';
-import type { ImageRef } from '#lib/apps/imageRef';
+import type { ImageRef } from '@pivi/sdk/image';
 import type { AppImage } from '../image';
 import { pinnedReference } from '../registry';
 import type { SandboxSpec, VolumeSpec } from './types';

@@ -1,8 +1,8 @@
 import { afterEach, expect, it } from 'vitest';
-import { Harness } from './harness';
-import { startPreview, type Preview } from './preview';
+import { Harness } from '../harness';
+import { startPreview, type Preview } from './server';
 
-const fixture = new URL('../test/fixtures/good', import.meta.url).pathname;
+const fixture = new URL('../../test/fixtures/good', import.meta.url).pathname;
 let harness: Harness | undefined;
 let preview: Preview | undefined;
 afterEach(async () => {
@@ -19,8 +19,10 @@ it('serves the page, the published state, and sends UI events to the app', async
 
 	const page = await fetch(preview.url).then((r) => r.text());
 	expect(page).toContain('<title>pivi preview</title>');
-	// App text is only ever set through textContent.
-	expect(page).not.toContain('innerHTML');
+	const client = await fetch(`${preview.url}client.js`).then((r) => r.text());
+	// The typed client, bundled: it renders, and app text only ever goes through textContent.
+	expect(client).toContain('textContent');
+	expect(client).not.toContain('innerHTML');
 
 	const state = await fetch(`${preview.url}state`).then((r) => r.json());
 	expect(Object.keys(state.screens)).toEqual(['main']);

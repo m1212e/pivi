@@ -72,6 +72,9 @@ export default defineConfig(({ mode, command }) => ({
 		paraglideVitePlugin({
 			project: './project.inlang',
 			outdir: './src/lib/paraglide',
+			// custom-profile: the logged in profile's language, see hooks.server.ts
+			// and hooks.client.ts. The cookie is the device's choice otherwise.
+			strategy: ['custom-profile', 'cookie', 'globalVariable', 'baseLocale'],
 			emitTsDeclarations: true
 		})
 	],

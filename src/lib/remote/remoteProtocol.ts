@@ -2,6 +2,7 @@
 // the TV (RemoteBridge.svelte), carried over the encrypted pairing channel.
 // Each method comes with a zod schema so both ends validate what crosses the
 // boundary (see rpc.ts) and can't drift apart.
+import { isHttpsUrl } from '@pivi/sdk/limits';
 import { NotificationType, NotificationType0 } from 'vscode-jsonrpc';
 import { z } from 'zod';
 
@@ -260,13 +261,7 @@ export const pairingDecisionNotification = new NotificationType<
  * host path nor something else on the TV's loopback can hand it a
  * javascript:, intent: or file: URL.
  */
-export function isPhoneSafeUrl(raw: string): boolean {
-	try {
-		return new URL(raw).protocol === 'https:';
-	} catch {
-		return false;
-	}
-}
+export const isPhoneSafeUrl = isHttpsUrl;
 
 // Host -> phone, sent by the openUrlOnPhone mutation (handlers/remote.ts) so
 // an app can finish a login, or anything needing a real browser, on the phone.

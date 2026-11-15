@@ -1,6 +1,7 @@
-// Apps are installed from an OCI image reference the user types in. Parsed
-// with Docker's own rules, so a reference copied from a compose file means
-// what the person expects.
+// Apps are distributed as OCI images and installed from a reference the user
+// types in. Parsed with Docker's own rules, so a reference copied from a compose
+// file means what the person expects. The host (install, updates, registry) and
+// pivi-app (publish) share this parser, so they agree on what a reference means.
 const DOCKER_HUB = 'docker.io';
 
 /** The parsed form the installer, updater and registry client work with. */
@@ -99,4 +100,14 @@ export function formatImageRef({ registry, repository, tag, digest }: ImageRef):
 /** Needed by the registry client because Docker Hub's API lives at a different host than its pull name. */
 export function registryApiHost(registry: string): string {
 	return registry === DOCKER_HUB ? 'registry-1.docker.io' : registry;
+}
+
+/**
+ * A registry on this machine is spoken to in plain HTTP, since that's how a
+ * development registry normally runs (the host's registry client, microsandbox and
+ * pivi-app publish all treat it so).
+ */
+export function isLocalRegistry(registry: string): boolean {
+	const host = registry.replace(/:\d+$/, '');
+	return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 }

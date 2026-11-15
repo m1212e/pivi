@@ -1,4 +1,4 @@
-import { parseImageRef } from '#lib/apps/imageRef';
+import { parseImageRef } from '@pivi/sdk/image';
 import type { AppDeps } from './deps';
 import { availabilityCache } from './availabilityCache';
 import { announceAppListChanged } from './events';

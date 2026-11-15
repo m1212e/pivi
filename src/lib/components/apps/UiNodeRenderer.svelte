@@ -23,6 +23,9 @@
 	import AppIcon from './AppIcon.svelte';
 	import Self from './UiNodeRenderer.svelte';
 
+	// Sanitized trees only hold known types, so this renders nothing at runtime.
+	const unhandled = (node: never): string => (void node, '');
+
 	let {
 		node,
 		onEvent,
@@ -374,4 +377,7 @@
 	{@render textInputNode(node)}
 {:else if node.type === 'list'}
 	{@render listNode(node)}
+{:else}
+	<!-- A node type the SDK added without a branch here fails the type check. -->
+	{unhandled(node)}
 {/if}

@@ -6,9 +6,13 @@
 // else: it imports only zod, vscode-jsonrpc and itself, never host code, so an
 // app can be built from this package alone.
 import { NotificationType, NotificationType0, RequestType, RequestType0 } from 'vscode-jsonrpc';
+
+// The message types themselves, so tools typing against the protocol need nothing else.
+export type { NotificationType, NotificationType0, RequestType, RequestType0 };
 import { z } from 'zod';
 import { dashboardContributionSchema } from './dashboard';
 import { idSchema, MAX_LIST_ITEMS, textSchema, tokenSchema, urlSchema } from './limits';
+import { localeSchema } from './locale';
 import { appScreenSchema, uiEventSchema } from './ui';
 
 // App -> host
@@ -274,9 +278,11 @@ export const chatMessagesNotification = new NotificationType<
 
 // Host -> app
 
-// A BCP 47 tag like `de-DE`, so an app can ask its backend for results in the
-// language the person reads.
-export const activateParamsSchema = z.object({ locale: z.string() });
+// The user's locale (see locale.ts), so an app shows its own text and asks its
+// backend for results in the language the person reads.
+export const activateParamsSchema = z.object({ locale: localeSchema });
+/** What host/activate and host/locale carry. */
+export type LocaleParams = z.output<typeof activateParamsSchema>;
 /** Tells a ready app it may start publishing, along with the host's locale. */
 export const activateNotification = new NotificationType<z.infer<typeof activateParamsSchema>>(
 	'host/activate'
@@ -287,7 +293,10 @@ export const uiEventNotification = new NotificationType<z.infer<typeof uiEventSc
 	'host/uiEvent'
 );
 
-/** The TV's language often becomes known only after the app started, once a page is opened. */
+/**
+ * The user's locale changed: they picked another language in pivi, or the TV's
+ * language became known only after the app started. Same params as activate.
+ */
 export const localeNotification = new NotificationType<z.infer<typeof activateParamsSchema>>(
 	'host/locale'
 );

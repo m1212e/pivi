@@ -30,8 +30,10 @@ import {
 	type resolveSkipSegmentsParamsSchema,
 	type resolveSkipSegmentsResultSchema,
 	type resolveStreamParamsSchema,
-	type ResolvedStream
+	type ResolvedStream,
+	type LocaleParams
 } from './protocol';
+import type { Locale } from './locale';
 import { createStdioConnection } from './stdioConnection';
 import type { appScreenSchema, uiEventSchema } from './ui';
 
@@ -54,6 +56,12 @@ export interface AppContext {
 	sendChat(sessionId: string, batch: ChatBatch): void;
 	/** Logs to stderr, the stream the host captures. */
 	log(level: LogLevel, message: string): void;
+	/**
+	 * The user's locale, a BCP 47 tag such as `de-DE`: from host/activate, kept current
+	 * by host/locale. `en` until the host has activated the app. Use it with `Intl` for
+	 * formatting and with `pickLocale` to choose the app's own translations.
+	 */
+	readonly locale: Locale;
 }
 
 /**
@@ -66,9 +74,9 @@ export interface AppHandlers {
 	 * The host allows publishing from now on. Start loading data here, not
 	 * before: anything published earlier is dropped.
 	 */
-	onActivate?(params: { locale: string }): Awaitable<void>;
-	/** The TV's language became known or changed (a BCP 47 tag such as `de-DE`). */
-	onLocale?(params: { locale: string }): void;
+	onActivate?(params: LocaleParams): Awaitable<void>;
+	/** The user's locale changed (`app.locale` already has the new one): re-publish translated text. */
+	onLocale?(params: LocaleParams): void;
 	/** The home screen opened, so its cards may be stale (feature `dashboard`). */
 	onRefreshDashboard?(): void;
 	/** The user did something on a published screen (feature `screen`). */
@@ -119,8 +127,12 @@ export interface AppHandlers {
  */
 export function defineApp(handlers: AppHandlers | ((app: AppContext) => AppHandlers)): AppContext {
 	const connection = createStdioConnection();
+	let locale: Locale = 'en';
 	const app: AppContext = {
 		connection,
+		get locale() {
+			return locale;
+		},
 		publishDashboard: (dashboard) =>
 			void connection.sendNotification(publishDashboardNotification, dashboard),
 		publishScreen: (screen) => void connection.sendNotification(publishScreenNotification, screen),
@@ -136,11 +148,15 @@ export function defineApp(handlers: AppHandlers | ((app: AppContext) => AppHandl
 	// Registered right after ready, before anything is awaited, so an activate
 	// that arrives straight away is never missed.
 	connection.onNotification(activateNotification, (params) => {
+		locale = params.locale;
 		Promise.resolve(h.onActivate?.(params)).catch((err) =>
 			app.log('error', `onActivate failed: ${String(err)}`)
 		);
 	});
-	connection.onNotification(localeNotification, (params) => h.onLocale?.(params));
+	connection.onNotification(localeNotification, (params) => {
+		locale = params.locale;
+		h.onLocale?.(params);
+	});
 	connection.onNotification(refreshDashboardNotification, () => h.onRefreshDashboard?.());
 	connection.onNotification(uiEventNotification, (event) => h.onUiEvent?.(event));
 	connection.onNotification(shutdownNotification, () =>

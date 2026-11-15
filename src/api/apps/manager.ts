@@ -8,7 +8,7 @@
 // once nothing uses it (usage.ts), and its last dashboard stays on the home
 // screen until it runs again. Opening the home screen boots it again for fresh
 // cards (refreshDashboards).
-import { parseImageRef } from '#lib/apps/imageRef';
+import { parseImageRef } from '@pivi/sdk/image';
 import type { DashboardContribution } from '@pivi/sdk/dashboard';
 import { getActiveProfileUser, onActiveProfileChanged } from '../activeProfile';
 import { loadApp, type AppInstance } from './runtime';

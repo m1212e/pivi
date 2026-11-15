@@ -1,6 +1,7 @@
 import { hashPin, verifyPin } from '#lib/crypto/pin';
 import { clearActiveProfile, setActiveProfile } from './activeProfile';
 import { getStartedApps } from './apps/manager';
+import { noteProfileLocale } from './apps/hostLocale';
 import { db } from './db';
 import { user } from './db/schema';
 import { userPubsub } from './handlers/user';
@@ -43,12 +44,13 @@ function recordFailedLogin(username: string, state: LoginAttempts | undefined) {
 }
 
 /** Backs the register mutation. Makes the new profile active, so a new user lands logged in. */
-export async function registerWithPin(username: string, pin: string) {
+export async function registerWithPin(username: string, pin: string, locale: string) {
 	const existing = await db.query.user.findFirst({ where: { username: { eq: username } } });
 	if (existing) throw new AuthError('Username is already taken');
 
 	const pinHash = await hashPin(pin);
-	const [created] = await db.insert(user).values({ username, pinHash }).returning();
+	// A new profile keeps the language the TV was showing when it was created.
+	const [created] = await db.insert(user).values({ username, pinHash, locale }).returning();
 	// Subscribers of the user table need to learn about the new row.
 	userPubsub.created();
 	setActiveProfile(created.id);
@@ -102,6 +104,8 @@ async function attemptLogin(username: string, pin: string) {
 	}
 
 	loginAttempts.delete(username);
+	// Before the apps boot, so they start in this profile's language.
+	if (existing.locale) noteProfileLocale(existing.locale);
 	setActiveProfile(existing.id);
 	// Boot the apps now so they're ready by the time /home asks for them.
 	void getStartedApps();

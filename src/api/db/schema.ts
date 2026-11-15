@@ -25,7 +25,10 @@ export const user = snakeCase.table('user', {
 	...defaultIdAndTimestamps,
 	username: text().notNull().unique(),
 	pinHash: text().notNull(),
-	image: text()
+	image: text(),
+	// The interface language this profile picked (a paraglide locale), which
+	// apps follow too. Null until they pick one: the device's choice applies.
+	locale: text()
 });
 
 // Phones that completed pairing. The relay checks their signatures against

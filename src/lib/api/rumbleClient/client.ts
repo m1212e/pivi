@@ -46,6 +46,8 @@ export type AppDashboard = {
 	cards: () => AppCard[];
 };
 
+export type AppFeature = 'chat' | 'dashboard' | 'playback' | 'screen' | 'skipSegments';
+
 export type AppForcedStop = {
 	appId: String;
 	appName: String;
@@ -54,7 +56,7 @@ export type AppForcedStop = {
 
 export type AppInfo = {
 	entryScreenId: String;
-	features: String[];
+	features: AppFeature[];
 	hasUpdate: Boolean;
 	icon: String | null;
 	id: String;
@@ -66,7 +68,7 @@ export type AppInfo = {
 export type AppInstallPreview = {
 	conflict: Boolean;
 	domains: String[];
-	features: String[];
+	features: AppFeature[];
 	icon: String | null;
 	image: String;
 	name: String;
@@ -318,7 +320,7 @@ export type ManagedApp = {
 	domains: String[];
 	enabled: Boolean;
 	errorMessage: String | null;
-	features: String[];
+	features: AppFeature[];
 	icon: String | null;
 	id: String;
 	image: String;
@@ -370,6 +372,7 @@ export type Mutation = {
 	setAppAutoUpdate: (p: { appId: String; autoUpdate: Boolean }) => Boolean;
 	setAppEnabled: (p: { appId: String; enabled: Boolean }) => Boolean;
 	setAppPermission: (p: { appId: String; granted: Boolean; permission: String }) => Boolean;
+	setProfileLocale: (p: { locale: String }) => Boolean;
 	signOut: Boolean;
 	uninstallApp: (p: { appId: String }) => Boolean;
 };
@@ -482,6 +485,7 @@ export type User = {
 	createdAt: DateTime;
 	id: ID;
 	image: String | null;
+	locale: String | null;
 	pinHash: String;
 	updatedAt: DateTime | null;
 	username: String;
@@ -491,6 +495,7 @@ export type UserOrderInputArgument = {
 	createdAt?: SortingParameter | null | undefined;
 	id?: SortingParameter | null | undefined;
 	image?: SortingParameter | null | undefined;
+	locale?: SortingParameter | null | undefined;
 	pinHash?: SortingParameter | null | undefined;
 	updatedAt?: SortingParameter | null | undefined;
 	username?: SortingParameter | null | undefined;
@@ -503,6 +508,7 @@ export type UserWhereInputArgument = {
 	createdAt?: DateTimeWhereInputArgument | null | undefined;
 	id?: IDWhereInputArgument | null | undefined;
 	image?: StringWhereInputArgument | null | undefined;
+	locale?: StringWhereInputArgument | null | undefined;
 	pinHash?: StringWhereInputArgument | null | undefined;
 	updatedAt?: DateTimeWhereInputArgument | null | undefined;
 	username?: StringWhereInputArgument | null | undefined;

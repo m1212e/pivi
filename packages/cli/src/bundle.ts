@@ -3,9 +3,10 @@
 // `pivi-app dev` runs and what pivi runs come out of the same build.
 import { join, resolve } from 'node:path';
 import { build } from 'tsdown';
+import { NODE_MAJOR } from './image/containerfile';
 
 /** The Node major the images run (see DEFAULT_BASE), which the bundle is compiled for. */
-const NODE_TARGET = 'node26';
+const NODE_TARGET = `node${NODE_MAJOR}`;
 
 // CommonJS dependencies (vscode-jsonrpc, for one) `require` Node built-ins. In an
 // ESM bundle that only works with a real `require`, which this provides.

@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { resolveStreamRequest } from '@pivi/sdk/protocol';
 import { executeCommand } from './commands';
 import { Harness } from './harness';
 
@@ -50,7 +51,7 @@ describe('the harness with a broken app', () => {
 		// The manifest declares no `screen`, so the host drops the publish.
 		expect(problems).toMatch(/app\/publishScreen: the host drops this/);
 
-		const reply = await h.request('app/resolveStream', { sessionId: 'a' });
+		const reply = await h.request(resolveStreamRequest, { sessionId: 'a' });
 		expect(reply.valid).toBe(false);
 		expect(h.problems.map((p) => p.message).join('\n')).toMatch(/rejects this answer/);
 	});

@@ -201,6 +201,24 @@ const METHODS: MethodSpec[] = [
 /** Every protocol method with its direction, feature gate and zod schemas, for tooling that speaks the protocol (the pivi CLI). */
 export const protocolMethods: readonly MethodSpec[] = METHODS;
 
+const byMethod = new Map(METHODS.map((spec) => [spec.method, spec]));
+
+/** The table entry of one message, by the notification or request type that sends it, or by name. */
+export function methodSpec(message: { method: string } | string): MethodSpec | undefined {
+	return byMethod.get(typeof message === 'string' ? message : message.method);
+}
+
+/**
+ * Whether an app with these features takes part in `message`: the host only sends a
+ * message whose feature the manifest declares, and drops one an app sends without it.
+ * The table above is the only place that says which feature a message needs.
+ */
+export function supportsMethod(features: readonly Feature[], message: { method: string }): boolean {
+	const spec = byMethod.get(message.method);
+	if (!spec) throw new Error(`${message.method} is not a protocol method`);
+	return !spec.feature || features.includes(spec.feature);
+}
+
 // Input side of each schema, since that is what the sender has to produce.
 // Unrepresentable zod types become `any` instead of failing the release build.
 const toSchema = (schema: z.ZodType | undefined) =>

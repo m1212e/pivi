@@ -3,7 +3,9 @@
 // back, so no app needs schema changes. Anything not yet published resolves to
 // null, never an error. Subscriptions re-run the query resolver on every
 // apps/pubsub.ts event so the frontend never has to poll.
+import type { Feature } from '@pivi/sdk/manifest';
 import { schemaBuilder } from '../rumble';
+import { AppFeatureEnum } from './appFeature';
 import { defaultAppDeps } from '../apps/deps';
 import {
 	ANY_DASHBOARD_EVENT,
@@ -21,7 +23,7 @@ import { lastUsedByApp, markAppUsed, sortByLastUsed } from '../apps/appUsage';
 type AppInfo = {
 	id: string;
 	name: string;
-	features: string[];
+	features: Feature[];
 	entryScreenId: string;
 	icon: string | null;
 	primaryColor: string | null;
@@ -59,7 +61,7 @@ const AppInfoRef = schemaBuilder.objectRef<AppInfo>('AppInfo').implement({
 	fields: (t) => ({
 		id: t.exposeString('id'),
 		name: t.exposeString('name'),
-		features: t.exposeStringList('features'),
+		features: t.expose('features', { type: [AppFeatureEnum] }),
 		entryScreenId: t.exposeString('entryScreenId'),
 		icon: t.exposeString('icon', { nullable: true }),
 		primaryColor: t.exposeString('primaryColor', { nullable: true }),

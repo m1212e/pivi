@@ -1,4 +1,4 @@
-import type { InitOptions } from './options';
+import type { CiPlatform, InitOptions } from './options';
 
 const SKILL = 'node_modules/@pivi/sdk/skills/pivi-app/SKILL.md';
 
@@ -79,7 +79,7 @@ bun install
 bun run dev        # run against a fake pivi host, type "help" for commands
 bun run validate   # static checks
 bun test
-bun run image      # build the image (an OCI layout in .pivi-dev/image), no Docker needed
+bun run image      # bundle the app and build its image with buildah (or podman)
 \`\`\`
 
 Edit \`manifest.json\` to declare what the app is and which hosts it may contact, \`service.ts\` for
@@ -217,6 +217,14 @@ jobs:
 `;
 }
 
+// One per CI platform, so a platform without a template is a type error.
+const CI_FILES: Record<CiPlatform, { path: string; content: () => string } | undefined> = {
+	github: { path: '.github/workflows/publish.yml', content: githubWorkflow },
+	gitlab: { path: '.gitlab-ci.yml', content: () => gitlabCi },
+	gitea: { path: '.gitea/workflows/publish.yml', content: giteaWorkflow },
+	none: undefined
+};
+
 export function extraFiles(o: InitOptions): Record<string, string> {
 	const files: Record<string, string> = { 'README.md': readme(o) };
 	if (o.agent !== 'none') files['AGENTS.md'] = agents(o);
@@ -225,8 +233,7 @@ export function extraFiles(o: InitOptions): Record<string, string> {
 		files['.mcp.json'] = mcpJson;
 		files['.claude/settings.json'] = claudeSettings;
 	}
-	if (o.ci === 'github') files['.github/workflows/publish.yml'] = githubWorkflow();
-	if (o.ci === 'gitlab') files['.gitlab-ci.yml'] = gitlabCi;
-	if (o.ci === 'gitea') files['.gitea/workflows/publish.yml'] = giteaWorkflow();
+	const ci = CI_FILES[o.ci];
+	if (ci) files[ci.path] = ci.content();
 	return files;
 }

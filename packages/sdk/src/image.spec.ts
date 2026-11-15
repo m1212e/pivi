@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatImageRef, parseImageRef, registryApiHost } from './imageRef';
+import { formatImageRef, parseImageRef, registryApiHost } from './image';
 
 describe('parseImageRef', () => {
 	it('puts bare names on Docker Hub under library/', () => {

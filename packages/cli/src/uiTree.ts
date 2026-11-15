@@ -1,28 +1,31 @@
-import type { DashboardContribution } from '@pivi/sdk/dashboard';
-import type { UiNode } from '@pivi/sdk/ui';
+import type { AppAction, DashboardContribution } from '@pivi/sdk/dashboard';
+import { uiNodeEvents, type UiNode } from '@pivi/sdk/ui';
 
-type Action = { type: string; screenId?: string; sessionId?: string; url?: string } | undefined;
-
-const actionText = (action: Action) =>
-	!action
-		? ''
-		: action.type === 'screen'
-			? ` → screen ${action.screenId}`
-			: action.type === 'session'
-				? ` → play ${action.sessionId}`
-				: ` → phone ${action.url}`;
+/** Where an action goes. Exhaustive: a new action kind is a type error here. */
+function actionText(action: AppAction | undefined): string {
+	if (!action) return '';
+	switch (action.type) {
+		case 'screen':
+			return ` → screen ${action.screenId}`;
+		case 'session':
+			return ` → play ${action.sessionId}`;
+		case 'openOnPhone':
+			return ` → phone ${action.url}`;
+		default: {
+			const unknown: never = action;
+			return unknown;
+		}
+	}
+}
 
 const clip = (text: string, max = 60) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** A screen as an indented text tree: what it shows, and which events and actions it can fire. */
 export function renderUiTree(node: UiNode, depth = 0): string {
 	const pad = '  '.repeat(depth);
-	const events: string[] = [];
-	const n = node as Record<string, unknown>;
-	for (const key of ['onSelect', 'onChange', 'onInput', 'onSubmit', 'onReachEnd']) {
-		if (typeof n[key] === 'string') events.push(`${key}=${n[key]}`);
-	}
-	const tail = `${actionText(n.action as Action)}${events.length ? `  [${events.join(' ')}]` : ''}`;
+	const events = Object.entries(uiNodeEvents(node)).map(([field, id]) => `${field}=${id}`);
+	const action = 'action' in node ? node.action : undefined;
+	const tail = `${actionText(action)}${events.length ? `  [${events.join(' ')}]` : ''}`;
 	switch (node.type) {
 		case 'container':
 			return [
@@ -55,8 +58,11 @@ export function renderUiTree(node: UiNode, depth = 0): string {
 		case 'spinner':
 		case 'skeleton':
 			return `${pad}${node.type}`;
-		default:
-			return `${pad}${(node as { type: string }).type}`;
+		default: {
+			// Exhaustive: a new node kind is a type error until it is rendered here.
+			const unknown: never = node;
+			return unknown;
+		}
 	}
 }
 

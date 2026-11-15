@@ -17,7 +17,7 @@
 //   - The runtime keeps a unix socket per sandbox under its home directory, whose
 //     path must be short (< 108 bytes), hence PIVI_SANDBOX_HOME.
 import { chunkBytes } from '@pivi/sdk/rpc';
-import { isLocalRegistry } from '../registry';
+import { isLocalRegistry } from '@pivi/sdk/image';
 import { SANDBOX_PREFIX } from './spec';
 import type { RunningSandbox, SandboxBackend, SandboxHandlers, SandboxSpec } from './types';
 

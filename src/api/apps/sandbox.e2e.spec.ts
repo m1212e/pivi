@@ -11,7 +11,7 @@
 // docs/apps.md.) The image is expected to be the YouTube app.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { parseImageRef } from '#lib/apps/imageRef';
+import { parseImageRef } from '@pivi/sdk/image';
 import type { AppDeps } from './deps';
 import { installApp, previewInstall } from './installer';
 import { memoryStore } from './fixtures';

@@ -4,9 +4,16 @@ import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as p from '@clack/prompts';
 import {
+	APP_ID_PATTERN,
+	FEATURE_DESCRIPTIONS,
+	MAX_DESCRIPTION_LENGTH,
+	type Feature
+} from '@pivi/sdk/manifest';
+import {
+	AGENT_FILES,
 	CI_PLATFORMS,
+	DEFAULT_FEATURES,
 	FEATURES,
-	ID_PATTERN,
 	generateProject,
 	normalizeOptions,
 	titleCase,
@@ -22,7 +29,7 @@ Scaffolds a new pivi app. Without --yes it asks for what you did not pass.
 
   --id <id>              lowercase letters, digits, dashes (default: the directory name)
   --name <name>          display name
-  --description <text>   one line, at most 140 characters
+  --description <text>   one line, at most ${MAX_DESCRIPTION_LENGTH} characters
   --features <list>      comma separated: ${FEATURES.join(', ')}
   --domains <list>       comma separated hosts the app contacts (*.example.com allowed)
   --storage              the app keeps data across restarts (adds the storage permission)
@@ -99,7 +106,7 @@ async function askLocation(dirArg: string | undefined, values: Values, interacti
 				message: 'App id (lowercase letters, digits, dashes)',
 				initialValue: id || 'my-app',
 				validate: (v) =>
-					ID_PATTERN.test(v ?? '') ? undefined : 'Lowercase letters, digits and dashes only'
+					APP_ID_PATTERN.test(v ?? '') ? undefined : 'Lowercase letters, digits and dashes only'
 			})
 		);
 	}
@@ -130,23 +137,24 @@ async function askApp(partial: Draft) {
 		await p.text({
 			message: 'One line description',
 			initialValue: `Watch ${partial.name} on pivi`,
-			validate: (v) => ((v?.length ?? 0) > 140 ? 'At most 140 characters' : undefined)
+			validate: (v) =>
+				(v?.length ?? 0) > MAX_DESCRIPTION_LENGTH
+					? `At most ${MAX_DESCRIPTION_LENGTH} characters`
+					: undefined
 		})
 	);
 	partial.features ??= cancelled(
-		await p.multiselect({
+		await p.multiselect<Feature>({
 			message: 'What does the app do?',
-			options: [
-				{ value: 'dashboard', label: 'dashboard', hint: 'cards on the home screen' },
-				{ value: 'screen', label: 'screen', hint: 'its own pages (browse, search, settings)' },
-				{ value: 'playback', label: 'playback', hint: 'plays video' },
-				{ value: 'skipSegments', label: 'skipSegments', hint: 'sponsor/intro skipping' },
-				{ value: 'chat', label: 'chat', hint: 'live chat beside a stream' }
-			],
-			initialValues: ['dashboard', 'screen', 'playback'],
+			options: FEATURES.map((feature) => ({
+				value: feature,
+				label: feature,
+				hint: FEATURE_DESCRIPTIONS[feature]
+			})),
+			initialValues: [...DEFAULT_FEATURES],
 			required: true
 		})
-	) as InitOptions['features'];
+	);
 	partial.domains ??= list(
 		cancelled(
 			await p.text({
@@ -198,9 +206,14 @@ function finalize(partial: Draft): InitOptions | string {
 	} catch (error) {
 		return error instanceof Error ? error.message : String(error);
 	}
-	if (options.description.length > 140) return 'The description is at most 140 characters.';
+	if (options.description.length > MAX_DESCRIPTION_LENGTH) {
+		return `The description is at most ${MAX_DESCRIPTION_LENGTH} characters.`;
+	}
 	if (!CI_PLATFORMS.includes(options.ci)) {
 		return `Unknown --ci "${options.ci}". Supported: ${CI_PLATFORMS.join(', ')}.`;
+	}
+	if (!AGENT_FILES.includes(options.agent)) {
+		return `Unknown --agent "${options.agent}". Supported: ${AGENT_FILES.join(', ')}.`;
 	}
 	return options;
 }

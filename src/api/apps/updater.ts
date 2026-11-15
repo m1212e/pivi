@@ -6,7 +6,7 @@
 // swapped in (when auto-update is on) and rolled back if it won't start. One that asks for
 // more (a permission, a domain) is pulled and parked for the user to approve,
 // and the old version keeps running meanwhile.
-import { parseImageRef } from '#lib/apps/imageRef';
+import { parseImageRef } from '@pivi/sdk/image';
 import { diffManifests } from '#lib/apps/manifestDiff';
 import { withAppLock } from './appLock';
 import { isDowngrade } from './versions';

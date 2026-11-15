@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildArguments, pushArguments } from './builder';
-import { BUNDLE_PATH, containerfile, containerignore } from './containerfile';
-import { parseReference } from './reference';
+import { BUNDLE_PATH } from '../paths';
+import { containerfile, containerignore, NODE_MAJOR } from './containerfile';
 
 describe('the default Containerfile', () => {
 	it('copies the bundle and runs it with node', () => {
 		const file = containerfile();
-		expect(file).toMatch(/^FROM docker\.io\//m);
+		expect(file).toContain(`FROM docker.io/library/node:${NODE_MAJOR}-alpine`);
 		expect(file).toContain(`COPY ${BUNDLE_PATH} /app/main.mjs`);
 		const entrypoint = JSON.parse(file.match(/^ENTRYPOINT (.+)$/m)![1]!);
 		expect(entrypoint[0]).toBe('node');
@@ -67,23 +67,5 @@ describe('buildah arguments', () => {
 			'n:1',
 			'docker://r/x:1'
 		]);
-	});
-});
-
-describe('image references', () => {
-	it('fill in Docker Hub, library/ and latest', () => {
-		expect(parseReference('oven/bun:1')).toEqual({
-			registry: 'docker.io',
-			repository: 'oven/bun',
-			tag: '1',
-			digest: undefined
-		});
-		expect(parseReference('alpine')).toMatchObject({ repository: 'library/alpine', tag: 'latest' });
-		expect(parseReference('localhost:5000/a/b')).toMatchObject({
-			registry: 'localhost:5000',
-			repository: 'a/b',
-			tag: 'latest'
-		});
-		expect(() => parseReference('ghcr.io/Me/App')).toThrow(/Invalid repository/);
 	});
 });

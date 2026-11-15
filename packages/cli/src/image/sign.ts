@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Credentials } from './builder';
-import { isLocal, type ImageRef } from './reference';
+import { isLocalRegistry, type ImageRef } from '@pivi/sdk/image';
 
 function skopeo(args: string[]) {
 	// stdin stays the terminal for a passphrase prompt, the output goes to stderr (see builder.ts).
@@ -59,7 +59,7 @@ export function signImage(target: ImageRef, signing: SigningKey, credentials?: C
 		// Store the signatures as cosign does, next to the image, for this registry only.
 		mkdirRegistries(dir, target.registry);
 		const image = `docker://${target.registry}/${target.repository}:${target.tag}`;
-		const insecure = isLocal(target.registry)
+		const insecure = isLocalRegistry(target.registry)
 			? ['--src-tls-verify=false', '--dest-tls-verify=false']
 			: [];
 		const creds = credentials

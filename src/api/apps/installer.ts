@@ -3,7 +3,7 @@
 // what it asks for is shown (the preview) before anything is stored, and
 // what's stored is the user's answer, not the image's request.
 import { withAppLock } from './appLock';
-import { formatImageRef, parseImageRef, type ImageRef } from '#lib/apps/imageRef';
+import { formatImageRef, parseImageRef, type ImageRef } from '@pivi/sdk/image';
 import type { PermissionKey, AppManifest } from '@pivi/sdk/manifest';
 import type { AppDeps } from './deps';
 import { pinnedReference, resolveImage } from './registry';

@@ -4,6 +4,7 @@
 // minutes, the outcome arrives through the subscription.
 import { permissionKeySchema } from '@pivi/sdk/manifest';
 import { schemaBuilder } from '../rumble';
+import { AppFeatureEnum } from './appFeature';
 import { appManagement } from '../appManagement';
 import type { AppsState } from '../appManagementService';
 import { APP_MANAGEMENT_EVENT } from '../apps/events';
@@ -41,7 +42,7 @@ const EntryRef = schemaBuilder.objectRef<Entry>('ManagedApp').implement({
 		image: t.exposeString('image'),
 		enabled: t.exposeBoolean('enabled'),
 		autoUpdate: t.exposeBoolean('autoUpdate'),
-		features: t.exposeStringList('features'),
+		features: t.expose('features', { type: [AppFeatureEnum] }),
 		permissions: t.field({ type: [PermissionRef], resolve: (p) => p.permissions }),
 		domains: t.exposeStringList('domains'),
 		signerFingerprint: t.exposeString('signerFingerprint', { nullable: true }),
@@ -60,7 +61,7 @@ const PreviewRef = schemaBuilder.objectRef<Preview>('AppInstallPreview').impleme
 		image: t.exposeString('image'),
 		name: t.exposeString('name'),
 		version: t.exposeString('version'),
-		features: t.exposeStringList('features'),
+		features: t.expose('features', { type: [AppFeatureEnum] }),
 		permissions: t.exposeStringList('permissions'),
 		domains: t.exposeStringList('domains'),
 		signerFingerprint: t.exposeString('signerFingerprint', { nullable: true }),

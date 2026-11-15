@@ -53,15 +53,19 @@ function log(level: 'info' | 'warn' | 'error', message: string) {
 	console.error(`[${level}] ${message}`);
 }
 
-let locale = 'en';
-
 function viewerLabel(viewers: number): string {
-	const count = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 });
+	const count = new Intl.NumberFormat(app.locale, {
+		notation: 'compact',
+		maximumFractionDigits: 1
+	});
 	return `${count.format(viewers)} viewers`;
 }
 
 function followersLabel(followers: number): string {
-	const count = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 });
+	const count = new Intl.NumberFormat(app.locale, {
+		notation: 'compact',
+		maximumFractionDigits: 1
+	});
 	return `${count.format(followers)} followers`;
 }
 
@@ -277,7 +281,7 @@ function formatDate(iso: string | undefined): string | undefined {
 	const date = new Date(iso);
 	return Number.isNaN(date.getTime())
 		? undefined
-		: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+		: new Intl.DateTimeFormat(app.locale, { dateStyle: 'medium' }).format(date);
 }
 
 // 2:45:02, or 12:07 under an hour, as on the website's thumbnails.
@@ -727,15 +731,13 @@ const app = defineApp((app) => {
 	const chat = createChat((sessionId, batch) => app.sendChat(sessionId, batch));
 
 	return {
-		onActivate({ locale: tag }) {
-			locale = tag;
+		onActivate() {
 			activated = true;
 			return loadSession().then(onSessionChanged);
 		},
 
-		// Only number formatting depends on it, the next publish picks it up.
-		onLocale({ locale: tag }) {
-			locale = tag;
+		// Only number formatting depends on it (app.locale), the next publish picks it up.
+		onLocale() {
 			if (activated) publishScreen();
 		},
 

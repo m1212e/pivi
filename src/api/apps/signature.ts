@@ -14,7 +14,7 @@
 // are deliberately not accepted rather than half-checked.
 import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto';
 import { z } from 'zod';
-import type { ImageRef } from '#lib/apps/imageRef';
+import type { ImageRef } from '@pivi/sdk/image';
 import { RegistryClient } from './registry';
 
 const SIGNATURE_LAYER_TYPE = 'application/vnd.dev.cosign.simplesigning.v1+json';

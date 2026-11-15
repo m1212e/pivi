@@ -1,12 +1,13 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { domainsAllow, type AppManifest } from '@pivi/sdk/manifest';
+import { domainsAllow, type AppManifest, type Feature } from '@pivi/sdk/manifest';
 import { SUPPORTED_PROTOCOLS, PROTOCOL_VERSION } from '@pivi/sdk/protocol';
+import { DEV_DIR } from './paths';
 import { readManifest } from './project';
 
 export type Finding = { level: 'error' | 'warning'; message: string };
 
-const SKIP_DIRS = new Set(['node_modules', '.git', '.pivi-dev', 'dist', 'build', '.github']);
+const SKIP_DIRS = new Set(['node_modules', '.git', DEV_DIR, 'dist', 'build', '.github']);
 const MAX_FILES = 500;
 
 /** The app's own TypeScript, without tests, as [relative path, source]. */
@@ -29,7 +30,7 @@ function readSources(dir: string): [string, string][] {
 }
 
 // feature -> what the source calls when it implements it
-const IMPLEMENTS: Record<string, RegExp> = {
+const IMPLEMENTS: Record<Feature, RegExp> = {
 	dashboard: /publishDashboard/,
 	screen: /publishScreen/,
 	playback: /resolveStream/,
@@ -69,8 +70,8 @@ function checkFiles(root: string, entry: string, manifest: AppManifest): Finding
 
 /** Declared features without code, and code for features the host would drop. */
 function checkFeatures(manifest: AppManifest, source: string): Finding[] {
-	return Object.entries(IMPLEMENTS).flatMap(([feature, pattern]) => {
-		const declared = manifest.features.includes(feature as never);
+	return (Object.entries(IMPLEMENTS) as [Feature, RegExp][]).flatMap(([feature, pattern]) => {
+		const declared = manifest.features.includes(feature);
 		const used = pattern.test(source);
 		if (declared && !used)
 			return [warning(`feature "${feature}" is declared but no code for it was found`)];

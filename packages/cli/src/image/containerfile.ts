@@ -4,12 +4,15 @@
 // added as the dev.pivi.manifest label at build time, so manifest.json stays the
 // only place it is written.
 
-/** Where the bundle is written in the project, and copied from into the image. */
-export const BUNDLE_PATH = '.pivi-dev/bundle/main.mjs';
+import { BUNDLE_PATH } from '../paths';
 
-// Node's current LTS, pinned to its major so a rebuild never jumps to a new Node.
+/**
+ * The Node major apps run on: the image's base and what tsdown compiles for. Node's
+ * current LTS, pinned to its major so a rebuild never jumps to a new Node.
+ */
+export const NODE_MAJOR = 26;
 // Fully qualified, so buildah never asks which registry a short name means.
-const BASE = 'docker.io/library/node:26-alpine';
+const BASE = `docker.io/library/node:${NODE_MAJOR}-alpine`;
 
 export function containerfile(): string {
 	return `# The image pivi runs: the app's bundle (${BUNDLE_PATH}, built by
