@@ -17,12 +17,14 @@
 	import type { AppsState } from '#lib/apps/management';
 	import type { PermissionKey } from '@pivi/sdk/manifest';
 	import { appIconDataUrl } from '#lib/apps/icon';
+	import { installFraction, installLabel } from '#lib/apps/installProgress';
 	import { appAccentGradient } from '#lib/appAccent';
 	import HoldToConfirmButton from './HoldToConfirmButton.svelte';
 	import TextField from './TextField.svelte';
 	import * as m from '#lib/paraglide/messages';
 
 	type InstalledApp = AppsState['apps'][number];
+	type PendingInstall = AppsState['installs'][number];
 
 	export type AppActions = {
 		// `publicKey` is left out to install without signature verification.
@@ -109,7 +111,6 @@
 		apps.busy &&
 			{
 				previewing: m.apps_reviewing(),
-				installing: m.apps_installing(),
 				checking: m.apps_checking(),
 				working: m.apps_working()
 			}[apps.busy]
@@ -478,6 +479,47 @@
 	</div>
 {/snippet}
 
+{#snippet pendingInstall(install: PendingInstall)}
+	{@const fraction = installFraction(install)}
+	<li
+		class="flex items-center gap-3 rounded-3xl bg-white/10 p-4 ring-1 ring-white/15"
+		in:fly|global={{ y: 16, duration: 300, easing: quintOut }}
+		out:fade|global={{ duration: 150 }}
+	>
+		{@render appBadge(
+			install.id,
+			install.name,
+			install.icon,
+			install.primaryColor,
+			install.secondaryColor
+		)}
+		<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+			<span class="flex items-baseline gap-2">
+				<span class="truncate text-lg font-semibold text-white/90">{install.name}</span>
+				<span class="shrink-0 text-xs text-white/40">{install.version}</span>
+			</span>
+			<div
+				role="progressbar"
+				aria-label={installLabel(install)}
+				aria-valuemin={0}
+				aria-valuemax={100}
+				aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
+				class="h-1.5 overflow-hidden rounded-full bg-white/10"
+			>
+				{#if fraction === null}
+					<div class="pivi-indeterminate h-full w-1/3 rounded-full bg-indigo-400/80"></div>
+				{:else}
+					<div
+						class="h-full rounded-full bg-indigo-400 transition-[width] duration-300 ease-out"
+						style:width="{fraction * 100}%"
+					></div>
+				{/if}
+			</div>
+			<span class="text-xs text-white/50">{installLabel(install)}</span>
+		</div>
+	</li>
+{/snippet}
+
 {#snippet installed(app: InstalledApp)}
 	{@const expanded = expandedAppId === app.id}
 	<li
@@ -527,11 +569,19 @@
 	</div>
 
 	<div class="flex min-w-0 flex-1 flex-col gap-3">
-		{#if apps.apps.length === 0}
+		{#if apps.installs.length > 0}
+			<h3 class="text-sm font-medium text-white/70">{m.apps_installs_heading()}</h3>
+			<ul class="flex flex-col gap-3">
+				{#each apps.installs as install (install.id)}
+					{@render pendingInstall(install)}
+				{/each}
+			</ul>
+		{/if}
+		{#if apps.apps.length === 0 && apps.installs.length === 0}
 			<p class="text-center text-sm text-white/40" transition:fade={{ duration: 200 }}>
 				{m.apps_none()}
 			</p>
-		{:else}
+		{:else if apps.apps.length > 0}
 			<ul class="flex flex-col gap-3">
 				{#each apps.apps as app, i (i)}
 					{@render installed(app)}

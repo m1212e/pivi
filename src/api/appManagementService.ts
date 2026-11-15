@@ -1,7 +1,7 @@
 // Installing, configuring and updating apps from the TV's own /apps screen
 // (served over GraphQL by handlers/appManagement.ts), so apps can be managed
 // with nothing but the remote. Deps are injected so this can be tested.
-import type { AppsState as SharedAppsState } from '#lib/apps/management';
+import type { AppInstall, AppsState as SharedAppsState } from '#lib/apps/management';
 import type { PermissionKey } from '@pivi/sdk/manifest';
 import { describeApp } from './appState';
 import type { AppDeps } from './apps/deps';
@@ -10,7 +10,6 @@ import {
 	clearAppStorage,
 	installApp,
 	previewInstall,
-	ReviewOutdatedError,
 	setAppAutoUpdate,
 	setAppEnabled,
 	setAppPermission,
@@ -26,6 +25,10 @@ import {
 /** Re-exported so handlers/appManagement.ts can type its GraphQL object from the service side. */
 export type AppsState = SharedAppsState;
 type Busy = NonNullable<AppsState['busy']>;
+type Preview = NonNullable<AppsState['preview']>;
+
+// A download reports many times a second, more than any screen needs to redraw.
+const PROGRESS_PUSH_MS = 300;
 
 /** How the service tells GraphQL subscriptions to push fresh state, wired in appManagement.ts. */
 export type ManagementEvents = {
@@ -49,10 +52,11 @@ export function createAppManagement(
 	// last failure, and the preview awaiting the user's decision. Kept server-side
 	// so a screen that reloads mid-install, or a second one, sees the same thing
 	// as the one that started it.
-	const session: Pick<AppsState, 'busy' | 'error' | 'preview' | 'lastCheckSummary'> = {
+	const session: Pick<AppsState, 'busy' | 'error' | 'preview' | 'installs' | 'lastCheckSummary'> = {
 		busy: null,
 		error: null,
 		preview: null,
+		installs: [],
 		lastCheckSummary: null
 	};
 	// What the preview was made from. Install refers to it rather than taking the
@@ -79,6 +83,54 @@ export function createAppManagement(
 		}
 	}
 
+	// Coalesces progress pushes, the last one always goes out.
+	let progressTimer: ReturnType<typeof setTimeout> | undefined;
+	function pushProgressSoon(): void {
+		progressTimer ??= setTimeout(() => {
+			progressTimer = undefined;
+			events.stateChanged();
+		}, PROGRESS_PUSH_MS);
+	}
+
+	const isInstalling = (appId: string) => session.installs.some((entry) => entry.id === appId);
+
+	// Runs one install in the background. Unlike run() it doesn't mark the
+	// service busy: the screen stays usable, and the progress lives on the entry.
+	async function runInstall(
+		request: InstallRequest,
+		preview: Preview,
+		granted: PermissionKey[]
+	): Promise<void> {
+		const entry: AppInstall = {
+			id: preview.id,
+			name: preview.name,
+			version: preview.version,
+			icon: preview.icon,
+			primaryColor: preview.primaryColor,
+			secondaryColor: preview.secondaryColor,
+			phase: 'checking',
+			downloadedBytes: 0,
+			totalBytes: null
+		};
+		session.installs = [...session.installs, entry];
+		session.error = null;
+		events.stateChanged();
+
+		try {
+			await installApp(deps, { ...request, granted }, (progress) => {
+				Object.assign(entry, progress);
+				pushProgressSoon();
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			session.error = `${preview.name}: ${message}`;
+		} finally {
+			session.installs = session.installs.filter((other) => other !== entry);
+			events.listChanged();
+			events.stateChanged();
+		}
+	}
+
 	const forApp = (action: (appId: string) => Promise<void>) => (appId: string) =>
 		run('working', () => action(appId));
 
@@ -94,6 +146,7 @@ export function createAppManagement(
 			await run('previewing', async () => {
 				const preview = await previewInstall(deps, request);
 				session.preview = {
+					id: preview.manifest.id,
 					image: preview.image,
 					name: preview.manifest.name,
 					version: preview.manifest.version,
@@ -101,7 +154,7 @@ export function createAppManagement(
 					permissions: preview.manifest.permissions,
 					domains: preview.manifest.network?.domains ?? [],
 					signerFingerprint: preview.signer?.fingerprint ?? null,
-					conflict: preview.conflict,
+					conflict: preview.conflict || isInstalling(preview.manifest.id),
 					icon: preview.manifest.icon ?? null,
 					primaryColor: preview.manifest.primaryColor ?? null,
 					secondaryColor: preview.manifest.secondaryColor ?? null
@@ -111,23 +164,28 @@ export function createAppManagement(
 		},
 
 		// Installs what was last previewed, with the permissions the user left on.
-		install: (granted: PermissionKey[]) =>
-			run('installing', async () => {
-				if (!previewed) throw new Error('Review the app before installing it');
-				try {
-					await installApp(deps, { ...previewed, granted });
-				} catch (error) {
-					// The preview shows a build that's no longer there, so it must not
-					// stay up as if installing it were still possible.
-					if (error instanceof ReviewOutdatedError) {
-						session.preview = null;
-						previewed = null;
-					}
-					throw error;
-				}
-				session.preview = null;
-				previewed = null;
-			}),
+		// The preview closes right away so the next app can be picked while this
+		// one downloads. Resolves once the install is done, either way.
+		install(granted: PermissionKey[]): Promise<void> {
+			const request = previewed;
+			const preview = session.preview;
+			if (!request || !preview) {
+				return run('working', () =>
+					Promise.reject(new Error('Review the app before installing it'))
+				);
+			}
+			session.preview = null;
+			previewed = null;
+			if (isInstalling(preview.id)) {
+				session.error = `${preview.name} is already being installed`;
+				events.stateChanged();
+				return Promise.resolve();
+			}
+			return runInstall(request, preview, granted);
+		},
+
+		/** What the home screen shows as pending tiles. */
+		installs: (): AppInstall[] => session.installs,
 
 		dismissPreview(): void {
 			session.preview = null;

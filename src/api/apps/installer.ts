@@ -13,6 +13,7 @@ import {
 	volumeName,
 	volumeOfUnknownProfile
 } from './sandbox/spec';
+import type { PullProgress } from './sandbox/types';
 import { parseAppSigner, type AppSigner } from './signature';
 import type { InstalledApp } from './store';
 
@@ -90,11 +91,14 @@ export async function previewInstall(
  */
 export async function installApp(
 	deps: AppDeps,
-	request: InstallRequest & { granted: readonly PermissionKey[] }
+	request: InstallRequest & { granted: readonly PermissionKey[] },
+	onProgress?: (progress: PullProgress) => void
 ): Promise<InstalledApp> {
 	const { ref, signer, resolved } = await inspect(deps, request);
 	if (request.digest && request.digest !== resolved.digest) throw new ReviewOutdatedError();
-	return withAppLock(resolved.manifest.id, () => insertApp(deps, request, ref, signer, resolved));
+	return withAppLock(resolved.manifest.id, () =>
+		insertApp(deps, request, ref, signer, resolved, onProgress)
+	);
 }
 
 async function insertApp(
@@ -102,7 +106,8 @@ async function insertApp(
 	request: InstallRequest & { granted: readonly PermissionKey[] },
 	ref: Awaited<ReturnType<typeof inspect>>['ref'],
 	signer: Awaited<ReturnType<typeof inspect>>['signer'],
-	resolved: Awaited<ReturnType<typeof inspect>>['resolved']
+	resolved: Awaited<ReturnType<typeof inspect>>['resolved'],
+	onProgress?: (progress: PullProgress) => void
 ): Promise<InstalledApp> {
 	const track = updateTrack(ref);
 	const { manifest } = resolved;
@@ -111,9 +116,9 @@ async function insertApp(
 		throw new AppError(`An app with the id "${manifest.id}" is already installed`);
 	}
 
-	// Pulled now, while the user is waiting for an install, so it can start later
+	// Pulled now, while the install shows its progress, so it can start later
 	// without the network. Nothing is recorded if this fails.
-	await deps.backend.prepare(pinnedReference(ref, resolved.digest));
+	await deps.backend.prepare(pinnedReference(ref, resolved.digest), onProgress);
 	// Any volume under this id is left over from an earlier app that claimed the
 	// same id, which is self-declared, so it must not hand its data to this one.
 	await deps.backend.removeVolumes(volumeBelongsToApp(manifest.id));

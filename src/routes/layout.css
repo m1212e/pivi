@@ -455,3 +455,19 @@ html[data-view-transition='zoom-in']::view-transition-new(root) {
 		transparent 100%
 	);
 }
+
+/*
+ * A progress bar's moving segment while there's nothing to measure yet (an
+ * install checking the image, or a registry that didn't say how big it is).
+ */
+@keyframes pivi-indeterminate {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(300%);
+	}
+}
+.pivi-indeterminate {
+	animation: pivi-indeterminate 1.4s ease-in-out infinite;
+}

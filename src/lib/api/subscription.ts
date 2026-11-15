@@ -10,3 +10,32 @@ export function stopSubscription(subscription: unknown): void {
 	if (typeof subscription === 'function') subscription();
 	else (subscription as { unsubscribe(): void }).unsubscribe();
 }
+
+/**
+ * Keeps a page's copy of some data live without trusting urql's cache.
+ *
+ * A liveQuery's `.subscribe()` starts by replaying the query from the cache,
+ * which holds whatever the last visit saw (its subscription pushes don't
+ * update that cached copy), and the server only pushes on changes, so a page
+ * opened again can be stuck on outdated data. This follows the push-only
+ * subscription instead, plus one network fetch for anything that changed
+ * before it started, ignored if a push already came in. Returns the cleanup.
+ */
+export function followLive<T>(
+	subscribe: (onValue: (value: T | null | undefined) => void) => unknown,
+	refetch: () => Promise<NoInfer<T> | null | undefined>,
+	apply: (value: T) => void
+): () => void {
+	let pushed = false;
+	const subscription = subscribe((value) => {
+		if (!value) return;
+		pushed = true;
+		apply(value);
+	});
+	refetch()
+		.then((value) => {
+			if (value && !pushed) apply(value);
+		})
+		.catch(() => {});
+	return () => stopSubscription(subscription);
+}

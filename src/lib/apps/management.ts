@@ -38,6 +38,7 @@ const installedAppSchema = z.object({
 
 // What the user is about to install, shown for approval before anything is installed.
 const appPreviewSchema = z.object({
+	id: z.string(),
 	image: z.string(),
 	name: z.string(),
 	version: z.string(),
@@ -60,13 +61,36 @@ const updateCheckSummarySchema = z.object({
 	failed: z.array(z.string())
 });
 
+/**
+ * An install running in the background: the preview it came from (so it can be
+ * drawn like the app it will become) and how far its download is. Shown on the
+ * /apps screen and as a pending tile on the home screen.
+ */
+export const appInstallSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	version: z.string(),
+	icon: z.string().nullable(),
+	primaryColor: z.string().nullable(),
+	secondaryColor: z.string().nullable(),
+	// `checking` reruns the signature and registry checks before the download.
+	phase: z.enum(['checking', 'resolving', 'downloading', 'unpacking']),
+	downloadedBytes: z.number(),
+	// Null while the registry hasn't said how big the image is.
+	totalBytes: z.number().nullable()
+});
+export type AppInstall = z.infer<typeof appInstallSchema>;
+
 /** Everything the /apps screen renders, parsed there from the GraphQL response. */
 export const appsStateSchema = z.object({
 	apps: z.array(installedAppSchema),
 	preview: appPreviewSchema.nullable(),
+	// Installs don't block the screen: several can download at once while the
+	// user keeps browsing, each with its own progress.
+	installs: z.array(appInstallSchema),
 	// What the host is in the middle of, so a screen that reloads (or a second
 	// one) shows the same thing as the one that asked.
-	busy: z.enum(['previewing', 'installing', 'checking', 'working']).nullable(),
+	busy: z.enum(['previewing', 'checking', 'working']).nullable(),
 	error: z.string().nullable(),
 	lastCheckSummary: updateCheckSummarySchema.nullable()
 });

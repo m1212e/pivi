@@ -4,11 +4,14 @@
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 	import { profileGradient } from '#lib/profileColor';
 	import { client } from '#lib/api/rumbleClient/client';
-	import { stopSubscription } from '#lib/api/subscription';
+	import { followLive } from '#lib/api/subscription';
+	import { freshQuery } from '#lib/api/freshQuery';
 	import { appActionSchema } from '@pivi/sdk/dashboard';
 	import { appActionHref } from '#lib/apps/actionHref';
+	import { appInstallSchema, type AppInstall } from '#lib/apps/management';
 	import HeroBanner from '#lib/components/HeroBanner.svelte';
 	import HeroBannerEmpty from '#lib/components/HeroBannerEmpty.svelte';
 	import HeroBannerSkeleton from '#lib/components/HeroBannerSkeleton.svelte';
@@ -53,7 +56,7 @@
 	} as const;
 
 	let installedApps = $state<InstalledApp[]>(
-		toInstalled((await client.liveQuery.apps(APP_FIELDS)) ?? [])
+		toInstalled((await freshQuery.apps(APP_FIELDS)) ?? [])
 	);
 	const apps = $derived(
 		installedApps.map((app) => ({
@@ -65,6 +68,32 @@
 			secondaryColor: app.secondaryColor,
 			hasUpdate: app.hasUpdate
 		}))
+	);
+
+	// Installs running in the background (started on /apps or from the phone),
+	// shown as pending tiles with their progress until the app is in. Copied
+	// and parsed for the same reason as the dashboards below.
+	const INSTALL_FIELDS = {
+		id: true,
+		name: true,
+		version: true,
+		icon: true,
+		primaryColor: true,
+		secondaryColor: true,
+		phase: true,
+		downloadedBytes: true,
+		totalBytes: true
+	} as const;
+	const toInstalls = (value: unknown): AppInstall[] => {
+		const parsed = appInstallSchema.array().safeParse(JSON.parse(JSON.stringify(value ?? [])));
+		return parsed.success ? parsed.data : [];
+	};
+	let pendingInstalls = $state<AppInstall[]>(
+		toInstalls(await freshQuery.appInstalls(INSTALL_FIELDS).catch(() => []))
+	);
+	// An app whose install just finished can show up in both lists for one push.
+	const pending = $derived(
+		pendingInstalls.filter((install) => !installedApps.some((app) => app.id === install.id))
 	);
 
 	const me = await client.liveQuery.me({
@@ -149,27 +178,33 @@
 		);
 	}
 
-	const initialDashboards = await client.liveQuery.appDashboards(DASHBOARD_FIELDS);
+	// Fresh rather than from urql's cache, which holds what the last visit saw
+	// (see followLive below).
+	const initialDashboards = await freshQuery.appDashboards(DASHBOARD_FIELDS);
 	let cardsByAppId = $state<Record<string, AppCard[] | null>>(
 		groupCardsByAppId((initialDashboards ?? []) as DashboardResult)
 	);
+	// Pushes only, never a cached replay, see followLive. An emission with no
+	// data (an error) says nothing about the lists, so it never wipes them.
 	onMount(() => {
-		// .subscribe() returns an ES Observable Subscription object
-		// (.unsubscribe()), not a plain unsubscribe function — returning it
-		// directly as onMount's cleanup throws "not a function" the moment
-		// Svelte actually calls it (client-side navigation away from /home).
-		const dashboards = client.liveQuery.appDashboards(DASHBOARD_FIELDS).subscribe((value) => {
-			// An emission with no data (before the first result, or on an error) says
-			// nothing about the dashboards, so it must not wipe what's shown.
-			if (value) cardsByAppId = groupCardsByAppId(value as DashboardResult);
-		});
-		const apps = client.liveQuery.apps(APP_FIELDS).subscribe((value) => {
-			if (value) installedApps = toInstalled(value);
-		});
-		return () => {
-			stopSubscription(dashboards);
-			stopSubscription(apps);
-		};
+		const stops = [
+			followLive(
+				(onValue) => client.subscribe.appDashboards(DASHBOARD_FIELDS).subscribe(onValue),
+				() => freshQuery.appDashboards(DASHBOARD_FIELDS),
+				(value) => (cardsByAppId = groupCardsByAppId(value as DashboardResult))
+			),
+			followLive<readonly InstalledApp[]>(
+				(onValue) => client.subscribe.apps(APP_FIELDS).subscribe(onValue),
+				() => freshQuery.apps(APP_FIELDS),
+				(value) => (installedApps = toInstalled(value))
+			),
+			followLive(
+				(onValue) => client.subscribe.appInstalls(INSTALL_FIELDS).subscribe(onValue),
+				() => freshQuery.appInstalls(INSTALL_FIELDS),
+				(value) => (pendingInstalls = toInstalls(value))
+			)
+		];
+		return () => stops.forEach((stop) => stop());
 	});
 
 	// An app with no entry in cardsByAppId doesn't have a dashboard at all
@@ -193,16 +228,29 @@
 	// Long enough to read the title and decide, short enough that the home
 	// screen doesn't feel frozen.
 	const HERO_ROTATION_MS = 20_000;
-	let heroTurn = $state(0);
+	// The hero follows a card, not a position: an app arriving (or a dashboard
+	// refreshing) reshuffles heroCandidates, and indexing into that would swap
+	// the banner out from under whoever is looking at it.
+	const heroKey = (card: AppCard) => `${card.appId}:${card.id}`;
+	let heroCurrentKey = $state<string | null>(null);
 	// Set while the remote's focus is on the hero's button, which a turn
 	// would take away from under it.
 	let heroFocused = $state(false);
 	const heroCard = $derived(
-		heroCandidates.length ? heroCandidates[heroTurn % heroCandidates.length] : undefined
+		heroCandidates.find((card) => heroKey(card) === heroCurrentKey) ?? heroCandidates[0]
 	);
+	// Pin whatever is shown, so a card taking first place doesn't replace it.
 	$effect(() => {
-		if (heroCandidates.length < 2 || heroFocused) return;
-		const timer = setInterval(() => (heroTurn += 1), HERO_ROTATION_MS);
+		if (heroCard) heroCurrentKey = heroKey(heroCard);
+	});
+	// Only the count restarts the timer, not every dashboard push.
+	const heroCount = $derived(heroCandidates.length);
+	$effect(() => {
+		if (heroCount < 2 || heroFocused) return;
+		const timer = setInterval(() => {
+			const at = heroCandidates.findIndex((card) => heroKey(card) === heroCurrentKey);
+			heroCurrentKey = heroKey(heroCandidates[(at + 1) % heroCandidates.length]);
+		}, HERO_ROTATION_MS);
 		return () => clearInterval(timer);
 	});
 
@@ -221,6 +269,11 @@
 				return { ...app, loading: cards === null, shelfCards: cards ?? [] };
 			})
 	);
+	// The rows that render anything, keyed by app below so an app arriving or
+	// leaving adds or removes its own row and the others stay as they are
+	// (keyed by position, every row after it would be rebuilt, replaying its
+	// reveal).
+	const shownRows = $derived(appRows.filter((row) => row.loading || row.shelfCards.length > 0));
 
 	// True once every app has published something (even an empty result) --
 	// used to decide whether a missing hero means "still loading" or "no app
@@ -389,23 +442,25 @@
 		</div>
 
 		<div class="flex flex-col gap-10">
-			<AppsRow title={m.apps()} items={apps} />
-			{#each appRows as row, i (i)}
-				{#if row.loading}
-					<VideoRowSkeleton title={row.name} />
-				{:else if row.shelfCards.length > 0}
-					<VideoRow
-						title={m.suggested_on({ app: row.name })}
-						items={row.shelfCards.map((c) => ({
-							id: c.id,
-							title: c.title,
-							meta: c.subtitle,
-							image: c.image,
-							fallbackImage: c.fallbackImage ?? undefined,
-							href: cardHref(c)
-						}))}
-					/>
-				{/if}
+			<AppsRow title={m.apps()} items={apps} {pending} />
+			{#each shownRows as row (row.id)}
+				<div animate:flip={{ duration: 300 }}>
+					{#if row.loading}
+						<VideoRowSkeleton title={row.name} />
+					{:else}
+						<VideoRow
+							title={m.suggested_on({ app: row.name })}
+							items={row.shelfCards.map((c) => ({
+								id: c.id,
+								title: c.title,
+								meta: c.subtitle,
+								image: c.image,
+								fallbackImage: c.fallbackImage ?? undefined,
+								href: cardHref(c)
+							}))}
+						/>
+					{/if}
+				</div>
 			{/each}
 		</div>
 	</div>

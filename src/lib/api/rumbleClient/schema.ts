@@ -338,6 +338,14 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'id',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
 						name: 'image',
 						type: {
 							kind: 'NON_NULL',
@@ -395,6 +403,73 @@ export const schema = {
 			},
 			{
 				kind: 'OBJECT',
+				name: 'AppInstallProgress',
+				fields: [
+					{
+						name: 'downloadedBytes',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Float', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'icon',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'id',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'name',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'phase',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'primaryColor',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'secondaryColor',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'totalBytes',
+						type: { kind: 'SCALAR', name: 'Float', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'version',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
 				name: 'AppLiveStatus',
 				fields: [
 					{
@@ -431,6 +506,25 @@ export const schema = {
 					{
 						name: 'errorMessage',
 						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'installs',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: {
+										name: 'AppInstallProgress',
+										kind: 'OBJECT',
+										ofType: null,
+										__proto__: null
+									}
+								}
+							}
+						},
 						args: []
 					},
 					{
@@ -2601,6 +2695,25 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'appInstalls',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: {
+										name: 'AppInstallProgress',
+										kind: 'OBJECT',
+										ofType: null,
+										__proto__: null
+									}
+								}
+							}
+						},
+						args: []
+					},
+					{
 						name: 'appLiveStatus',
 						type: {
 							kind: 'NON_NULL',
@@ -3077,6 +3190,25 @@ export const schema = {
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'AppForcedStop', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'appInstalls',
+						type: {
+							kind: 'NON_NULL',
+							ofType: {
+								kind: 'LIST',
+								ofType: {
+									kind: 'NON_NULL',
+									ofType: {
+										name: 'AppInstallProgress',
+										kind: 'OBJECT',
+										ofType: null,
+										__proto__: null
+									}
+								}
+							}
 						},
 						args: []
 					},

@@ -18,6 +18,7 @@
 //     path must be short (< 108 bytes), hence PIVI_SANDBOX_HOME.
 import { chunkBytes } from '@pivi/sdk/rpc';
 import { isLocalRegistry } from '@pivi/sdk/image';
+import { pullProgressTracker } from './pullProgress';
 import { SANDBOX_PREFIX } from './spec';
 import type { RunningSandbox, SandboxBackend, SandboxHandlers, SandboxSpec } from './types';
 
@@ -208,8 +209,9 @@ async function startMicrosandbox(
 	};
 }
 
-// Fixed so a leftover prepare sandbox is replaced rather than accumulating.
-const PREPARE_NAME = `${SANDBOX_PREFIX}prepare`;
+// Unique per pull so installs running side by side don't replace each other's
+// sandbox. A leftover is swept by removeStale, as it shares SANDBOX_PREFIX.
+const prepareName = () => `${SANDBOX_PREFIX}prepare-${crypto.randomUUID().slice(0, 8)}`;
 
 /**
  * The only backend, used by manager.ts to start apps and through
@@ -220,15 +222,26 @@ export const microsandboxBackend: SandboxBackend = {
 
 	// Booting a throwaway sandbox is how the runtime pulls (and unpacks) an
 	// image, there's no standalone pull.
-	async prepare(image) {
+	async prepare(image, onProgress) {
 		const msb = await loadRuntime();
-		let builder = msb.Sandbox.builder(PREPARE_NAME)
+		let builder = msb.Sandbox.builder(prepareName())
 			.image(image)
 			.ephemeral(true)
 			.replace()
 			.disableNetwork();
 		if (usesLocalRegistry(image)) builder = builder.registry((registry) => registry.insecure());
-		const sandbox = await builder.create();
+		const creation = await builder.createWithPullProgress();
+		const track = pullProgressTracker();
+		// Read alongside the creation, the stream closes once the pull is done.
+		// Progress is only shown, so a failing stream must not fail the install.
+		const reading = (async () => {
+			for await (const event of creation.progress) {
+				const progress = track(event);
+				if (progress && onProgress) onProgress(progress);
+			}
+		})().catch(() => {});
+		const sandbox = await creation.awaitSandbox();
+		await reading;
 		await sandbox.stop().catch(() => sandbox.kill());
 	},
 

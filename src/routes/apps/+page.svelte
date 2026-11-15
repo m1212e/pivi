@@ -34,6 +34,7 @@
 			secondaryColor: true
 		},
 		preview: {
+			id: true,
 			image: true,
 			name: true,
 			version: true,
@@ -46,6 +47,17 @@
 			primaryColor: true,
 			secondaryColor: true
 		},
+		installs: {
+			id: true,
+			name: true,
+			version: true,
+			icon: true,
+			primaryColor: true,
+			secondaryColor: true,
+			phase: true,
+			downloadedBytes: true,
+			totalBytes: true
+		},
 		busy: true,
 		errorMessage: true,
 		lastCheckSummary: { checkedAt: true, applied: true, pending: true, failed: true }
@@ -54,6 +66,7 @@
 	const EMPTY: AppsState = {
 		apps: [],
 		preview: null,
+		installs: [],
 		busy: null,
 		error: null,
 		lastCheckSummary: null
@@ -89,7 +102,10 @@
 
 	// A short, operator-configured list of known apps (see
 	// src/api/apps/suggested.ts) -- fixed for the life of the page, so it's
-	// fetched once rather than kept live like the installed set above.
+	// fetched once rather than kept live like the installed set above. Fresh,
+	// not from urql's cache: the server leaves out an app whose registry lookup
+	// failed (often right after boot), and a cached answer from such a moment
+	// would keep that app missing on every later visit.
 	let suggested = $state<
 		{
 			id: string;
@@ -99,7 +115,7 @@
 			image: string;
 		}[]
 	>([]);
-	client.query
+	freshQuery
 		.suggestedApps({
 			id: true,
 			name: true,

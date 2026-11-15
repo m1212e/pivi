@@ -24,6 +24,8 @@ const manifest: AppManifest = {
 };
 
 let registry: FakeRegistry;
+// Lets a test hold the download open and report progress from it.
+let prepare: AppDeps['backend']['prepare'];
 let key: ReturnType<typeof generateSigningKey>;
 let userId: string | null;
 let seen: { busy: AppsState['busy']; error: string | null }[];
@@ -37,12 +39,13 @@ beforeEach(async () => {
 	userId = 'user-1';
 	listChanges = 0;
 	seen = [];
+	prepare = () => Promise.resolve();
 
 	const deps: AppDeps = {
 		store: memoryStore(),
 		registry: new RegistryClient(),
 		backend: {
-			prepare: () => Promise.resolve(),
+			prepare: (image, onProgress) => prepare(image, onProgress),
 			removeImage: () => Promise.resolve(),
 			removeStale: () => Promise.resolve(),
 			removeVolumes: () => Promise.resolve(),
@@ -213,5 +216,38 @@ describe('installing and managing', () => {
 		userId = null;
 		await service.clearCache('demo');
 		expect((await service.state()).error).toMatch(/No profile is active/);
+	});
+
+	it('installs in the background, showing progress and keeping the screen usable', async () => {
+		publish();
+		let finish!: () => void;
+		let report!: (downloadedBytes: number) => void;
+		prepare = (_image, onProgress) =>
+			new Promise((resolve) => {
+				report = (downloadedBytes) =>
+					onProgress?.({ phase: 'downloading', downloadedBytes, totalBytes: 100 });
+				finish = resolve;
+			});
+		await service.preview(request());
+		const installing = service.install(['network']);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+
+		let state = await service.state();
+		expect(state.busy).toBeNull();
+		expect(state.preview).toBeNull();
+		expect(state.installs).toEqual([expect.objectContaining({ id: 'demo', name: 'Demo' })]);
+
+		report(40);
+		expect(service.installs()[0]).toMatchObject({ phase: 'downloading', downloadedBytes: 40 });
+
+		// Previewing the same app again while it downloads marks it as taken.
+		await service.preview(request());
+		expect((await service.state()).preview?.conflict).toBe(true);
+
+		finish();
+		await installing;
+		state = await service.state();
+		expect(state.installs).toEqual([]);
+		expect(state.apps.map((app) => app.id)).toEqual(['demo']);
 	});
 });

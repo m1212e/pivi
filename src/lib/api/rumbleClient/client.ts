@@ -70,12 +70,25 @@ export type AppInstallPreview = {
 	domains: String[];
 	features: AppFeature[];
 	icon: String | null;
+	id: String;
 	image: String;
 	name: String;
 	permissions: String[];
 	primaryColor: String | null;
 	secondaryColor: String | null;
 	signerFingerprint: String | null;
+	version: String;
+};
+
+export type AppInstallProgress = {
+	downloadedBytes: Float;
+	icon: String | null;
+	id: String;
+	name: String;
+	phase: String;
+	primaryColor: String | null;
+	secondaryColor: String | null;
+	totalBytes: Float | null;
 	version: String;
 };
 
@@ -87,6 +100,7 @@ export type AppManagement = {
 	apps: () => ManagedApp[];
 	busy: String | null;
 	errorMessage: String | null;
+	installs: () => AppInstallProgress[];
 	lastCheckSummary: () => AppUpdateCheckSummary | null;
 	preview: () => AppInstallPreview | null;
 };
@@ -402,6 +416,7 @@ export type PhoneNumber = string;
 
 export type Query = {
 	appDashboards: () => AppDashboard[];
+	appInstalls: () => AppInstallProgress[];
 	appLiveStatus: (p: { appId: String; sessionId: String }) => AppLiveStatus;
 	appManagement: () => AppManagement;
 	appNextSession: (p: { appId: String; context: String; sessionId: String }) => AppNextSession;
@@ -459,6 +474,7 @@ export type Subscription = {
 	appChat: (p: { appId: String; sessionId: String }) => AppChatBatch;
 	appDashboards: () => AppDashboard[];
 	appForcedStop: () => AppForcedStop;
+	appInstalls: () => AppInstallProgress[];
 	appManagement: () => AppManagement;
 	appScreen: (p: { appId: String; screenId: String }) => AppScreenData;
 	apps: () => AppInfo[];
@@ -558,6 +574,7 @@ export const client = {
 			'appChat',
 			'appDashboards',
 			'appForcedStop',
+			'appInstalls',
 			'appManagement',
 			'appScreen',
 			'apps',

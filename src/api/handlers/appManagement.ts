@@ -16,6 +16,7 @@ type Entry = AppsState['apps'][number];
 type Preview = NonNullable<AppsState['preview']>;
 type Update = NonNullable<Entry['update']>;
 type CheckSummary = NonNullable<AppsState['lastCheckSummary']>;
+type Install = AppsState['installs'][number];
 
 const PermissionRef = schemaBuilder
 	.objectRef<Entry['permissions'][number]>('ManagedAppPermission')
@@ -58,6 +59,7 @@ const EntryRef = schemaBuilder.objectRef<Entry>('ManagedApp').implement({
 
 const PreviewRef = schemaBuilder.objectRef<Preview>('AppInstallPreview').implement({
 	fields: (t) => ({
+		id: t.exposeString('id'),
 		image: t.exposeString('image'),
 		name: t.exposeString('name'),
 		version: t.exposeString('version'),
@@ -69,6 +71,21 @@ const PreviewRef = schemaBuilder.objectRef<Preview>('AppInstallPreview').impleme
 		icon: t.exposeString('icon', { nullable: true }),
 		primaryColor: t.exposeString('primaryColor', { nullable: true }),
 		secondaryColor: t.exposeString('secondaryColor', { nullable: true })
+	})
+});
+
+// Floats, not Ints: an image can be bigger than GraphQL's 32-bit Int.
+const InstallRef = schemaBuilder.objectRef<Install>('AppInstallProgress').implement({
+	fields: (t) => ({
+		id: t.exposeString('id'),
+		name: t.exposeString('name'),
+		version: t.exposeString('version'),
+		icon: t.exposeString('icon', { nullable: true }),
+		primaryColor: t.exposeString('primaryColor', { nullable: true }),
+		secondaryColor: t.exposeString('secondaryColor', { nullable: true }),
+		phase: t.exposeString('phase'),
+		downloadedBytes: t.exposeFloat('downloadedBytes'),
+		totalBytes: t.exposeFloat('totalBytes', { nullable: true })
 	})
 });
 
@@ -85,6 +102,7 @@ const StateRef = schemaBuilder.objectRef<AppsState>('AppManagement').implement({
 	fields: (t) => ({
 		apps: t.field({ type: [EntryRef], resolve: (s) => s.apps }),
 		preview: t.field({ type: PreviewRef, nullable: true, resolve: (s) => s.preview }),
+		installs: t.field({ type: [InstallRef], resolve: (s) => s.installs }),
 		busy: t.exposeString('busy', { nullable: true }),
 		errorMessage: t.string({ nullable: true, resolve: (s) => s.error }),
 		lastCheckSummary: t.field({
@@ -115,6 +133,8 @@ function start(work: () => Promise<void> | void): boolean {
 
 schemaBuilder.queryFields((t) => ({
 	appManagement: t.field({ type: StateRef, resolve: () => appManagement.state() }),
+	// Just the installs in flight, for the home screen's pending tiles.
+	appInstalls: t.field({ type: [InstallRef], resolve: () => appManagement.installs() }),
 	suggestedApps: t.field({
 		type: [SuggestedAppRef],
 		resolve: () => suggestedApps(defaultAppDeps.registry)
@@ -126,6 +146,11 @@ schemaBuilder.subscriptionFields((t) => ({
 		type: StateRef,
 		subscribe: () => appPubSub.subscribe(APP_MANAGEMENT_EVENT),
 		resolve: () => appManagement.state()
+	}),
+	appInstalls: t.field({
+		type: [InstallRef],
+		subscribe: () => appPubSub.subscribe(APP_MANAGEMENT_EVENT),
+		resolve: () => appManagement.installs()
 	})
 }));
 

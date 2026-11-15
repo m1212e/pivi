@@ -63,13 +63,24 @@ export type RunningSandbox = {
 };
 
 /**
+ * How far an image download has come, for the install progress the TV shows.
+ * `totalBytes` is null while the registry hasn't said how big the image is.
+ */
+export type PullProgress = {
+	phase: 'resolving' | 'downloading' | 'unpacking';
+	downloadedBytes: number;
+	totalBytes: number | null;
+};
+
+/**
  * Narrow on purpose, see the header. Reached through AppDeps (deps.ts) so the
  * install and update tests can run without a VM.
  */
 export interface SandboxBackend {
 	// Downloads an image so it can later start without the network. Done at
 	// install time, where a slow first pull is expected, not at first use.
-	prepare(image: string): Promise<void>;
+	// `onProgress` hears how far the download is, when the caller shows it.
+	prepare(image: string, onProgress?: (progress: PullProgress) => void): Promise<void>;
 	// Frees the downloaded copy of an image no installed app uses any more.
 	removeImage(image: string): Promise<void>;
 	start(spec: SandboxSpec, handlers: SandboxHandlers): Promise<RunningSandbox>;
