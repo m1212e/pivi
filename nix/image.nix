@@ -103,6 +103,34 @@
   # dropping them takes a sizeable bite out of the image.
   documentation.enable = false;
   documentation.nixos.enable = false;
+  documentation.man.enable = false;
+
+  # The SD image module (via nixos-generators' sd-aarch64 format) is written for
+  # NixOS's generic installer image, and brings two things along that a
+  # television has no use for: profiles/base.nix (a rescue toolkit, plus zfs,
+  # btrfs, xfs, ntfs and cifs support) and hardware.enableAllHardware (the
+  # whole linux-firmware set and initrd drivers for SATA controllers,
+  # hypervisors and other boards). sd-image.nix sets the latter itself, hence
+  # mkForce, as nixos-hardware's own Pi 1 image does. What the Pi does need is
+  # named elsewhere: its initrd drivers come from nixos-hardware, mmc_block from
+  # NixOS's default initrd modules, its radio firmware from hardware.firmware
+  # above.
+  disabledModules = [ "profiles/base.nix" ];
+  hardware.enableAllHardware = lib.mkForce false;
+  # Booting from a USB SSD, which enableAllHardware used to cover.
+  boot.initrd.availableKernelModules = [ "uas" ];
+
+  # Not part of the job: a modem, LVM volumes, sudo (there is no user to
+  # elevate, SSH logs in as root), and the perl/rsync/strace NixOS installs by
+  # default.
+  networking.modemmanager.enable = false;
+  services.lvm.enable = false;
+  security.sudo.enable = false;
+  environment.defaultPackages = [ ];
+  # nixos-install, nixos-rebuild and friends. Updates call the new system's
+  # switch-to-configuration directly (nix/updates.nix), and a rebuild pushed
+  # from a dev machine (`nixos-rebuild --target-host`) runs there, not here.
+  system.disableInstallerTools = true;
 
   # Wired networking should just work if a cable is present, so that a device
   # whose wifi provisioning goes wrong still comes up reachable.
