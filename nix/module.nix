@@ -353,6 +353,11 @@ in
       description = "pivi TV shell and phone-remote server";
       wantedBy = [ "multi-user.target" ];
 
+      # The stream route remuxes with `ffmpeg` from PATH (src/routes/api/stream).
+      # Headless: no X11, SDL or other playback outputs, only codecs and network
+      # inputs, which is all a remux needs.
+      path = [ pkgs.ffmpeg-headless ];
+
       # network-online, not just network: the phone-remote listener binds the
       # LAN address, which has to exist before the process starts.
       wants = [ "network-online.target" ];
