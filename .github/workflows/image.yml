@@ -89,6 +89,27 @@ jobs:
       - name: Build the image
         run: nix build .#sd-image-${{ matrix.board }} --print-build-logs
 
+      # The Pi's firmware loads whatever config.txt names as `kernel=` (or
+      # kernel8.img without one) from the FAT partition. A board-support update
+      # once left that file out, and the image built fine but never booted, so
+      # check it here rather than on a television.
+      - name: Check the firmware partition can boot
+        run: |
+          set -euo pipefail
+          img=$(find -L result/sd-image -name '*.img' -print -quit)
+          read -r start sectors < <(partx -g -o START,SECTORS -n 1 "$img")
+          dd if="$img" of=firmware.vfat bs=512 skip="$start" count="$sectors" status=none
+          nix shell nixpkgs#mtools --command bash -euo pipefail -c '
+            mtype -i firmware.vfat ::config.txt
+            kernel=$(mtype -i firmware.vfat ::config.txt | tr -d "\r" | sed -n "s/^kernel=//p" | tail -n 1)
+            if ! mdir -i firmware.vfat "::${kernel:-kernel8.img}" >/dev/null 2>&1; then
+              echo "::error::The firmware partition has no ${kernel:-kernel8.img}: this image would not boot."
+              exit 1
+            fi
+            echo "OK: firmware loads ${kernel:-kernel8.img}"
+          '
+          rm firmware.vfat
+
       # Where the size actually goes. The image has been stuck just over GitHub's
       # 2 GiB asset limit, and trimming by intuition has a poor record here — the
       # kernel, not the browser, turned out to be the 90-minute build. This is the

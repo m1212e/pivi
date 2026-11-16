@@ -63,6 +63,14 @@
   # (`raspberrypifw`).
   hardware.firmware = [ pkgs.raspberrypiWirelessFirmware ];
 
+  # nixos-hardware stages the firmware partition itself (its
+  # raspberry-pi/common/firmware.nix replaces the sd-image module's version),
+  # and copies U-Boot only when asked. Without it the partition has no
+  # `kernel=` target and the Pi stops at the firmware: seven green blinks,
+  # "kernel image not found". U-Boot is what reads extlinux.conf on the root
+  # partition, where NixOS puts its kernels and generations.
+  hardware.raspberry-pi.firmware.uboot.enable = true;
+
   # Chromium on a 2GB Pi 4 with a 1080p video decoded into it is genuinely
   # tight. Compressed swap in RAM costs a little CPU and avoids the OOM killer
   # taking the shell down mid-playback; swapping to the SD card instead would
