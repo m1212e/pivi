@@ -143,6 +143,14 @@ export function holdApp(appId: string): () => void {
 	return usage.hold(appId);
 }
 
+/**
+ * Whether someone is using the TV, so the nightly system update
+ * (nix/updates.nix, via routes/api/system/busy) doesn't restart it under them.
+ */
+export function isDeviceBusy(windowMs: number): boolean {
+	return usage.busy(windowMs);
+}
+
 // getApp without counting as use, for warming apps up.
 function ensureApp(appId: string): Promise<AppInstance> {
 	const existing = instances.get(appId);

@@ -60,6 +60,22 @@ describe('the usage tracker', () => {
 		advance(50);
 		expect(usage.idle(['a', 'b', 'unknown'])).toEqual(['a']);
 	});
+
+	it('calls the device busy while anything is held or was used recently', () => {
+		const { usage, advance } = setup();
+		expect(usage.busy(50)).toBe(false);
+		usage.touch('a');
+		advance(49);
+		expect(usage.busy(50)).toBe(true);
+		advance(1);
+		expect(usage.busy(50)).toBe(false);
+		const release = usage.hold('b');
+		advance(1_000);
+		expect(usage.busy(50)).toBe(true);
+		release();
+		advance(50);
+		expect(usage.busy(50)).toBe(false);
+	});
 });
 
 describe('releaseWhenDone', () => {

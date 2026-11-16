@@ -156,3 +156,31 @@ jobs:
             gh release create "$TAG" --generate-notes ||
             gh release view "$TAG" >/dev/null
           gh release upload "$TAG" "${{ steps.image.outputs.path }}" --clobber
+
+      # What flashed devices update to (nix/updates.nix): the system the image
+      # was built from goes to the binary cache, and its store path is attached
+      # as `pivi-<board>.toplevel`. Pushed before the pointer is published, so
+      # a device never sees a path it can't download. Skipped until the cache
+      # is set up: a CACHIX_CACHE repository variable and a CACHIX_AUTH_TOKEN
+      # secret.
+      - name: Publish the system for over-the-air updates
+        if: vars.CACHIX_CACHE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || inputs.tag }}
+        run: |
+          set -euo pipefail
+          toplevel=$(nix build --no-link --print-out-paths \
+            ".#nixosConfigurations.${{ matrix.board }}.config.system.build.toplevel")
+          nix run nixpkgs#cachix -- push "${{ vars.CACHIX_CACHE }}" "$toplevel"
+
+          if [ -z "$TAG" ]; then
+            echo "No release tag given — pushed to the cache, nothing published for devices."
+            exit 0
+          fi
+          echo "$toplevel" > "pivi-${{ matrix.board }}.toplevel"
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --generate-notes ||
+            gh release view "$TAG" >/dev/null
+          gh release upload "$TAG" "pivi-${{ matrix.board }}.toplevel" --clobber

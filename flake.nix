@@ -45,6 +45,8 @@
         self.nixosModules.default
         ./nix/image.nix
         nixos-hardware.nixosModules."raspberry-pi-${board}"
+        # Which release asset the device follows (nix/updates.nix).
+        { services.pivi.updates.board = "pi${board}"; }
       ];
 
       # The sd-aarch64 format module is part of the system, not a wrapper around

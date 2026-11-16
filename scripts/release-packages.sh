@@ -86,7 +86,8 @@ for pkg in "${PACKAGES[@]}"; do
 			git push origin "$tag"
 			release_flags=()
 			[ "$dist_tag" = next ] && release_flags+=(--prerelease)
-			gh release create "$tag" "${release_flags[@]}" --title "$name $version" \
+			# Never "latest": devices update from the latest release (nix/updates.nix).
+			gh release create "$tag" "${release_flags[@]}" --latest=false --title "$name $version" \
 				--notes "Published to npm: https://www.npmjs.com/package/$name/v/$version"
 		fi
 	fi

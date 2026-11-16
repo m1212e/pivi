@@ -40,6 +40,13 @@ export function createUsageTracker(idleMs = IDLE_STOP_MS, now = Date.now) {
 			};
 		},
 
+		/** Whether any app is held right now or was used within `windowMs`. */
+		busy(windowMs: number): boolean {
+			if (holds.size > 0) return true;
+			const at = now();
+			return [...lastUsed.values()].some((usedAt) => at - usedAt < windowMs);
+		},
+
 		/** Which of `running` nobody has used for the idle window. */
 		idle(running: Iterable<string>): string[] {
 			const at = now();

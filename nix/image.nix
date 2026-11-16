@@ -13,6 +13,8 @@
 # display manager, no user to log in as. The only thing on the screen is the
 # kiosk browser the pivi module starts.
 {
+  imports = [ ./updates.nix ];
+
   services.pivi = {
     enable = true;
     # Both are the module's own defaults; stated here because they are the two
@@ -20,6 +22,14 @@
     # is how a device with no keyboard gets onto a network.
     kiosk.enable = true;
     wifi.provisioning = true;
+
+    # Where CI pushes each release's system (see .github/workflows/image.yml).
+    # Updates turn themselves on once the key is set; until then a flashed
+    # image stays on the version it was flashed with.
+    updates.cache = {
+      url = null;
+      publicKey = null;
+    };
   };
 
   # nixos-hardware's Pi modules default to the downstream Raspberry Pi kernel
