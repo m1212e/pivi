@@ -125,7 +125,10 @@ jobs:
       # version and architecture), so the path is discovered rather than
       # assumed. xz rather than the module's zstd: common flashing tools take
       # .img.xz as is, and it compresses tighter, which matters next to the
-      # 2 GiB release-asset limit below.
+      # 2 GiB release-asset limit below. Measured on the v0.0.18 Pi 4 image
+      # (6.6 GiB raw): zstd -3 2213 MiB, xz -3 1954, xz -6 1832. -6 keeps a
+      # margin under the limit; -9 gains little more and takes several times
+      # as long on the 4-core runner.
       - name: Locate, name and compress the image
         id: image
         run: |
@@ -139,7 +142,7 @@ jobs:
 
           tag="${{ github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || inputs.tag }}"
           name="pivi-${tag:-dev}-${{ matrix.board }}.img.xz"
-          xz --threads=0 -9 --stdout "$built" > "$name"
+          xz --threads=0 -6 --stdout "$built" > "$name"
           echo "path=$name" >> "$GITHUB_OUTPUT"
           ls -lh "$name"
 
