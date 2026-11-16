@@ -9,6 +9,7 @@
 	import { resolve } from '$app/paths';
 	import { onNavigate, afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
+	import { dev } from '$app/env';
 	import { Toaster } from 'svelte-sonner';
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
@@ -46,6 +47,15 @@
 		}
 		applyTvScale();
 		return clearTvScale;
+	});
+
+	// Nothing on the TV is pointed at: the remote moves focus and taps through
+	// synthetic touch events (RemoteBridge.svelte). Kept in dev, where a mouse
+	// is how the shell gets clicked through on a desktop. See layout.css.
+	$effect(() => {
+		if (dev || isRemotePage) return;
+		document.documentElement.dataset.hideCursor = '';
+		return () => delete document.documentElement.dataset.hideCursor;
 	});
 
 	// The pairing QR overlay (PairingOverlay.svelte) repeats on every screen

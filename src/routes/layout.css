@@ -17,6 +17,15 @@
 }
 
 /*
+ * No mouse cursor on the TV in production (set by +layout.svelte).
+ * `!important` because components set their own `cursor-pointer` etc.
+ */
+html[data-hide-cursor],
+html[data-hide-cursor] * {
+	cursor: none !important;
+}
+
+/*
  * svelte-sonner (the toast library, see +layout.svelte) hardcodes every
  * dimension as literal px in its own stylesheet/inline styles rather than
  * rem, so none of it responds to tvScale.ts's root-font-size scaling the
