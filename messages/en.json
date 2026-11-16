@@ -67,6 +67,7 @@
 	"network_ap_password": "Password: {password}",
 	"network_step_open_remote": "2. Open the remote",
 	"network_step_open_remote_hint": "Scan this once you've joined. The TV then lists your networks: pick yours with the remote and type the password on your phone.",
+	"network_hotspot_failed": "The setup network didn't start. Retrying…",
 	"network_continue_offline": "Continue without wifi",
 	"network_unavailable_hint": "Wifi setup isn't available on this device.",
 	"wifi_title": "Connectivity",

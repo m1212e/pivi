@@ -2600,6 +2600,11 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'hotspotError',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
 						name: 'hotspotPassword',
 						type: {
 							kind: 'NON_NULL',

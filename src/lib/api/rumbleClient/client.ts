@@ -394,6 +394,7 @@ export type Mutation = {
 export type Network = {
 	available: Boolean;
 	ethernet: Boolean;
+	hotspotError: String | null;
 	hotspotPassword: String;
 	hotspotSsid: String;
 	mode: String;

@@ -8,11 +8,13 @@
 	let {
 		hotspotSsid,
 		hotspotPassword,
+		hotspotError,
 		remoteUrl,
 		onDismiss
 	}: {
 		hotspotSsid: string;
 		hotspotPassword: string;
+		hotspotError: string | null;
 		remoteUrl: string | null;
 		onDismiss: () => void;
 	} = $props();
@@ -54,6 +56,16 @@
 		>
 			{#if remoteUrl}
 				<PairingQr url={remoteUrl} size={176} />
+			{:else if hotspotError}
+				<!-- Nobody can SSH into a fresh device, so the TV is the only place
+				     NetworkManager's reason can be read. Retried in the background
+				     (wifiBootstrap.ts), so it clears itself if the AP comes up. -->
+				<div
+					class="flex size-44 flex-col justify-center gap-2 rounded-2xl bg-red-500/15 p-3 text-center ring-1 ring-red-400/30"
+				>
+					<p class="text-sm font-medium text-red-100">{m.network_hotspot_failed()}</p>
+					<p class="line-clamp-5 font-mono text-xs break-words text-red-200/80">{hotspotError}</p>
+				</div>
 			{:else}
 				<!-- No LAN address yet: the access point is still coming up, and the
 				     pairing URL has nothing to point at until it has. The first

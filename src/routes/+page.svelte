@@ -105,6 +105,7 @@
 	<NetworkSetup
 		hotspotSsid={network.hotspotSsid}
 		hotspotPassword={network.hotspotPassword}
+		hotspotError={network.hotspotError}
 		remoteUrl={pairing.remoteUrl}
 		onDismiss={() => (setupDismissed = true)}
 	/>

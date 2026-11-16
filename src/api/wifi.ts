@@ -252,7 +252,8 @@ export async function startHotspot(): Promise<void> {
 	);
 }
 
-async function stopHotspot(): Promise<void> {
+/** Takes the setup AP down. A no-op when it isn't up. */
+export async function stopHotspot(): Promise<void> {
 	try {
 		await nmcli('connection', 'down', HOTSPOT_CONNECTION);
 	} catch {

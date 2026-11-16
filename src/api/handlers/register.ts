@@ -23,9 +23,9 @@ if (!building) {
 	startPairingRelay();
 	startDeviceCleanupSchedule();
 	startAppHost();
-	// Not awaited so the first request doesn't wait on NetworkManager.
-	// Nothing depends on it finishing, the /wifi screen asks for state itself.
-	void startWifiProvisioning();
+	// Runs in the background so the first request doesn't wait on
+	// NetworkManager. The /wifi screen asks for state itself.
+	startWifiProvisioning();
 }
 
 // Keeps the typed client in step with the schema, only dev and build have the

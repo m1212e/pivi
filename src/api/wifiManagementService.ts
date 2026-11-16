@@ -63,6 +63,11 @@ export function createWifiManagement(events: ManagementEvents) {
 			};
 		},
 
+		/** A join is in flight, with the hotspot down on purpose (see wifiBootstrap.ts). */
+		joining(): boolean {
+			return session.connectingSsid !== null;
+		},
+
 		async scan(): Promise<void> {
 			// The screen hides the button without wifi hardware, so a request from
 			// a stale screen is ignored instead of running a pointless nmcli call.

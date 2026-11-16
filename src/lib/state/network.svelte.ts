@@ -12,6 +12,7 @@ export function getNetworkStatus() {
 		online: true,
 		ethernet: true,
 		hotspotSsid: true,
-		hotspotPassword: true
+		hotspotPassword: true,
+		hotspotError: true
 	});
 }

@@ -67,6 +67,7 @@
 	"network_ap_password": "Passwort: {password}",
 	"network_step_open_remote": "2. Fernbedienung öffnen",
 	"network_step_open_remote_hint": "Scanne dies, sobald du verbunden bist. Der Fernseher zeigt dann deine Netzwerke: Wähle deins mit der Fernbedienung aus und gib das Passwort am Handy ein.",
+	"network_hotspot_failed": "Das Einrichtungsnetzwerk ist nicht gestartet. Neuer Versuch läuft…",
 	"network_continue_offline": "Ohne WLAN fortfahren",
 	"network_unavailable_hint": "WLAN-Einrichtung ist auf diesem Gerät nicht verfügbar.",
 	"wifi_title": "Konnektivität",
