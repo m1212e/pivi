@@ -116,8 +116,8 @@ let
     name = "node-modules";
     production = false;
     hash = {
-      x86_64-linux = "sha256-BYB6T2/xW0jkDe/gui7eitAbQ504SmqmT5hZF2ZcNXk=";
-      aarch64-linux = "sha256-52Otwibs5Hlz2D/GYNomUOvn5TVjUHgIHko1rP2DoBE=";
+      x86_64-linux = "sha256-Z0g0xH4jBnRnSThaUtdq2mfcu4KGw8fWRqZBs18gkNk=";
+      aarch64-linux = "sha256-LlzUYPRvs0TOKWtXil3/D/USnZahKXLBZj3nE6RVB7c=";
     };
   };
 
