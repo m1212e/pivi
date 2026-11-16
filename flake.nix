@@ -59,7 +59,12 @@
         board:
         nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
-          modules = piModules board ++ [ nixos-generators.nixosModules.sd-aarch64 ];
+          modules = piModules board ++ [
+            nixos-generators.nixosModules.sd-aarch64
+            # Left raw: CI compresses it with xz (image.yml), which GNOME Disks,
+            # Raspberry Pi Imager and Etcher all flash directly, unlike zstd.
+            { sdImage.compressImage = false; }
+          ];
         };
 
       sdImage = board: (piSystem board).config.system.build.sdImage;
