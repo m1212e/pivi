@@ -24,11 +24,10 @@
     wifi.provisioning = true;
 
     # Where CI pushes each release's system (see .github/workflows/image.yml).
-    # Updates turn themselves on once the key is set; until then a flashed
-    # image stays on the version it was flashed with.
+    # Setting the key is what turns updates on (nix/updates.nix).
     updates.cache = {
-      url = null;
-      publicKey = null;
+      url = "https://pivi.cachix.org";
+      publicKey = "pivi.cachix.org-1:5J+I/bJb4kFakhG6VWSv5ORvIpDsuIjW4R0yaSPJ9NU=";
     };
   };
 
