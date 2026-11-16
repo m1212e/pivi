@@ -35,6 +35,11 @@ export function appScreenHref(appId: string, screenId?: string): string {
 	return screenId ? `${base}?${new URLSearchParams({ screen: screenId })}` : base;
 }
 
+/** The /wifi screen opened by the first-boot setup, which returns to the picker once online. */
+export function wifiSetupHref(): string {
+	return `${ROUTES.wifi}?${new URLSearchParams({ setup: '1' })}`;
+}
+
 export function loginHref(profileId: string): string {
 	return `${LOGIN_PREFIX}/${profileId}`;
 }

@@ -4,6 +4,10 @@
 	// and type a password into the focused field on the phone's keyboard.
 	import * as m from '#lib/paraglide/messages';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { ROUTES } from '#lib/routes';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import { client } from '#lib/api/rumbleClient/client';
 	import { stopSubscription } from '#lib/api/subscription';
@@ -79,6 +83,16 @@
 	}
 
 	const StatusIcon = $derived(wifiStatusIcon(managed));
+
+	// Opened by the first-boot setup (see routes/+page.svelte): once online, go
+	// back to the picker, whose pairing QR is the next step since the phone just
+	// lost the setup network. The pause lets "Connected to …" be read first.
+	const fromSetup = page.url.searchParams.has('setup');
+	$effect(() => {
+		if (!fromSetup || !(managed.online || managed.ethernet)) return;
+		const timer = setTimeout(() => goto(resolve(ROUTES.login), { replaceState: true }), 2_500);
+		return () => clearTimeout(timer);
+	});
 </script>
 
 <svelte:head><title>{m.wifi_title()}</title></svelte:head>

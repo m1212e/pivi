@@ -1,13 +1,21 @@
+<script module lang="ts">
+	// Module level so it survives client-side navigation: going back from /wifi
+	// while still offline must not bounce straight back into it.
+	let handedOffToWifi = false;
+</script>
+
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Path } from '$app/types';
-	import { ROUTES, loginHref } from '#lib/routes';
+	import { goto } from '$app/navigation';
+	import { ROUTES, loginHref, wifiSetupHref } from '#lib/routes';
 	import { page } from '$app/state';
 	import { profileGradient } from '#lib/profileColor';
 	import PairingQr from '#lib/components/PairingQr.svelte';
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import NetworkSetup from '#lib/components/NetworkSetup.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
+	import { stopSubscription } from '#lib/api/subscription';
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import { getNetworkStatus } from '#lib/state/network.svelte';
 	import { pollEvery } from '#lib/poll';
@@ -60,6 +68,35 @@
 	const needsWifiSetup = $derived(
 		network.available && !network.online && !network.ethernet && !setupDismissed
 	);
+
+	// The overlay's job ends once a phone is paired: networks are picked on the
+	// TV's /wifi screen, steered by that phone. Polled on top of the
+	// subscription for the same reason as PairingOverlay.svelte.
+	let phoneConnected = $state(false);
+	$effect(() => {
+		const stopPoll = pollEvery(
+			5_000,
+			() => client.query.phoneConnection({ connected: true }),
+			(result) => {
+				phoneConnected = result.connected;
+			}
+		);
+		const subscription = client.liveQuery
+			.phoneConnection({ connected: true })
+			.subscribe((value) => {
+				if (value) phoneConnected = value.connected;
+			});
+		return () => {
+			stopPoll();
+			stopSubscription(subscription);
+		};
+	});
+
+	$effect(() => {
+		if (!needsWifiSetup || !phoneConnected || handedOffToWifi) return;
+		handedOffToWifi = true;
+		void goto(resolve(wifiSetupHref() as Path));
+	});
 </script>
 
 <svelte:head><title>{m.app_title()}</title></svelte:head>
