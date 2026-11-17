@@ -425,7 +425,8 @@ in
             action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
             action.id === "org.freedesktop.NetworkManager.network-control" ||
             action.id === "org.freedesktop.NetworkManager.enable-disable-wifi" ||
-            action.id === "org.freedesktop.NetworkManager.wifi.share.protected") {
+            action.id === "org.freedesktop.NetworkManager.wifi.share.protected" ||
+            action.id === "org.freedesktop.NetworkManager.wifi.share.open") {
           return polkit.Result.YES;
         }
         return undefined;

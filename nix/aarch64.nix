@@ -59,6 +59,15 @@
   # partition, where NixOS puts its kernels and generations.
   hardware.raspberry-pi.firmware.uboot.enable = true;
 
+  # The device tree U-Boot hands the kernel: the generation's own, built with
+  # this kernel, rather than the one the firmware loaded. nixos-hardware keeps
+  # the firmware's whenever U-Boot is enabled, which suits the downstream
+  # kernel it was written for, not mainline: on a Pi 3 it describes the USB
+  # controller as `brcm,bcm2708-usb`, a driver only the downstream kernel has,
+  # so mainline's dwc2 never binds and there is no USB, and no Ethernet (which
+  # hangs off USB there).
+  boot.loader.generic-extlinux-compatible.useGenerationDeviceTree = true;
+
   # The SD image module (via nixos-generators' sd-aarch64 format) is written for
   # NixOS's generic installer image, and brings two things along that a
   # television has no use for: profiles/base.nix (a rescue toolkit, plus zfs,
