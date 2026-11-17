@@ -9,6 +9,8 @@
 // nmcli as the fallback.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import { promisify } from 'node:util';
 import { connectViaDbus } from './wifiDbus';
 
@@ -135,12 +137,26 @@ async function wifiDevice(): Promise<WifiDevice | null> {
 	return null;
 }
 
+// `startsWith` because a cable configured outside NetworkManager reports
+// `connected (externally)`.
 async function ethernetConnected(): Promise<boolean> {
 	const stdout = await nmcli('-f', 'TYPE,STATE', 'device', 'status');
-	return nonEmptyLines(stdout).some((line) => {
+	const viaNetworkManager = nonEmptyLines(stdout).some((line) => {
 		const [type, state] = splitTerse(line);
-		return type === 'ethernet' && state === 'connected';
+		return type === 'ethernet' && state.startsWith('connected');
 	});
+	return viaNetworkManager || wiredAddressPresent();
+}
+
+// What the kernel says, in case NetworkManager doesn't: a wired interface with
+// an IPv4 address is a working network whoever configured it, and the wifi
+// setup screen would only be a dead end in front of it.
+function wiredAddressPresent(): boolean {
+	return Object.entries(networkInterfaces()).some(
+		([name, addresses]) =>
+			!existsSync(`/sys/class/net/${name}/wireless`) &&
+			(addresses ?? []).some((address) => address.family === 'IPv4' && !address.internal)
+	);
 }
 
 async function isOnline(): Promise<boolean> {
@@ -238,18 +254,25 @@ export async function scanNetworks(): Promise<WifiNetwork[]> {
  * one named profile, so calling it repeatedly is safe.
  */
 export async function startHotspot(): Promise<void> {
-	await nmcli(
-		'device',
-		'wifi',
-		'hotspot',
-		...interfaceArgs(),
-		'con-name',
-		HOTSPOT_CONNECTION,
-		'ssid',
-		HOTSPOT_SSID,
-		'password',
-		HOTSPOT_PASSWORD
-	);
+	try {
+		await nmcli(
+			'device',
+			'wifi',
+			'hotspot',
+			...interfaceArgs(),
+			'con-name',
+			HOTSPOT_CONNECTION,
+			'ssid',
+			HOTSPOT_SSID,
+			'password',
+			HOTSPOT_PASSWORD
+		);
+	} catch (error) {
+		// The setup screen shows this message in a few lines, so it has to be
+		// nmcli's reason, not execFile's "Command failed: <whole command line>"
+		// that comes before it and would push it out of view.
+		throw new Error(nmcliError(error).split(HOTSPOT_PASSWORD).join('***'), { cause: error });
+	}
 }
 
 /** Takes the setup AP down. A no-op when it isn't up. */

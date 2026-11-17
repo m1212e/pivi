@@ -58,16 +58,10 @@
 		})
 	);
 
-	// Reset on every reload on purpose: dismissing is "let me look around now",
-	// not "stop asking me".
-	let setupDismissed = $state(false);
-
 	// Ethernet counts as connected even when `online` is false (a LAN with no
 	// route out) -- a cabled device has nothing to provision, and the wifi
 	// screen would be a dead end.
-	const needsWifiSetup = $derived(
-		network.available && !network.online && !network.ethernet && !setupDismissed
-	);
+	const needsWifiSetup = $derived(network.available && !network.online && !network.ethernet);
 
 	// The overlay's job ends once a phone is paired: networks are picked on the
 	// TV's /wifi screen, steered by that phone. Polled on top of the
@@ -107,7 +101,6 @@
 		hotspotPassword={network.hotspotPassword}
 		hotspotError={network.hotspotError}
 		remoteUrl={pairing.remoteUrl}
-		onDismiss={() => (setupDismissed = true)}
 	/>
 {/if}
 

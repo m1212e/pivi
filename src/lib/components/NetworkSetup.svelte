@@ -9,14 +9,12 @@
 		hotspotSsid,
 		hotspotPassword,
 		hotspotError,
-		remoteUrl,
-		onDismiss
+		remoteUrl
 	}: {
 		hotspotSsid: string;
 		hotspotPassword: string;
 		hotspotError: string | null;
 		remoteUrl: string | null;
-		onDismiss: () => void;
 	} = $props();
 
 	// The `WIFI:` format stock iOS and Android cameras offer to join. Its
@@ -78,15 +76,4 @@
 			</div>
 		</div>
 	</div>
-
-	<!-- An escape hatch, not a real workflow: nothing in Pivi works offline, but
-	     refusing to let anyone past a setup screen is worse than letting them
-	     look around. -->
-	<button
-		type="button"
-		onclick={onDismiss}
-		class="rounded-full px-5 py-2 text-sm text-white/45 transition hover:bg-white/10 hover:text-white/80 focus:outline-none"
-	>
-		{m.network_continue_offline()}
-	</button>
 </div>
