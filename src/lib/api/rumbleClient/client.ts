@@ -368,6 +368,7 @@ export type Mutation = {
 	}) => Boolean;
 	approveAppUpdate: (p: { appId: String }) => Boolean;
 	checkAppUpdates: Boolean;
+	checkSystemUpdate: Boolean;
 	clearAppCache: (p: { appId: String }) => Boolean;
 	clearAppStorage: (p: { appId: String }) => Boolean;
 	connectWifiNetwork: (p: {
@@ -377,8 +378,10 @@ export type Mutation = {
 	}) => Boolean;
 	dismissAppPreview: Boolean;
 	installApp: (p: { granted: String[] }) => Boolean;
+	installSystemUpdate: Boolean;
 	login: (p: { pin: String; username: String }) => Boolean;
 	openUrlOnPhone: (p: { url: String }) => Boolean;
+	postponeSystemUpdate: Boolean;
 	previewAppInstall: (p: { image: String; publicKey?: String | null | undefined }) => Boolean;
 	register: (p: { pin: String; username: String }) => Boolean;
 	rejectAppUpdate: (p: { appId: String }) => Boolean;
@@ -434,6 +437,7 @@ export type Query = {
 	pairing: () => Pairing;
 	phoneConnection: () => PhoneConnection;
 	suggestedApps: () => SuggestedApp[];
+	systemUpdate: () => SystemUpdate;
 	user: (p: { id: ID }) => User;
 	users: (p?: {
 		limit?: Int | null | undefined;
@@ -496,6 +500,15 @@ export type SuggestedApp = {
 	id: String;
 	image: String;
 	name: String;
+};
+
+export type SystemUpdate = {
+	available: String | null;
+	checking: Boolean;
+	current: String;
+	installing: Boolean;
+	postponed: Boolean;
+	supported: Boolean;
 };
 
 export type User = {

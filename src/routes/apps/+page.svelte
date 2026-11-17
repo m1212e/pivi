@@ -12,6 +12,8 @@
 	import { freshQuery } from '#lib/api/freshQuery';
 	import { stopSubscription } from '#lib/api/subscription';
 	import AppManagerPanel, { type AppActions } from '#lib/components/AppManagerPanel.svelte';
+	import SystemUpdateSection from '#lib/components/SystemUpdateSection.svelte';
+	import { getSystemUpdate } from '#lib/state/systemUpdate';
 	import { appsStateSchema, type AppsState } from '#lib/apps/management';
 	import type { PermissionKey } from '@pivi/sdk/manifest';
 
@@ -100,6 +102,9 @@
 	// dereference of it.
 	let managed = $state<AppsState>((initial && toState(initial)) || EMPTY);
 
+	// pivi's own updates, shown above the apps (SystemUpdateSection.svelte).
+	const systemUpdate = await getSystemUpdate().catch(() => null);
+
 	// A short, operator-configured list of known apps (see
 	// src/api/apps/suggested.ts) -- fixed for the life of the page, so it's
 	// fetched once rather than kept live like the installed set above. Fresh,
@@ -182,6 +187,10 @@
 		<p class="rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200 ring-1 ring-red-400/30">
 			{refusal}
 		</p>
+	{/if}
+
+	{#if systemUpdate}
+		<SystemUpdateSection initial={systemUpdate} />
 	{/if}
 
 	<AppManagerPanel apps={managed} {actions} {suggested} expand={updateAppId} />

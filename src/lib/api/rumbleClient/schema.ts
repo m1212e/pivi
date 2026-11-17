@@ -2269,6 +2269,14 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'checkSystemUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
 						name: 'clearAppCache',
 						type: {
 							kind: 'NON_NULL',
@@ -2355,6 +2363,14 @@ export const schema = {
 						]
 					},
 					{
+						name: 'installSystemUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
 						name: 'login',
 						type: {
 							kind: 'NON_NULL',
@@ -2392,6 +2408,14 @@ export const schema = {
 								}
 							}
 						]
+					},
+					{
+						name: 'postponeSystemUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
 					},
 					{
 						name: 'previewAppInstall',
@@ -2916,6 +2940,14 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'systemUpdate',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'SystemUpdate', kind: 'OBJECT', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
 						name: 'user',
 						type: {
 							kind: 'NON_NULL',
@@ -3373,6 +3405,58 @@ export const schema = {
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					}
+				],
+				interfaces: []
+			},
+			{
+				kind: 'OBJECT',
+				name: 'SystemUpdate',
+				fields: [
+					{
+						name: 'available',
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'checking',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'current',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'installing',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'postponed',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'supported',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
 						},
 						args: []
 					}

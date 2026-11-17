@@ -190,5 +190,19 @@
 	"osk_shift": "Shift",
 	"osk_space": "Space",
 	"osk_backspace": "Backspace",
-	"osk_suggestions": "Suggestions"
+	"osk_suggestions": "Suggestions",
+	"system_update_prompt_title": "pivi {version} is ready",
+	"system_update_prompt_description": "Installing restarts the TV, which takes about a minute. Later, it installs itself at night.",
+	"system_update_install": "Update now",
+	"system_update_later": "Later",
+	"system_update_installing": "Installing the update. The TV restarts in a moment…",
+	"system_update_title": "pivi updates",
+	"system_update_current": "Version {version}",
+	"system_update_up_to_date": "Up to date.",
+	"system_update_ready": "Version {version} is downloaded and ready to install.",
+	"system_update_checking": "Checking for updates…",
+	"system_update_check": "Check for updates",
+	"system_update_unsupported": "This device doesn't update itself.",
+	"system_update_failed": "Couldn't start the update.",
+	"app_settings_open": "App settings"
 }

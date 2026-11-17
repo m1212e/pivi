@@ -11,10 +11,12 @@
 # downloads that exact, signed build: nothing is evaluated or compiled on the Pi,
 # which has neither the memory nor the patience for it.
 #
-# The switch happens at night, and only when nobody is watching (the server's
-# /api/system/busy). After the reboot pivi has to answer within a few minutes,
-# or the device rolls back to the previous system and never tries that build
-# again.
+# Shortly after boot the device looks for a new release and downloads it, and
+# the TV offers it after the next login (src/api/systemUpdate.ts): installing
+# then only takes a reboot. Left alone, it is installed at night, when nobody
+# is watching (the server's /api/system/busy). After the reboot pivi has to
+# answer within a few minutes, or the device rolls back to the previous system
+# and never tries that build again.
 #
 # Not covered: a build so broken it never reaches userspace. The extlinux menu
 # on the serial console still offers the previous generations by hand.
@@ -35,23 +37,61 @@ let
       config.systemd.package
     ];
     text = ''
-      mkdir -p ${stateDir}
+      # check: download a new release and offer it on the TV (at boot).
+      # nightly: the same, then install it if nobody is watching.
+      # apply: install what check downloaded (the TV's "update now").
+      mode=''${1:-nightly}
+      running=$(readlink -f /run/current-system)
 
-      url="https://github.com/${cfg.repository}/releases/latest/download/pivi-${cfg.board}.toplevel"
-      if ! target=$(curl -fsSL --max-time 60 "$url"); then
-        echo "no release to update to at $url"
+      install() {
+        rm -f ${stateDir}/available ${stateDir}/deferred
+        nix-env --profile ${systemProfile} --set "$1"
+        "$1/bin/switch-to-configuration" boot
+        echo "$1" > ${stateDir}/pending
+        echo "rebooting into $1"
+        systemctl reboot
+      }
+
+      valid() {
+        [[ "$1" =~ ^/nix/store/[a-z0-9]{32}-nixos-system-[A-Za-z0-9._+-]+$ ]]
+      }
+
+      if [ "$mode" = apply ]; then
+        target=$(jq -r .target ${stateDir}/available 2>/dev/null || true)
+        if ! valid "$target" || [ "$target" = "$running" ]; then
+          echo "no downloaded update to install"
+          exit 0
+        fi
+        nix-store --realise "$target"
+        install "$target"
         exit 0
       fi
-      if [[ ! "$target" =~ ^/nix/store/[a-z0-9]{32}-nixos-system-[A-Za-z0-9._+-]+$ ]]; then
+
+      # The tag first, then that tag's file, so a release published in between
+      # can't pair one version's name with another's build.
+      if ! release=$(curl -fsSL -o /dev/null -w '%{url_effective}' --max-time 60 \
+        "https://github.com/${cfg.repository}/releases/latest"); then
+        echo "could not reach GitHub"
+        exit 0
+      fi
+      version=''${release##*/}
+      url="https://github.com/${cfg.repository}/releases/download/$version/pivi-${cfg.board}.toplevel"
+      if ! target=$(curl -fsSL --max-time 60 "$url"); then
+        echo "$version has no build for ${cfg.board}"
+        exit 0
+      fi
+      if ! valid "$target"; then
         echo "refusing a malformed store path: $target" >&2
         exit 1
       fi
 
-      if [ "$target" = "$(readlink -f ${systemProfile})" ]; then
-        echo "already on $target"
+      if [ "$target" = "$running" ]; then
+        rm -f ${stateDir}/available
+        echo "already on $version"
         exit 0
       fi
       if grep -qxF "$target" ${stateDir}/rejected 2>/dev/null; then
+        rm -f ${stateDir}/available
         echo "$target failed its health check before, skipping it"
         exit 0
       fi
@@ -59,6 +99,11 @@ let
       # Substituted only: the path has no derivation here, and nix accepts it
       # only signed by a key in trusted-public-keys.
       nix-store --realise "$target"
+      jq -n --arg target "$target" --arg version "$version" '{$target, $version}' \
+        > ${stateDir}/available.tmp
+      mv ${stateDir}/available.tmp ${stateDir}/available
+      echo "$version is downloaded and ready to install"
+      [ "$mode" = check ] && exit 0
 
       # Deferred while someone is watching, but not forever: a TV left on an
       # app screen every night would otherwise never update.
@@ -66,16 +111,10 @@ let
       busy=$(curl -fsS --max-time 10 http://127.0.0.1:${port}/api/system/busy | jq -r .busy || echo false)
       if [ "$busy" = true ] && [ "$deferred" -lt ${toString cfg.maxDeferrals} ]; then
         echo $((deferred + 1)) > ${stateDir}/deferred
-        echo "the TV is in use, deferring the update to $target"
+        echo "the TV is in use, deferring the update to $version"
         exit 0
       fi
-      rm -f ${stateDir}/deferred
-
-      nix-env --profile ${systemProfile} --set "$target"
-      "$target/bin/switch-to-configuration" boot
-      echo "$target" > ${stateDir}/pending
-      echo "rebooting into $target"
-      systemctl reboot
+      install "$target"
     '';
   };
 
@@ -196,13 +235,16 @@ in
       options = "--delete-older-than 30d";
     };
 
+    # Readable by pivi, which offers what's in `available` on the TV.
+    systemd.tmpfiles.rules = [ "d ${stateDir} 0755 root root - -" ];
+
     systemd.services.pivi-update = {
       description = "Install the latest pivi release";
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = lib.getExe update;
+        ExecStart = "${lib.getExe update} nightly";
       };
     };
 
@@ -213,6 +255,52 @@ in
         # Spreads a fleet's downloads; one device doesn't mind either way.
         RandomizedDelaySec = "1h";
       };
+    };
+
+    systemd.services.pivi-update-check = {
+      description = "Download the latest pivi release";
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe update} check";
+      };
+    };
+
+    # A device that's switched off with the TV at night still hears about
+    # releases. Not right at boot: the network may still be coming up, and
+    # pivi and the kiosk have the CPU to themselves for a moment.
+    systemd.timers.pivi-update-check = {
+      wantedBy = [ "timers.target" ];
+      timerConfig.OnBootSec = "2min";
+    };
+
+    systemd.services.pivi-update-apply = {
+      description = "Install the downloaded pivi release now";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe update} apply";
+      };
+    };
+
+    # The TV's "check for updates" and "update now" (src/api/systemUpdate.ts):
+    # pivi may start exactly these two units, nothing else systemd offers.
+    security.polkit.extraConfig = ''
+      polkit.addRule(function(action, subject) {
+        if (subject.user === "pivi" &&
+            action.id === "org.freedesktop.systemd1.manage-units" &&
+            (action.lookup("unit") === "pivi-update-check.service" ||
+             action.lookup("unit") === "pivi-update-apply.service") &&
+            action.lookup("verb") === "start") {
+          return polkit.Result.YES;
+        }
+        return undefined;
+      });
+    '';
+
+    systemd.services.pivi.environment = {
+      PIVI_UPDATE_STATE = "${stateDir}/available";
+      PIVI_SYSTEMCTL = "${config.systemd.package}/bin/systemctl";
     };
 
     systemd.services.pivi-update-verify = {

@@ -22,7 +22,10 @@
 	import { getNetworkStatus } from '#lib/state/network.svelte';
 	import { pollEvery } from '#lib/poll';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
-	import { Cable, Music, VolumeX, Wifi } from '@lucide/svelte';
+	import { Cable, Music, Settings, VolumeX, Wifi } from '@lucide/svelte';
+	import SystemUpdatePrompt from '#lib/components/SystemUpdatePrompt.svelte';
+	import { getSystemUpdate } from '#lib/state/systemUpdate';
+	import { graphQLErrorMessage } from '#lib/api/errors';
 
 	// Every installed app, whatever it implements -- one that only provides
 	// a screen (or nothing but playback) still gets its tile in the apps row.
@@ -186,6 +189,41 @@
 	);
 	// Pushes only, never a cached replay, see followLive. An emission with no
 	// data (an error) says nothing about the lists, so it never wipes them.
+	// pivi's own update, downloaded in the background after boot. Offered once
+	// per login until "later" (SystemUpdatePrompt.svelte).
+	let systemUpdate = $state<{
+		version: string;
+		installing: boolean;
+		error: string | null;
+	} | null>(null);
+	onMount(() => {
+		getSystemUpdate()
+			.then((update) => {
+				if (update.available && !update.postponed) {
+					systemUpdate = { version: update.available, installing: false, error: null };
+				}
+			})
+			.catch(() => {});
+	});
+
+	function installSystemUpdate() {
+		if (!systemUpdate) return;
+		systemUpdate.error = null;
+		client.mutate
+			.installSystemUpdate()
+			.then(() => {
+				if (systemUpdate) systemUpdate.installing = true;
+			})
+			.catch((err: unknown) => {
+				if (systemUpdate) systemUpdate.error = graphQLErrorMessage(err, m.system_update_failed());
+			});
+	}
+
+	function postponeSystemUpdate() {
+		systemUpdate = null;
+		client.mutate.postponeSystemUpdate().catch(() => {});
+	}
+
 	onMount(() => {
 		const stops = [
 			followLive(
@@ -385,6 +423,14 @@
 				{/if}
 			</button>
 			<a
+				href={resolve(ROUTES.apps)}
+				aria-label={m.app_settings_open()}
+				title={m.app_settings_open()}
+				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+			>
+				<Settings class="size-5" />
+			</a>
+			<a
 				href={resolve(ROUTES.wifi)}
 				aria-label={m.wifi_open_setup()}
 				title={m.wifi_open_setup()}
@@ -464,4 +510,14 @@
 			{/each}
 		</div>
 	</div>
+{/if}
+
+{#if systemUpdate}
+	<SystemUpdatePrompt
+		version={systemUpdate.version}
+		installing={systemUpdate.installing}
+		error={systemUpdate.error}
+		onInstall={installSystemUpdate}
+		onLater={postponeSystemUpdate}
+	/>
 {/if}

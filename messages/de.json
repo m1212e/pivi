@@ -190,5 +190,19 @@
 	"osk_shift": "Umschalt",
 	"osk_space": "Leertaste",
 	"osk_backspace": "Löschen",
-	"osk_suggestions": "Vorschläge"
+	"osk_suggestions": "Vorschläge",
+	"system_update_prompt_title": "pivi {version} ist bereit",
+	"system_update_prompt_description": "Beim Installieren startet der Fernseher neu, das dauert etwa eine Minute. Später installiert es sich nachts von selbst.",
+	"system_update_install": "Jetzt aktualisieren",
+	"system_update_later": "Später",
+	"system_update_installing": "Das Update wird installiert. Der Fernseher startet gleich neu…",
+	"system_update_title": "pivi-Updates",
+	"system_update_current": "Version {version}",
+	"system_update_up_to_date": "Auf dem neuesten Stand.",
+	"system_update_ready": "Version {version} ist heruntergeladen und bereit zur Installation.",
+	"system_update_checking": "Suche nach Updates…",
+	"system_update_check": "Nach Updates suchen",
+	"system_update_unsupported": "Dieses Gerät aktualisiert sich nicht selbst.",
+	"system_update_failed": "Das Update konnte nicht gestartet werden.",
+	"app_settings_open": "App-Einstellungen"
 }
