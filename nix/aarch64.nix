@@ -1,19 +1,19 @@
 { lib, pkgs, ... }:
 
-# The aarch64 image: one SD card for the Raspberry Pi 4, Pi 400, Pi 5 and
-# Pi 500. Imported alongside nixos-hardware's Pi 4 and Pi 5 modules and the
-# sd-image format (see flake.nix).
+# The aarch64 image: one SD card for the Raspberry Pi 3, Pi 4, Pi 400, Pi 5
+# and Pi 500. Imported alongside nixos-hardware's Pi 3, Pi 4 and Pi 5 modules
+# and the sd-image format (see flake.nix).
 #
 # One image serves every board because, on the mainline kernel, almost nothing
 # differs between them: the same kernel, the same U-Boot (rpi_arm64_defconfig
 # covers every 64-bit Pi) and one config.txt whose `[pi4]`/`[pi5]` sections the
 # firmware picks from. The firmware partition already carries every board's
-# device trees. What's left is a handful of initrd modules, which the two
+# device trees. What's left is a handful of initrd modules, which the
 # nixos-hardware modules contribute between them, and the device tree filter
 # below.
 #
-# The Pi 3 isn't a target: its interrupt controller is not a GIC, so there is
-# no KVM and no app could run on it.
+# The Pi 3 runs everything but the apps: its interrupt controller is not a
+# GIC, so there is no KVM for their microVMs.
 {
   # nixos-hardware's Pi modules default to the downstream Raspberry Pi kernel
   # (`linux-rpi`), which no binary cache carries — a CI run spent 90 minutes
@@ -35,9 +35,9 @@
   # (see DEPLOYMENT.md) — and if it needs the downstream kernel, that means
   # arranging a binary cache for it rather than compiling it per release.
   #
-  # On the Pi 5, mainline enables the RP1's Ethernet only from 7.0, so on this
-  # LTS kernel a Pi 5 is wifi-only.
-  boot.kernelPackages = pkgs.linuxPackages;
+  # The latest rather than the LTS kernel: Pi 5 support is still landing
+  # upstream, and its Ethernet (behind the RP1) is enabled only from 7.0.
+  boot.kernelPackages = pkgs.linuxPackages_latest;
 
   # The Pi 4 and Pi 5 modules each narrow the device trees to their own SoC, at
   # the same priority, so they'd conflict; the image wants all of them anyway.

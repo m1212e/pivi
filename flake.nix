@@ -30,8 +30,8 @@
       forAllSystems =
         f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # The appliance, one per architecture: an SD card for the Raspberry Pi 4
-      # and 5 (nix/aarch64.nix) and a disk image for UEFI PCs (nix/x86_64.nix).
+      # The appliance, one per architecture: an SD card for the Raspberry Pi 3,
+      # 4 and 5 (nix/aarch64.nix) and a disk image for UEFI PCs (nix/x86_64.nix).
       # No single image can cover both — they differ in kernel, bootloader and
       # every binary — but within each, one image boots every supported device.
       applianceSystem =
@@ -55,8 +55,9 @@
       # also means `nix flake check` validates exactly what gets flashed.
       appliances = {
         aarch64 = applianceSystem "aarch64" [
-          # Both boards' support: their initrd modules add up, and nix/aarch64.nix
-          # settles the one option they disagree on.
+          # Every board's support: their initrd modules add up, and
+          # nix/aarch64.nix settles the one option they disagree on.
+          nixos-hardware.nixosModules.raspberry-pi-3
           nixos-hardware.nixosModules.raspberry-pi-4
           nixos-hardware.nixosModules.raspberry-pi-5
           ./nix/aarch64.nix
