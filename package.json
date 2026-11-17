@@ -2,7 +2,7 @@
 	"name": "my-app",
 	"private": true,
 	"license": "Apache-2.0",
-	"version": "0.0.25",
+	"version": "0.0.26",
 	"type": "module",
 	"scripts": {
 		"dev": "concurrently \"bun run dev:server\" \"bun run dev:docker\"",
