@@ -221,17 +221,8 @@ jobs:
             echo "No release tag given — pushed to the cache, nothing published for devices."
             exit 0
           fi
-          files=("pivi-${{ matrix.variant }}.toplevel")
-          # Pi 4s and Pi 5s flashed before the images were merged follow a
-          # per-board name (pivi-pi4/pivi-pi5); the same build under those
-          # names moves them onto this image, after which they follow its
-          # own. The Pi 3 had its own image too, but isn't carried over: no
-          # app can run on it (nix/aarch64.nix).
-          if [ "${{ matrix.variant }}" = aarch64 ]; then
-            files+=(pivi-pi4.toplevel pivi-pi5.toplevel)
-          fi
-          for file in "${files[@]}"; do echo "$toplevel" > "$file"; done
+          echo "$toplevel" > "pivi-${{ matrix.variant }}.toplevel"
           gh release view "$TAG" >/dev/null 2>&1 ||
             gh release create "$TAG" --generate-notes ||
             gh release view "$TAG" >/dev/null
-          gh release upload "$TAG" "${files[@]}" --clobber
+          gh release upload "$TAG" "pivi-${{ matrix.variant }}.toplevel" --clobber
