@@ -30,6 +30,12 @@ const WIFI_INTERFACE = process.env.PIVI_WIFI_INTERFACE || undefined;
 const HOTSPOT_CONNECTION = 'pivi-hotspot';
 
 const HOTSPOT_SSID = process.env.PIVI_HOTSPOT_SSID || 'pivi-setup';
+
+// Fixed rather than left to NetworkManager's pick, because two other places
+// depend on it: the captive portal's DNS answer (nix/module.nix) and the check
+// below for whether a phone is on the setup network.
+const HOTSPOT_ADDRESS = '10.42.0.1';
+const HOTSPOT_SUBNET = '10.42.0.';
 // Random per boot unless one is configured, so there is no well-known default
 // that opens every unconfigured device's setup network. It is shown on the TV
 // screen and encoded in the QR code next to it, so nobody has to type it. WPA2
@@ -283,6 +289,8 @@ export async function startHotspot(): Promise<void> {
 			'bg',
 			'ipv4.method',
 			'shared',
+			'ipv4.addresses',
+			`${HOTSPOT_ADDRESS}/24`,
 			'ipv6.method',
 			'ignore',
 			'wifi-sec.key-mgmt',
@@ -305,6 +313,16 @@ export async function startHotspot(): Promise<void> {
 		// that comes before it and would push it out of view.
 		throw new Error(nmcliError(error).split(HOTSPOT_PASSWORD).join('***'), { cause: error });
 	}
+}
+
+/**
+ * Whether `address` is a phone that joined the setup AP, while the AP is up.
+ * Anyone there could read its passphrase off the TV, so they are in the room:
+ * the captive portal (routes/remote/captive) may hand them a pairing token.
+ */
+export async function isOnSetupNetwork(address: string): Promise<boolean> {
+	if (!address.replace(/^::ffff:/, '').startsWith(HOTSPOT_SUBNET)) return false;
+	return deriveMode(await wifiDevice()) === 'hotspot';
 }
 
 /** Takes the setup AP down. A no-op when it isn't up. */

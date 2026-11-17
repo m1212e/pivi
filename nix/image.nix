@@ -12,7 +12,10 @@
 # display manager, no user to log in as. The only thing on the screen is the
 # kiosk browser the pivi module starts.
 {
-  imports = [ ./updates.nix ];
+  imports = [
+    ./updates.nix
+    ./config-import.nix
+  ];
 
   services.pivi = {
     enable = true;
@@ -31,6 +34,13 @@
   };
 
   networking.hostName = "pivi";
+
+  # The wireless regulatory database. Without it the kernel is stuck on the
+  # restrictive worldwide rules even once it learns the country (from the
+  # networks around it, or `cfg80211.ieee80211_regdom`) and logs a failure to
+  # load it on every boot. The setup AP stays on 2.4 GHz either way, which the
+  # worldwide rules allow.
+  hardware.wirelessRegulatoryDatabase = true;
 
   # Chromium on a 2GB Pi 4 with a 1080p video decoded into it is genuinely
   # tight. Compressed swap in RAM costs a little CPU and avoids the OOM killer

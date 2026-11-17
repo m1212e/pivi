@@ -134,6 +134,29 @@ if (remotePort !== internalPort) {
 	);
 }
 
+// The setup AP's captive portal. Its DNS answers every name with the device's
+// own address and port 80 is redirected here (nix/module.nix), so the probe a
+// phone makes on joining any network (captive.apple.com,
+// connectivitycheck.gstatic.com, …) gets a redirect to the remote instead of
+// the answer it expects, and the phone opens it. The redirect is all this
+// serves: no request reaches the app, and whether the phone gets a pairing
+// token is decided there (src/routes/remote/captive).
+const captivePort = env('PIVI_CAPTIVE_PORT', '') ? port('PIVI_CAPTIVE_PORT', 0) : null;
+/** @type {import('node:http').Server | null} */
+let captive = null;
+if (captivePort !== null) {
+	captive = http.createServer((req, res) => {
+		res.writeHead(302, {
+			// The address the phone reached, which is the AP's: the probe's own
+			// Host is someone else's name.
+			Location: `http://${req.socket.localAddress}:${remotePort}/remote/captive`,
+			'Cache-Control': 'no-store'
+		});
+		res.end();
+	});
+	await listen(captive, '0.0.0.0', captivePort, 'captive portal redirect');
+}
+
 // The address the phone-remote listener is bound to is not stable for the life
 // of the process, which is why this is a poll rather than one-shot detection at
 // startup:
@@ -219,7 +242,7 @@ async function rebindIfNeeded(desired) {
 let shuttingDown = false;
 
 function activeServers() {
-	return remote ? [internal, remote.server] : [internal];
+	return [internal, remote?.server, captive].filter((server) => server != null);
 }
 
 await syncRemoteListener();

@@ -14,6 +14,14 @@ let
   # directly, so unlike the HTTP port it has to be reachable from the LAN.
   pairingWsPort = 5175;
 
+  # The setup AP's captive portal (deploy/pivi-server.mjs): port 80 on the AP's
+  # interface is redirected to it. Not an option, since nothing outside this
+  # module ever addresses it. The address is NetworkManager's shared-mode
+  # default, pinned by the AP profile in src/api/wifi.ts.
+  captivePort = 3080;
+  hotspotAddress = "10.42.0.1";
+  captivePortal = cfg.wifi.provisioning && cfg.wifi.interface != null;
+
   databaseUrl =
     if cfg.database.url != null then
       cfg.database.url
@@ -316,15 +324,40 @@ in
       # its own DHCP server and DNS forwarder for whatever phone joins. Without
       # these the phone associates with the AP and then never gets an address,
       # which looks exactly like a broken access point.
-      interfaces = lib.optionalAttrs (cfg.wifi.provisioning && cfg.wifi.interface != null) {
+      interfaces = lib.optionalAttrs captivePortal {
         ${cfg.wifi.interface} = {
           allowedUDPPorts = [
             53
             67
           ];
-          allowedTCPPorts = [ 53 ];
+          allowedTCPPorts = [
+            53
+            captivePort
+          ];
         };
       };
+
+      # Port 80 is where a joining phone sends its captive-portal probe. In a
+      # chain of its own, so a firewall reload replaces the rule rather than
+      # adding a second one.
+      extraCommands = lib.mkIf captivePortal ''
+        iptables -t nat -N pivi-captive 2>/dev/null || iptables -t nat -F pivi-captive
+        iptables -t nat -C PREROUTING -j pivi-captive 2>/dev/null || iptables -t nat -A PREROUTING -j pivi-captive
+        iptables -t nat -A pivi-captive -i ${cfg.wifi.interface} -p tcp --dport 80 -j REDIRECT --to-ports ${toString captivePort}
+      '';
+      extraStopCommands = lib.mkIf captivePortal ''
+        iptables -t nat -D PREROUTING -j pivi-captive 2>/dev/null || true
+        iptables -t nat -F pivi-captive 2>/dev/null || true
+        iptables -t nat -X pivi-captive 2>/dev/null || true
+      '';
+    };
+
+    # The other half of the captive portal: the dnsmasq NetworkManager runs for
+    # the setup AP answers every name with the device itself, so the probe's
+    # host (captive.apple.com and the like) resolves here. There's no internet
+    # behind the AP to resolve anything else to.
+    environment.etc."NetworkManager/dnsmasq-shared.d/pivi-captive.conf" = lib.mkIf captivePortal {
+      text = "address=/#/${hotspotAddress}\n";
     };
 
     networking.networkmanager.enable = lib.mkIf cfg.wifi.provisioning true;
@@ -392,6 +425,7 @@ in
       }
       // lib.optionalAttrs (cfg.wifi.provisioning && cfg.wifi.interface != null) {
         PIVI_WIFI_INTERFACE = cfg.wifi.interface;
+        PIVI_CAPTIVE_PORT = toString captivePort;
       }
       # ORIGIN is deliberately left unset: adapter-node then derives the
       # origin from each request, which is what's needed here since the TV

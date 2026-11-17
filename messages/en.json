@@ -66,7 +66,7 @@
 	"network_step_join_ap_hint": "Scan to join, or pick \"{ssid}\" in your phone's wifi settings.",
 	"network_ap_password": "Password: {password}",
 	"network_step_open_remote": "2. Open the remote",
-	"network_step_open_remote_hint": "Scan this once you've joined. The TV then lists your networks: pick yours with the remote and type the password on your phone.",
+	"network_step_open_remote_hint": "Most phones open the remote by themselves once joined; if yours doesn't, scan this. The TV then lists your networks: pick yours with the remote and type the password on your phone.",
 	"network_hotspot_failed": "The setup network didn't start. Retrying…",
 	"network_unavailable_hint": "Wifi setup isn't available on this device.",
 	"wifi_title": "Connectivity",
