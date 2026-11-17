@@ -6,10 +6,10 @@
 // Retried rather than tried once at boot: the radio may not be ready when the
 // server starts, and a cable can be pulled later. Once the device is on a real
 // network (a cable plugged in mid-setup, say), the AP comes down again: the
-// pairing QR uses the first LAN address, which must not be the AP's, and the
-// setup screen moves on by itself. The last failure is kept for the setup
-// screen, since a device nobody can SSH into has no other way to say why its
-// AP never appeared.
+// pairing QR points at the AP's address while it is up (lan.ts), which phones
+// on the real network can't reach, and the setup screen moves on by itself.
+// The last failure is kept for the setup screen, since a device nobody can SSH
+// into has no other way to say why its AP never appeared.
 import { getNetworkState, isAvailable, startHotspot, stopHotspot, type NetworkState } from './wifi';
 import { wifiManagement } from './wifiManagement';
 

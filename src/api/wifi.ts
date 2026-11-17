@@ -30,10 +30,11 @@ const HOTSPOT_CONNECTION = 'pivi-hotspot';
 
 const HOTSPOT_SSID = process.env.PIVI_HOTSPOT_SSID || 'pivi-setup';
 
-// Fixed rather than left to NetworkManager's pick, because two other places
-// depend on it: the captive portal's DNS answer (nix/module.nix) and the check
-// below for whether a phone is on the setup network.
-const HOTSPOT_ADDRESS = '10.42.0.1';
+// Fixed rather than left to NetworkManager's pick, because other places depend
+// on it: the captive portal's DNS answer (nix/module.nix), the pairing QR's
+// address (lan.ts) and the check below for whether a phone is on the setup
+// network.
+export const HOTSPOT_ADDRESS = '10.42.0.1';
 const HOTSPOT_SUBNET = '10.42.0.';
 // Open unless a passphrase is configured. A WPA2 setup AP is the better
 // network, but phones failed to join it on a Pi 3 (its brcmfmac radio

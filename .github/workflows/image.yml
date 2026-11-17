@@ -140,10 +140,12 @@ jobs:
       # aarch64 one under sd-image/, so the path is discovered rather than
       # assumed. xz rather than the module's zstd: common flashing tools take
       # .img.xz as is, and it compresses tighter, which matters next to the
-      # 2 GiB release-asset limit below. Measured on the v0.0.18 Pi 4 image
-      # (6.6 GiB raw): zstd -3 2213 MiB, xz -3 1954, xz -6 1832. -6 keeps a
-      # margin under the limit; -9 gains little more and takes several times
-      # as long on the 4-core runner.
+      # 2 GiB release-asset limit below. Measured on the v0.0.27 aarch64 image
+      # (6.0 GiB raw), 4 threads: xz -6 968 MiB in 210s, -3 1083 in 74s,
+      # -2 1111 in 47s, -1 1144 in 36s. -6 was the slowest step of the whole
+      # job (6-8 minutes on the runner) for 13% smaller; -2 still leaves the
+      # larger x86_64 image far under the limit. Above -3 xz switches to its
+      # slow match finder, which is where the time goes.
       - name: Locate, name and compress the image
         id: image
         run: |
@@ -157,7 +159,7 @@ jobs:
 
           tag="${{ github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || inputs.tag }}"
           name="pivi-${tag:-dev}-${{ matrix.variant }}.img.xz"
-          xz --threads=0 -6 --stdout "$built" > "$name"
+          xz --threads=0 -2 --stdout "$built" > "$name"
           echo "path=$name" >> "$GITHUB_OUTPUT"
           ls -lh "$name"
 

@@ -1,6 +1,7 @@
 import { networkInterfaces } from 'node:os';
 import { QR_BIND_HOSTNAME, QR_BIND_IP } from '$app/env/private';
 import { isIP } from 'node:net';
+import { HOTSPOT_ADDRESS } from './wifi';
 // The TV's kiosk browser usually points at localhost, but a phone scanning
 // the pairing QR code needs a LAN-reachable address instead.
 
@@ -30,7 +31,14 @@ function urlHost(ip: string): string | null {
 	return null;
 }
 
+// While the setup AP is up, the phones scanning the QR code are on it, and a
+// wired address that happens to come first in the list is one they may not
+// reach from there. The AP only runs while the device is offline
+// (wifiBootstrap.ts), so this doesn't outlive the setup.
 function detectLanAddress(): string | null {
-	const interfaces = Object.values(networkInterfaces()).flat();
-	return interfaces.find((iface) => iface && isLanInterface(iface))?.address ?? null;
+	const addresses = Object.values(networkInterfaces())
+		.flat()
+		.flatMap((iface) => (iface && isLanInterface(iface) ? [iface.address] : []));
+	if (addresses.includes(HOTSPOT_ADDRESS)) return HOTSPOT_ADDRESS;
+	return addresses[0] ?? null;
 }

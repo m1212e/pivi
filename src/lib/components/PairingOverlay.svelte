@@ -5,6 +5,7 @@
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { client } from '#lib/api/rumbleClient/client';
+	import { freshQuery } from '#lib/api/freshQuery';
 	import { stopSubscription } from '#lib/api/subscription';
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import { pollEvery } from '#lib/poll';
@@ -30,7 +31,7 @@
 		});
 		const stopPhonePoll = pollEvery(
 			60_000,
-			() => client.query.phoneConnection({ connected: true }),
+			() => freshQuery.phoneConnection({ connected: true }),
 			(result) => {
 				phoneConnected = result.connected;
 			}

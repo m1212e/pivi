@@ -9,14 +9,14 @@
 //     from any phone on the LAN
 //
 // Exposing one listener to the network would put the whole TV shell and the
-// GraphQL endpoint on the wifi alongside the remote. So this opens two:
-// a loopback listener that serves everything, and a LAN listener that serves
+// GraphQL endpoint on the wifi alongside the remote. So this opens two kinds:
+// a loopback listener that serves everything, and LAN listeners that serve
 // only the handful of paths the remote page actually needs, 404ing the rest.
 // Both share the same request handler, so there's no proxy hop, no second
 // copy of the app, and no way for the two to drift apart.
 //
-// The LAN listener binds the machine's LAN address specifically rather than
-// 0.0.0.0, which lets it reuse the *same port number* as the loopback one.
+// The LAN listeners bind the machine's LAN addresses specifically rather than
+// 0.0.0.0, which lets them reuse the *same port number* as the loopback one.
 // That matters: `src/hooks.server.ts` builds the pairing QR's URL from
 // `event.url.port`, taken from the request the TV made on loopback. Same port
 // on both listeners means that URL is correct for the phone as-is.
@@ -73,11 +73,14 @@ function isRemoteRequest(req) {
 	return ALLOWED_PATHS.some((pattern) => pattern.test(pathname));
 }
 
-function lanAddress() {
-	// Same rule as src/api/lan.ts, which is what puts the address into the QR
-	// code — these two have to agree on which interface is "the" LAN one.
+function lanAddresses() {
+	// Same rule as src/api/lan.ts, which puts one of these (the setup AP's
+	// while it is up, the first otherwise) into the QR code.
 	const interfaces = Object.values(networkInterfaces()).flat();
-	return interfaces.find((iface) => iface?.family === 'IPv4' && !iface.internal)?.address ?? null;
+	const addresses = interfaces
+		.filter((iface) => iface?.family === 'IPv4' && !iface.internal)
+		.map((iface) => iface.address);
+	return [...new Set(addresses)];
 }
 
 function env(name, fallback) {
@@ -157,9 +160,9 @@ if (captivePort !== null) {
 	await listen(captive, '0.0.0.0', captivePort, 'captive portal redirect');
 }
 
-// The address the phone-remote listener is bound to is not stable for the life
-// of the process, which is why this is a poll rather than one-shot detection at
-// startup:
+// The addresses the phone-remote listeners are bound to are not stable for the
+// life of the process, which is why this is a poll rather than one-shot
+// detection at startup:
 //
 //   - wifi provisioning (src/api/wifiCommands.ts) means the device may boot with
 //     no network at all, raise its own access point (putting it on 10.42.0.1),
@@ -168,42 +171,45 @@ if (captivePort !== null) {
 //     the phone reaches it to do the provisioning in the first place.
 //   - a DHCP lease can change under a long-running device.
 //
+// One listener per address rather than only the first one: with Ethernet
+// plugged in while the setup AP is up, the wired address comes first, and a
+// phone on the AP (sent to 10.42.0.1 by the captive portal or a QR code drawn
+// before the cable got its lease) would find nothing listening.
+//
 // An explicit PIVI_REMOTE_HOST still wins, and then this settles immediately and
 // never rebinds: it is the escape hatch for a fixed address, a second NIC, or
 // 0.0.0.0 in a container with its own network namespace.
 const REMOTE_SYNC_INTERVAL_MS = 3_000;
 
-/** @type {{ server: import('node:http').Server, host: string } | null} */
-let remote = null;
+/** @type {Map<string, import('node:http').Server>} */
+const remotes = new Map();
 let syncing = false;
 let warnedAboutMissingAddress = false;
 
-function desiredRemoteHost() {
-	return env('PIVI_REMOTE_HOST', lanAddress());
+function desiredRemoteHosts() {
+	const explicit = env('PIVI_REMOTE_HOST', null);
+	return explicit === null ? lanAddresses() : [explicit];
 }
 
-async function syncRemoteListener() {
+async function syncRemoteListeners() {
 	// listen() is async, and the interval keeps firing while it is in flight —
 	// without this guard a slow bind could be raced into two listeners.
 	if (syncing || shuttingDown) return;
 	syncing = true;
 	try {
-		await rebindIfNeeded(desiredRemoteHost());
+		await rebindIfNeeded(desiredRemoteHosts());
 	} finally {
 		syncing = false;
 	}
 }
 
-function boundTo(desired) {
-	return desired === (remote?.host ?? null);
-}
-
-function unbindRemote() {
-	if (!remote) return;
-	console.log(`pivi: phone remote no longer reachable on ${remote.host}, unbinding`);
-	remote.server.closeAllConnections();
-	remote.server.close();
-	remote = null;
+function unbindRemote(host) {
+	const server = remotes.get(host);
+	if (!server) return;
+	console.log(`pivi: phone remote no longer reachable on ${host}, unbinding`);
+	server.closeAllConnections();
+	server.close();
+	remotes.delete(host);
 }
 
 // Only once per stretch of having no address: this runs every few seconds, and a
@@ -217,36 +223,39 @@ function warnMissingAddress() {
 	);
 }
 
-async function bindRemote(desired) {
+async function bindRemote(host) {
 	const server = createServer({ filter: isRemoteRequest });
 	try {
-		await listen(server, desired, remotePort, 'phone remote (LAN)');
-		remote = { server, host: desired };
+		await listen(server, host, remotePort, 'phone remote (LAN)');
+		remotes.set(host, server);
 	} catch (error) {
 		// An address that appeared in the interface list but can't be bound yet
 		// (still tentative, or the old listener hasn't fully let go) is normal
 		// during a transition — the next tick tries again.
-		console.warn(`pivi: could not bind the phone remote to ${desired}: ${error.message}`);
+		console.warn(`pivi: could not bind the phone remote to ${host}: ${error.message}`);
 		server.close();
 	}
 }
 
 async function rebindIfNeeded(desired) {
-	if (boundTo(desired)) return;
-	unbindRemote();
-	if (desired === null) return warnMissingAddress();
+	for (const host of remotes.keys()) {
+		if (!desired.includes(host)) unbindRemote(host);
+	}
+	if (desired.length === 0) return warnMissingAddress();
 	warnedAboutMissingAddress = false;
-	await bindRemote(desired);
+	for (const host of desired) {
+		if (!remotes.has(host)) await bindRemote(host);
+	}
 }
 
 let shuttingDown = false;
 
 function activeServers() {
-	return [internal, remote?.server, captive].filter((server) => server != null);
+	return [internal, ...remotes.values(), captive].filter((server) => server != null);
 }
 
-await syncRemoteListener();
-const remoteSyncTimer = setInterval(() => void syncRemoteListener(), REMOTE_SYNC_INTERVAL_MS);
+await syncRemoteListeners();
+const remoteSyncTimer = setInterval(() => void syncRemoteListeners(), REMOTE_SYNC_INTERVAL_MS);
 
 function shutdown(signal) {
 	if (shuttingDown) return;

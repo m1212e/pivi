@@ -15,6 +15,7 @@
 	import LanguagePicker from '#lib/components/LanguagePicker.svelte';
 	import NetworkSetup from '#lib/components/NetworkSetup.svelte';
 	import { client } from '#lib/api/rumbleClient/client';
+	import { freshQuery } from '#lib/api/freshQuery';
 	import { stopSubscription } from '#lib/api/subscription';
 	import { getPairing } from '#lib/state/pairing.svelte';
 	import { getNetworkStatus } from '#lib/state/network.svelte';
@@ -65,12 +66,14 @@
 
 	// The overlay's job ends once a phone is paired: networks are picked on the
 	// TV's /wifi screen, steered by that phone. Polled on top of the
-	// subscription for the same reason as PairingOverlay.svelte.
+	// subscription for the same reason as PairingOverlay.svelte, and through
+	// freshQuery since client.query could keep answering with the cached
+	// "not connected".
 	let phoneConnected = $state(false);
 	$effect(() => {
 		const stopPoll = pollEvery(
 			5_000,
-			() => client.query.phoneConnection({ connected: true }),
+			() => freshQuery.phoneConnection({ connected: true }),
 			(result) => {
 				phoneConnected = result.connected;
 			}
