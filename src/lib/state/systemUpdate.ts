@@ -18,4 +18,4 @@ export async function getSystemUpdate() {
 	return { ...result };
 }
 
-export type SystemUpdate = Awaited<ReturnType<typeof getSystemUpdate>>;
+export type SystemUpdateView = Awaited<ReturnType<typeof getSystemUpdate>>;

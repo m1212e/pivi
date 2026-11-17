@@ -7,10 +7,10 @@
 	import { client } from '#lib/api/rumbleClient/client';
 	import { graphQLErrorMessage } from '#lib/api/errors';
 	import { pollEvery } from '#lib/poll';
-	import { getSystemUpdate, type SystemUpdate } from '#lib/state/systemUpdate';
+	import { getSystemUpdate, type SystemUpdateView } from '#lib/state/systemUpdate';
 	import Button from './Button.svelte';
 
-	let { initial }: { initial: SystemUpdate } = $props();
+	let { initial }: { initial: SystemUpdateView } = $props();
 
 	// svelte-ignore state_referenced_locally
 	let update = $state(initial);
