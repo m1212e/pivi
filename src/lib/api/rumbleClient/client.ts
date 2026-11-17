@@ -398,11 +398,12 @@ export type Network = {
 	available: Boolean;
 	ethernet: Boolean;
 	hotspotError: String | null;
-	hotspotPassword: String;
+	hotspotPassword: String | null;
 	hotspotSsid: String;
 	mode: String;
 	online: Boolean;
 	ssid: String | null;
+	wired: String;
 };
 
 export type Pairing = {

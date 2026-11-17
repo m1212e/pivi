@@ -2630,10 +2630,7 @@ export const schema = {
 					},
 					{
 						name: 'hotspotPassword',
-						type: {
-							kind: 'NON_NULL',
-							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
-						},
+						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
 						args: []
 					},
 					{
@@ -2663,6 +2660,14 @@ export const schema = {
 					{
 						name: 'ssid',
 						type: { kind: 'SCALAR', name: 'String', ofType: null, __proto__: null },
+						args: []
+					},
+					{
+						name: 'wired',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'String', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
 						args: []
 					}
 				],

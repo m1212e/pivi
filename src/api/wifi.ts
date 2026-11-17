@@ -8,7 +8,6 @@
 // goes over D-Bus first (wifiDbus.ts) so the password stays out of argv, with
 // nmcli as the fallback.
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { promisify } from 'node:util';
@@ -36,20 +35,32 @@ const HOTSPOT_SSID = process.env.PIVI_HOTSPOT_SSID || 'pivi-setup';
 // below for whether a phone is on the setup network.
 const HOTSPOT_ADDRESS = '10.42.0.1';
 const HOTSPOT_SUBNET = '10.42.0.';
-// Random per boot unless one is configured, so there is no well-known default
-// that opens every unconfigured device's setup network. It is shown on the TV
-// screen and encoded in the QR code next to it, so nobody has to type it. WPA2
-// requires 8 characters minimum; the alphabet leaves out look-alikes (0/O, 1/l).
-const PASSPHRASE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+// Open unless a passphrase is configured. A WPA2 setup AP is the better
+// network, but phones failed to join it on a Pi 3 (its brcmfmac radio
+// authenticates in firmware), and an open one has no handshake to get wrong.
+// The cost is that anyone in radio range, not just the room, can join while
+// the setup screen is up, and the captive portal pairs whoever does.
+const HOTSPOT_PASSWORD = process.env.PIVI_HOTSPOT_PASSWORD || null;
 
-function randomPassphrase(length = 10): string {
-	return Array.from(
-		randomBytes(length),
-		(byte) => PASSPHRASE_ALPHABET[byte % PASSPHRASE_ALPHABET.length]
-	).join('');
+// WPA2 with nothing a radio might refuse as an AP: no PMF (and so no WPA3,
+// which brcmfmac claims and can't serve), CCMP only.
+function hotspotSecurityArgs(password: string | null): string[] {
+	if (!password) return [];
+	return [
+		'wifi-sec.key-mgmt',
+		'wpa-psk',
+		'wifi-sec.psk',
+		password,
+		'wifi-sec.proto',
+		'rsn',
+		'wifi-sec.pairwise',
+		'ccmp',
+		'wifi-sec.group',
+		'ccmp',
+		'wifi-sec.pmf',
+		'disable'
+	];
 }
-
-const HOTSPOT_PASSWORD = process.env.PIVI_HOTSPOT_PASSWORD || randomPassphrase();
 
 /** Lets the /wifi screen show which networks need a password. */
 export type WifiSecurity = 'open' | 'wep' | 'wpa' | 'enterprise';
@@ -63,6 +74,13 @@ export type WifiNetwork = {
 	/** Whether NetworkManager already has a saved profile for this SSID. */
 	saved: boolean;
 };
+
+/**
+ * How far the wired side got, shown under the setup screen so a cable that
+ * doesn't help can say why: no port the kernel knows of, no cable (or no link),
+ * or a link still waiting for an address.
+ */
+export type WiredState = 'absent' | 'unplugged' | 'connecting' | 'connected';
 
 /** What the TV shows about its connection and what wifiBootstrap.ts decides on. */
 export type NetworkState = {
@@ -82,8 +100,10 @@ export type NetworkState = {
 	online: boolean;
 	/** Whether a wired connection is up, the reason wifi may not be needed. */
 	ethernet: boolean;
+	wired: WiredState;
 	hotspotSsid: string;
-	hotspotPassword: string;
+	/** `null` for an open setup AP. */
+	hotspotPassword: string | null;
 };
 
 // nmcli's terse output escapes its own field separator and backslashes, which
@@ -143,15 +163,22 @@ async function wifiDevice(): Promise<WifiDevice | null> {
 	return null;
 }
 
-// `startsWith` because a cable configured outside NetworkManager reports
-// `connected (externally)`.
-async function ethernetConnected(): Promise<boolean> {
+// The furthest any wired device got. `startsWith` because a cable configured
+// outside NetworkManager reports `connected (externally)`; NetworkManager's
+// `unavailable` is a port with no carrier, `disconnected` one with a link it
+// hasn't activated yet.
+async function wiredState(): Promise<WiredState> {
+	if (wiredAddressPresent()) return 'connected';
 	const stdout = await nmcli('-f', 'TYPE,STATE', 'device', 'status');
-	const viaNetworkManager = nonEmptyLines(stdout).some((line) => {
-		const [type, state] = splitTerse(line);
-		return type === 'ethernet' && state.startsWith('connected');
-	});
-	return viaNetworkManager || wiredAddressPresent();
+	const states = nonEmptyLines(stdout)
+		.map((line) => splitTerse(line))
+		.filter(([type]) => type === 'ethernet')
+		.map(([, state]) => state);
+	if (states.some((state) => state.startsWith('connected'))) return 'connected';
+	if (states.some((state) => state.startsWith('connecting') || state === 'disconnected')) {
+		return 'connecting';
+	}
+	return states.length > 0 ? 'unplugged' : 'absent';
 }
 
 // What the kernel says, in case NetworkManager doesn't: a wired interface with
@@ -197,18 +224,15 @@ function joinedSsid(device: WifiDevice | null, mode: NetworkState['mode']): stri
 
 /** Backs the TV's network status and the boot time AP decision. Throws if nmcli fails. */
 export async function getNetworkState(): Promise<NetworkState> {
-	const [device, ethernet, online] = await Promise.all([
-		wifiDevice(),
-		ethernetConnected(),
-		isOnline()
-	]);
+	const [device, wired, online] = await Promise.all([wifiDevice(), wiredState(), isOnline()]);
 	const mode = deriveMode(device);
 
 	return {
 		mode,
 		ssid: joinedSsid(device, mode),
 		online,
-		ethernet,
+		ethernet: wired === 'connected',
+		wired,
 		hotspotSsid: HOTSPOT_SSID,
 		hotspotPassword: HOTSPOT_PASSWORD
 	};
@@ -293,32 +317,25 @@ export async function startHotspot(): Promise<void> {
 			`${HOTSPOT_ADDRESS}/24`,
 			'ipv6.method',
 			'ignore',
-			'wifi-sec.key-mgmt',
-			'wpa-psk',
-			'wifi-sec.psk',
-			HOTSPOT_PASSWORD,
-			'wifi-sec.proto',
-			'rsn',
-			'wifi-sec.pairwise',
-			'ccmp',
-			'wifi-sec.group',
-			'ccmp',
-			'wifi-sec.pmf',
-			'disable'
+			...hotspotSecurityArgs(HOTSPOT_PASSWORD)
 		);
 		await nmcli('connection', 'up', HOTSPOT_CONNECTION);
 	} catch (error) {
 		// The setup screen shows this message in a few lines, so it has to be
 		// nmcli's reason, not execFile's "Command failed: <whole command line>"
 		// that comes before it and would push it out of view.
-		throw new Error(nmcliError(error).split(HOTSPOT_PASSWORD).join('***'), { cause: error });
+		const message = nmcliError(error);
+		throw new Error(HOTSPOT_PASSWORD ? message.split(HOTSPOT_PASSWORD).join('***') : message, {
+			cause: error
+		});
 	}
 }
 
 /**
- * Whether `address` is a phone that joined the setup AP, while the AP is up.
- * Anyone there could read its passphrase off the TV, so they are in the room:
+ * Whether `address` is a phone that joined the setup AP, while the AP is up:
  * the captive portal (routes/remote/captive) may hand them a pairing token.
+ * With a passphrase they could only have read it off the TV, so they are in
+ * the room; an open AP (see HOTSPOT_PASSWORD) extends that to radio range.
  */
 export async function isOnSetupNetwork(address: string): Promise<boolean> {
 	if (!address.replace(/^::ffff:/, '').startsWith(HOTSPOT_SUBNET)) return false;

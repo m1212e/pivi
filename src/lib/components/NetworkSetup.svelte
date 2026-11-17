@@ -2,6 +2,7 @@
 	// Shown over the profile picker when the device is offline. Nothing can be
 	// typed before a phone is paired, so it only gets a phone onto the hotspot and
 	// into the remote. Two QRs since the pairing URL only works after joining.
+	import { EthernetPort } from '@lucide/svelte';
 	import PairingQr from './PairingQr.svelte';
 	import * as m from '#lib/paraglide/messages';
 
@@ -9,18 +10,34 @@
 		hotspotSsid,
 		hotspotPassword,
 		hotspotError,
-		remoteUrl
+		remoteUrl,
+		wired
 	}: {
 		hotspotSsid: string;
-		hotspotPassword: string;
+		hotspotPassword: string | null;
 		hotspotError: string | null;
 		remoteUrl: string | null;
+		/** 'absent' | 'unplugged' | 'connecting' | 'connected', see WiredState in #api/wifi. */
+		wired: string;
 	} = $props();
+
+	// What the cable is doing, so one that doesn't help says why rather than
+	// leaving this screen up without a word. Nothing for 'connected': the screen
+	// is about to go away.
+	const wiredStatus = $derived(
+		{
+			absent: m.network_wired_absent(),
+			unplugged: m.network_wired_unplugged(),
+			connecting: m.network_wired_connecting()
+		}[wired] ?? null
+	);
 
 	// The `WIFI:` format stock iOS and Android cameras offer to join. Its
 	// reserved characters are legal in SSIDs and passwords, so they get escaped.
-	function wifiQrPayload(ssid: string, password: string): string {
+	// No password means an open access point.
+	function wifiQrPayload(ssid: string, password: string | null): string {
 		const escape = (value: string) => value.replace(/([\\;,":])/g, '\\$1');
+		if (!password) return `WIFI:T:nopass;S:${escape(ssid)};;`;
 		return `WIFI:T:WPA;S:${escape(ssid)};P:${escape(password)};;`;
 	}
 
@@ -43,9 +60,11 @@
 			<div class="text-center text-sm text-white/60">
 				<p class="font-medium text-white/90">{m.network_step_join_ap()}</p>
 				<p>{m.network_step_join_ap_hint({ ssid: hotspotSsid })}</p>
-				<p class="mt-1 font-mono text-white/75">
-					{m.network_ap_password({ password: hotspotPassword })}
-				</p>
+				{#if hotspotPassword}
+					<p class="mt-1 font-mono text-white/75">
+						{m.network_ap_password({ password: hotspotPassword })}
+					</p>
+				{/if}
 			</div>
 		</div>
 
@@ -74,6 +93,20 @@
 				<p class="font-medium text-white/90">{m.network_step_open_remote()}</p>
 				<p>{m.network_step_open_remote_hint()}</p>
 			</div>
+		</div>
+	</div>
+
+	<!-- Ethernet needs none of the above: the screen goes away by itself once a
+	     cable brings the device online (wifiBootstrap.ts). -->
+	<div class="flex items-center gap-3 text-sm">
+		<EthernetPort class="size-6 shrink-0 text-white/70" aria-hidden="true" />
+		<div>
+			<p class="text-white/60">{m.network_ethernet_hint()}</p>
+			{#if wiredStatus}
+				<p class={wired === 'connecting' ? 'text-emerald-300/80' : 'text-white/40'}>
+					{wiredStatus}
+				</p>
+			{/if}
 		</div>
 	</div>
 </div>

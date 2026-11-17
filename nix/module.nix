@@ -22,6 +22,46 @@ let
   hotspotAddress = "10.42.0.1";
   captivePortal = cfg.wifi.provisioning && cfg.wifi.interface != null;
 
+  # A cursor theme whose every cursor is a single transparent pixel. cage draws
+  # its own cursor wherever there's a pointer device (a plugged-in mouse, or a
+  # TV's HDMI-CEC/USB receiver that presents itself as one), and the page's
+  # `cursor: none` (src/routes/layout.css) reaches only what Chromium draws.
+  hiddenCursorTheme =
+    pkgs.runCommand "pivi-hidden-cursor"
+      {
+        nativeBuildInputs = [
+          pkgs.python3
+          pkgs.xcursorgen
+        ];
+      }
+      ''
+        # A 1x1 fully transparent PNG, written by hand to keep an image tool out
+        # of the build.
+        python3 - <<'PNG'
+        import struct, zlib
+        def chunk(kind, data):
+            body = kind + data
+            return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+        png = b"\x89PNG\r\n\x1a\n"
+        png += chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        png += chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\x00"))
+        png += chunk(b"IEND", b"")
+        open("blank.png", "wb").write(png)
+        PNG
+        echo "1 0 0 blank.png" > blank.cfg
+
+        dir=$out/share/icons/pivi-hidden
+        mkdir -p $dir/cursors
+        printf '[Icon Theme]\nName=pivi-hidden\n' > $dir/index.theme
+        xcursorgen blank.cfg $dir/cursors/default
+        # The names wlroots and Chromium ask for, old X11 ones included.
+        for name in left_ptr arrow pointer hand1 hand2 text xterm wait watch \
+          progress left_ptr_watch crosshair cross grab grabbing fleur move \
+          all-scroll not-allowed help question_arrow col-resize row-resize; do
+          ln -s default $dir/cursors/$name
+        done
+      '';
+
   databaseUrl =
     if cfg.database.url != null then
       cfg.database.url
@@ -33,6 +73,13 @@ let
   defaults = lib.importTOML ../pivi.toml;
   configFile = (pkgs.formats.toml { }).generate "pivi.toml" {
     apps.suggested = cfg.suggestedApps;
+  };
+
+  # What the kiosk opens first, handing over to kiosk.url once it answers (see
+  # the file itself).
+  kioskSplash = pkgs.replaceVars ./kiosk-splash.html {
+    url = builtins.toJSON cfg.kiosk.url;
+    logo = builtins.readFile ../static/favicon.svg;
   };
 in
 {
@@ -260,7 +307,10 @@ in
         type = lib.types.str;
         default = "http://127.0.0.1:${toString cfg.port}";
         defaultText = lib.literalExpression ''"http://127.0.0.1:''${toString config.services.pivi.port}"'';
-        description = "What the kiosk browser opens.";
+        description = ''
+          What the kiosk browser shows. It opens a local splash screen first,
+          which hands over to this URL as soon as it answers.
+        '';
       };
 
       extraChromiumFlags = lib.mkOption {
@@ -465,6 +515,12 @@ in
     services.cage = lib.mkIf cfg.kiosk.enable {
       enable = true;
       user = cfg.kiosk.user;
+      # Inherited by Chromium, which reads the same variables for the cursors
+      # it draws itself.
+      environment = {
+        XCURSOR_THEME = "pivi-hidden";
+        XCURSOR_PATH = "${hiddenCursorTheme}/share/icons";
+      };
       program =
         let
           flags = [
@@ -483,16 +539,43 @@ in
           ] ++ cfg.kiosk.extraChromiumFlags;
         in
         pkgs.writeShellScript "pivi-kiosk" ''
-          exec ${lib.getExe pkgs.chromium} ${lib.escapeShellArgs flags} ${lib.escapeShellArg cfg.kiosk.url}
+          exec ${lib.getExe pkgs.chromium} ${lib.escapeShellArgs flags} file://${kioskSplash}
         '';
     };
 
     systemd.services."cage-tty1" = lib.mkIf cfg.kiosk.enable {
-      # Without this the kiosk races the server and lands on a connection
-      # error page that nothing will ever navigate away from.
+      # The splash screen waits for the server either way; ordering after it
+      # still keeps the browser's startup off the CPU while the server boots.
       after = [ "pivi.service" ];
       wants = [ "pivi.service" ];
     };
+
+    # The boot log stays on screen (it's the only sign of life on a television
+    # until the kiosk is up, and the only diagnostics without SSH), but in the
+    # shell's palette rather than the VGA one: slate-950 behind it like the
+    # shell and the splash screen after it, so the hand-over is seamless, and
+    # indigo/fuchsia for systemd's status markers. Applied as kernel
+    # parameters, so it holds from the kernel's first line.
+    console.colors = lib.mkIf cfg.kiosk.enable [
+      "020617" # black: the background (slate-950)
+      "fb7185" # red: FAILED (rose-400)
+      "818cf8" # green: OK (indigo-400)
+      "fbbf24" # yellow (amber-400)
+      "6366f1" # blue (indigo-500)
+      "d946ef" # magenta (fuchsia-500)
+      "22d3ee" # cyan (cyan-400)
+      "94a3b8" # white: regular text (slate-400)
+      "475569" # bright black (slate-600)
+      "fda4af" # bright red (rose-300)
+      "a5b4fc" # bright green (indigo-300)
+      "fcd34d" # bright yellow (amber-300)
+      "818cf8" # bright blue (indigo-400)
+      "e879f9" # bright magenta (fuchsia-400)
+      "67e8f9" # bright cyan (cyan-300)
+      "f1f5f9" # bright white: highlighted text (slate-100)
+    ];
+    # No blinking cursor under the log.
+    boot.kernelParams = lib.mkIf cfg.kiosk.enable [ "vt.global_cursor_default=0" ];
 
     # `StateDirectory=` would hardcode a name under /var/lib and silently
     # disagree with a customised stateDir, so create it here instead.

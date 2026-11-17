@@ -11,8 +11,9 @@ type Network = {
 	ssid: string | null;
 	online: boolean;
 	ethernet: boolean;
+	wired: string;
 	hotspotSsid: string;
-	hotspotPassword: string;
+	hotspotPassword: string | null;
 	hotspotError: string | null;
 };
 
@@ -27,10 +28,12 @@ const NetworkRef = schemaBuilder.objectRef<Network>('Network').implement({
 		ssid: t.exposeString('ssid', { nullable: true }),
 		online: t.exposeBoolean('online'),
 		ethernet: t.exposeBoolean('ethernet'),
+		// 'absent' | 'unplugged' | 'connecting' | 'connected', see WiredState.
+		wired: t.exposeString('wired'),
 		// Shown on the TV and in a `WIFI:` QR code so a phone can join the AP.
-		// Not a secret, it only keeps the AP from being open.
+		// Not a secret, it only keeps the AP from being open; `null` when it is.
 		hotspotSsid: t.exposeString('hotspotSsid'),
-		hotspotPassword: t.exposeString('hotspotPassword'),
+		hotspotPassword: t.exposeString('hotspotPassword', { nullable: true }),
 		// Why the AP didn't come up, shown on the setup screen in place of the
 		// remote's QR code, which has no address to point at without it.
 		hotspotError: t.exposeString('hotspotError', { nullable: true })
@@ -43,8 +46,9 @@ const UNAVAILABLE: Network = {
 	ssid: null,
 	online: false,
 	ethernet: false,
+	wired: 'absent',
 	hotspotSsid: '',
-	hotspotPassword: '',
+	hotspotPassword: null,
 	hotspotError: null
 };
 

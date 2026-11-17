@@ -1,0 +1,169 @@
+<!doctype html>
+<!--
+  What the kiosk browser opens first (nix/module.nix). Chromium starts well
+  before the server answers, and would otherwise sit on a white page until it
+  does. This is a local file, so it paints the moment Chromium is up: the
+  shell's background, its logo and a progress line, until the server responds
+  and the page hands over to it.
+
+  The two placeholders below are filled in at build time by module.nix: the
+  kiosk URL as a JS string, and the logo from static/favicon.svg.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="color-scheme" content="dark" />
+		<title>pivi</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				overflow: hidden;
+				/* slate-950, the shell's own background (src/routes/layout.css). */
+				background: #020617;
+				cursor: none;
+			}
+
+			body {
+				display: grid;
+				place-items: center;
+				animation: fade-in 0.8s ease-out both;
+			}
+			body.leaving {
+				animation: fade-out 0.4s ease-in both;
+			}
+
+			/* The home screen's aurora, toned down: indigo and fuchsia, the logo's two stops. */
+			.blob {
+				position: fixed;
+				width: 70vmax;
+				height: 70vmax;
+				border-radius: 50%;
+				filter: blur(12vmax);
+				opacity: 0.22;
+			}
+			.blob.a {
+				background: #6366f1;
+				left: -25vmax;
+				top: -30vmax;
+				animation: drift-a 18s ease-in-out infinite alternate;
+			}
+			.blob.b {
+				background: #d946ef;
+				right: -30vmax;
+				bottom: -35vmax;
+				animation: drift-b 23s ease-in-out infinite alternate;
+			}
+
+			.mark {
+				position: relative;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 7vmin;
+			}
+			.mark svg {
+				width: 18vmin;
+				height: 18vmin;
+				animation: breathe 3.2s ease-in-out infinite;
+			}
+
+			.track {
+				position: relative;
+				width: 22vmin;
+				height: 0.4vmin;
+				min-height: 2px;
+				border-radius: 999px;
+				overflow: hidden;
+				background: rgb(148 163 184 / 0.15);
+			}
+			.track::after {
+				content: '';
+				position: absolute;
+				inset: 0;
+				width: 40%;
+				border-radius: inherit;
+				background: linear-gradient(90deg, #6366f1, #d946ef);
+				animation: sweep 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+			}
+
+			@keyframes fade-in {
+				from {
+					opacity: 0;
+				}
+			}
+			@keyframes fade-out {
+				to {
+					opacity: 0;
+				}
+			}
+			@keyframes breathe {
+				0%,
+				100% {
+					transform: scale(1);
+					filter: drop-shadow(0 0 2vmin rgb(99 102 241 / 0.35));
+				}
+				50% {
+					transform: scale(1.04);
+					filter: drop-shadow(0 0 5vmin rgb(217 70 239 / 0.45));
+				}
+			}
+			@keyframes sweep {
+				from {
+					transform: translateX(-100%);
+				}
+				to {
+					transform: translateX(250%);
+				}
+			}
+			@keyframes drift-a {
+				to {
+					transform: translate(18vmax, 12vmax);
+				}
+			}
+			@keyframes drift-b {
+				to {
+					transform: translate(-16vmax, -10vmax);
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="blob a"></div>
+		<div class="blob b"></div>
+		<div class="mark">
+			@logo@
+			<div class="track"></div>
+		</div>
+		<script>
+			const target = @url@;
+
+			// `no-cors`: all this needs to know is whether anything answers, and
+			// an opaque response says that as well as a readable one. A refused
+			// connection rejects; the timeout covers one that hangs instead.
+			async function reachable() {
+				try {
+					await fetch(target, {
+						mode: 'no-cors',
+						cache: 'no-store',
+						signal: AbortSignal.timeout(3000)
+					});
+					return true;
+				} catch {
+					return false;
+				}
+			}
+
+			async function waitAndHandOver() {
+				while (!(await reachable())) {
+					await new Promise((resolve) => setTimeout(resolve, 500));
+				}
+				document.body.classList.add('leaving');
+				setTimeout(() => location.replace(target), 400);
+			}
+
+			waitAndHandOver();
+		</script>
+	</body>
+</html>

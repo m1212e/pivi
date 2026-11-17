@@ -5,6 +5,15 @@
 		<meta charset="utf-8" />
 
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="dark" />
+		<!-- The shell's background before any stylesheet loads, so the kiosk's
+		     hand-over from its splash screen (nix/kiosk-splash.html) never
+		     flashes white. Same slate-950 as layout.css. -->
+		<style>
+			html {
+				background: #020617;
+			}
+		</style>
 
 		%sveltekit.head%
 	</head>

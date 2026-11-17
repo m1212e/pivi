@@ -101,6 +101,7 @@
 		hotspotPassword={network.hotspotPassword}
 		hotspotError={network.hotspotError}
 		remoteUrl={pairing.remoteUrl}
+		wired={network.wired}
 	/>
 {/if}
 

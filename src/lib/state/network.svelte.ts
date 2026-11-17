@@ -11,6 +11,7 @@ export function getNetworkStatus() {
 		ssid: true,
 		online: true,
 		ethernet: true,
+		wired: true,
 		hotspotSsid: true,
 		hotspotPassword: true,
 		hotspotError: true
