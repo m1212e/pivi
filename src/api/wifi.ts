@@ -252,21 +252,53 @@ export async function scanNetworks(): Promise<WifiNetwork[]> {
 /**
  * Raise the provisioning AP so a phone can reach the TV with no network. Reuses
  * one named profile, so calling it repeatedly is safe.
+ *
+ * The profile is spelled out rather than left to `nmcli device wifi hotspot`,
+ * whose choices radios reject as an AP, each failing as "802.1X supplicant
+ * took too long to authenticate": protected management frames (and WPA3,
+ * where the driver claims SAE) on the Pi's brcmfmac, and 5 GHz on Intel cards
+ * and on any radio with no regulatory country set. 2.4 GHz WPA2-PSK with CCMP
+ * is what every radio and every phone can do.
  */
 export async function startHotspot(): Promise<void> {
 	try {
+		// Recreated rather than modified, so a profile made by an older version
+		// (or by `nmcli device wifi hotspot`) can't keep a setting this omits.
+		await nmcli('connection', 'delete', HOTSPOT_CONNECTION).catch(() => {});
 		await nmcli(
-			'device',
+			'connection',
+			'add',
+			'type',
 			'wifi',
-			'hotspot',
 			...interfaceArgs(),
 			'con-name',
 			HOTSPOT_CONNECTION,
+			'autoconnect',
+			'no',
 			'ssid',
 			HOTSPOT_SSID,
-			'password',
-			HOTSPOT_PASSWORD
+			'802-11-wireless.mode',
+			'ap',
+			'802-11-wireless.band',
+			'bg',
+			'ipv4.method',
+			'shared',
+			'ipv6.method',
+			'ignore',
+			'wifi-sec.key-mgmt',
+			'wpa-psk',
+			'wifi-sec.psk',
+			HOTSPOT_PASSWORD,
+			'wifi-sec.proto',
+			'rsn',
+			'wifi-sec.pairwise',
+			'ccmp',
+			'wifi-sec.group',
+			'ccmp',
+			'wifi-sec.pmf',
+			'disable'
 		);
+		await nmcli('connection', 'up', HOTSPOT_CONNECTION);
 	} catch (error) {
 		// The setup screen shows this message in a few lines, so it has to be
 		// nmcli's reason, not execFile's "Command failed: <whole command line>"
