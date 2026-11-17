@@ -1,6 +1,7 @@
-name: SD image
+name: Images
 
-# Builds the flashable Raspberry Pi images and attaches them to the release.
+# Builds the flashable images, one per architecture, and attaches them to the
+# release: aarch64 (Raspberry Pi 4/5, an SD card) and x86_64 (UEFI PCs).
 #
 # Release-only, not per-push: each image is a full NixOS system closure plus a
 # SvelteKit build, which is on the order of a gigabyte and tens of minutes. It
@@ -27,29 +28,42 @@ permissions:
 jobs:
   image:
     strategy:
-      # One image per board: each Pi generation needs its own device trees and
-      # initrd modules (see nixos-hardware's per-generation modules), so no image
-      # boots another's hardware. The Pi 3 is the weakest of the three — see the
-      # note in flake.nix.
+      # One image per architecture, each built natively (see flake.nix).
       fail-fast: false
       matrix:
-        board: [pi3, pi4, pi5]
+        include:
+          # A native arm64 runner, so the aarch64 closure builds without
+          # emulation — under QEMU this takes hours rather than minutes. These
+          # runners are free for public repositories; on a private repo they
+          # need a paid plan, in which case swap in `ubuntu-latest` plus a QEMU
+          # step:
+          #
+          #   - uses: docker/setup-qemu-action@v4
+          #   - run: echo "extra-platforms = aarch64-linux" | sudo tee -a /etc/nix/nix.conf
+          #
+          # and expect it to be very slow.
+          - variant: aarch64
+            runner: ubuntu-24.04-arm
+          - variant: x86_64
+            runner: ubuntu-latest
 
-    # A native arm64 runner, so the aarch64 closure builds without emulation —
-    # under QEMU this takes hours rather than minutes. These runners are free
-    # for public repositories; on a private repo they need a paid plan, in
-    # which case swap in `ubuntu-latest` plus a QEMU step:
-    #
-    #   - uses: docker/setup-qemu-action@v4
-    #   - run: echo "extra-platforms = aarch64-linux" | sudo tee -a /etc/nix/nix.conf
-    #
-    # and expect it to be very slow.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
 
     timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v7
+
+      # The x86_64 image is assembled inside a VM (nixpkgs' make-disk-image),
+      # which nix runs only where it finds a usable /dev/kvm. GitHub's x86
+      # runners have one, but not open to the runner's user by default.
+      - name: Enable KVM
+        if: matrix.variant == 'x86_64'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -84,16 +98,17 @@ jobs:
 
       - name: Report what must be built vs fetched
         run: |
-          nix build .#sd-image-${{ matrix.board }} --dry-run 2>&1 | tail -60
+          nix build .#image --dry-run 2>&1 | tail -60
 
       - name: Build the image
-        run: nix build .#sd-image-${{ matrix.board }} --print-build-logs
+        run: nix build .#image --print-build-logs
 
       # The Pi's firmware loads whatever config.txt names as `kernel=` (or
       # kernel8.img without one) from the FAT partition. A board-support update
       # once left that file out, and the image built fine but never booted, so
       # check it here rather than on a television.
       - name: Check the firmware partition can boot
+        if: matrix.variant == 'aarch64'
         run: |
           set -euo pipefail
           img=$(find -L result/sd-image -name '*.img' -print -quit)
@@ -117,12 +132,12 @@ jobs:
       - name: Report the largest closure entries
         run: |
           nix path-info -rSh \
-            ".#nixosConfigurations.${{ matrix.board }}.config.system.build.toplevel" \
+            ".#nixosConfigurations.${{ matrix.variant }}.config.system.build.toplevel" \
             2>/dev/null | sort -hk2 | tail -25 || echo "(closure report unavailable)"
 
-      # The sd-image module writes a raw image (compression is off in flake.nix)
-      # under sd-image/ with a name of its own choosing (it carries the nixpkgs
-      # version and architecture), so the path is discovered rather than
+      # Both formats write a raw .img (compression is off in flake.nix) with a
+      # name of their own choosing (it carries the nixpkgs version), the
+      # aarch64 one under sd-image/, so the path is discovered rather than
       # assumed. xz rather than the module's zstd: common flashing tools take
       # .img.xz as is, and it compresses tighter, which matters next to the
       # 2 GiB release-asset limit below. Measured on the v0.0.18 Pi 4 image
@@ -133,15 +148,15 @@ jobs:
         id: image
         run: |
           set -euo pipefail
-          built=$(find -L result/sd-image -name '*.img' -print -quit)
+          built=$(find -L result -name '*.img' -print -quit)
           if [ -z "$built" ]; then
-            echo "No .img found under result/sd-image:" >&2
+            echo "No .img found under result:" >&2
             find -L result -maxdepth 2 >&2
             exit 1
           fi
 
           tag="${{ github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || inputs.tag }}"
-          name="pivi-${tag:-dev}-${{ matrix.board }}.img.xz"
+          name="pivi-${tag:-dev}-${{ matrix.variant }}.img.xz"
           xz --threads=0 -6 --stdout "$built" > "$name"
           echo "path=$name" >> "$GITHUB_OUTPUT"
           ls -lh "$name"
@@ -166,7 +181,7 @@ jobs:
             exit 0
           fi
           # A bare tag push (what `npm version && git push --follow-tags` does)
-          # has no release behind it yet. Both boards run this, so it has to
+          # has no release behind it yet. Both images run this, so it has to
           # tolerate the other one having just created it.
           # GitHub rejects release assets over 2 GiB (HTTP 422). The image is
           # already uploaded as a workflow artifact by the step above, which has
@@ -186,7 +201,7 @@ jobs:
 
       # What flashed devices update to (nix/updates.nix): the system the image
       # was built from goes to the binary cache, and its store path is attached
-      # as `pivi-<board>.toplevel`. Pushed before the pointer is published, so
+      # as `pivi-<variant>.toplevel`. Pushed before the pointer is published, so
       # a device never sees a path it can't download. Skipped until the cache
       # is set up: a CACHIX_CACHE repository variable and a CACHIX_AUTH_TOKEN
       # secret.
@@ -199,15 +214,24 @@ jobs:
         run: |
           set -euo pipefail
           toplevel=$(nix build --no-link --print-out-paths \
-            ".#nixosConfigurations.${{ matrix.board }}.config.system.build.toplevel")
+            ".#nixosConfigurations.${{ matrix.variant }}.config.system.build.toplevel")
           nix run nixpkgs#cachix -- push "${{ vars.CACHIX_CACHE }}" "$toplevel"
 
           if [ -z "$TAG" ]; then
             echo "No release tag given — pushed to the cache, nothing published for devices."
             exit 0
           fi
-          echo "$toplevel" > "pivi-${{ matrix.board }}.toplevel"
+          files=("pivi-${{ matrix.variant }}.toplevel")
+          # Pi 4s and Pi 5s flashed before the images were merged follow a
+          # per-board name (pivi-pi4/pivi-pi5); the same build under those
+          # names moves them onto this image, after which they follow its
+          # own. The Pi 3 had its own image too, but isn't carried over: no
+          # app can run on it (nix/aarch64.nix).
+          if [ "${{ matrix.variant }}" = aarch64 ]; then
+            files+=(pivi-pi4.toplevel pivi-pi5.toplevel)
+          fi
+          for file in "${files[@]}"; do echo "$toplevel" > "$file"; done
           gh release view "$TAG" >/dev/null 2>&1 ||
             gh release create "$TAG" --generate-notes ||
             gh release view "$TAG" >/dev/null
-          gh release upload "$TAG" "pivi-${{ matrix.board }}.toplevel" --clobber
+          gh release upload "$TAG" "${files[@]}" --clobber

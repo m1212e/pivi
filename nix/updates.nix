@@ -6,8 +6,8 @@
 }:
 
 # Keeps a flashed appliance current without anyone touching it. CI builds each
-# board's whole system on release, pushes it to a binary cache and attaches its
-# store path to the release as `pivi-<board>.toplevel`. The device only ever
+# image's whole system on release, pushes it to a binary cache and attaches its
+# store path to the release as `pivi-<variant>.toplevel`. The device only ever
 # downloads that exact, signed build: nothing is evaluated or compiled on the Pi,
 # which has neither the memory nor the patience for it.
 #
@@ -18,8 +18,9 @@
 # answer within a few minutes, or the device rolls back to the previous system
 # and never tries that build again.
 #
-# Not covered: a build so broken it never reaches userspace. The extlinux menu
-# on the serial console still offers the previous generations by hand.
+# Not covered: a build so broken it never reaches userspace. The boot menu (a
+# Pi's extlinux menu on the serial console, systemd-boot's on a PC) still
+# offers the previous generations by hand.
 let
   cfg = config.services.pivi.updates;
   port = toString config.services.pivi.port;
@@ -75,9 +76,9 @@ let
         exit 0
       fi
       version=''${release##*/}
-      url="https://github.com/${cfg.repository}/releases/download/$version/pivi-${cfg.board}.toplevel"
+      url="https://github.com/${cfg.repository}/releases/download/$version/pivi-${cfg.variant}.toplevel"
       if ! target=$(curl -fsSL --max-time 60 "$url"); then
-        echo "$version has no build for ${cfg.board}"
+        echo "$version has no build for ${cfg.variant}"
         exit 0
       fi
       if ! valid "$target"; then
@@ -169,13 +170,12 @@ in
       '';
     };
 
-    board = lib.mkOption {
+    variant = lib.mkOption {
       type = lib.types.enum [
-        "pi3"
-        "pi4"
-        "pi5"
+        "aarch64"
+        "x86_64"
       ];
-      description = "Which board's build to follow, as named in the release assets.";
+      description = "Which image's build to follow, as named in the release assets.";
     };
 
     repository = lib.mkOption {
@@ -229,6 +229,7 @@ in
     # Every update adds a full system to a small SD card. Old generations are
     # the rollback path, so a few stay; the rest are collected.
     boot.loader.generic-extlinux-compatible.configurationLimit = 5;
+    boot.loader.systemd-boot.configurationLimit = 5;
     nix.gc = {
       automatic = true;
       dates = "weekly";

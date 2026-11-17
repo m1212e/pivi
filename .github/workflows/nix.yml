@@ -4,10 +4,10 @@ name: Nix
 # time when the only signal is a failed image build.
 #
 # The images themselves are deliberately not built here — that's a full system
-# closure per board, far too slow for a PR. What this does instead is cheaper
-# and catches most of the same mistakes: evaluate every flake output (including
-# both Pi configurations, which is where a bad option name or a typo in the
-# module surfaces) and actually build the app package.
+# closure per architecture, far too slow for a PR. What this does instead is
+# cheaper and catches most of the same mistakes: evaluate every flake output
+# (including both appliance configurations, which is where a bad option name or
+# a typo in the module surfaces) and actually build the app package.
 on:
   pull_request:
   push:
