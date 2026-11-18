@@ -536,12 +536,76 @@ in
             "--noerrdialogs"
             "--disable-infobars"
             "--disable-session-crashed-bubble"
+            # The successor of the flag above, which newer Chromium ignores.
+            "--hide-crash-restore-bubble"
+            "--no-first-run"
+            "--no-default-browser-check"
+            # The image pins its own Chromium; no "Chromium is out of date"
+            # nag between pivi updates.
+            "--check-for-update-interval=31536000"
+            # No keyring on the kiosk; skip the unlock prompt.
+            "--password-store=basic"
             "--user-data-dir=/var/lib/pivi-kiosk"
           ] ++ cfg.kiosk.extraChromiumFlags;
         in
         pkgs.writeShellScript "pivi-kiosk" ''
           exec ${lib.getExe pkgs.chromium} ${lib.escapeShellArgs flags} file://${kioskSplash}
         '';
+    };
+
+    # Managed policy (/etc/chromium/policies/managed): every bubble, infobar
+    # and permission prompt Chromium can raise switched off, since on a
+    # television there's nobody with a mouse to dismiss it. The shell asks for
+    # no permissions, so blocking them all costs nothing.
+    programs.chromium = lib.mkIf cfg.kiosk.enable {
+      enable = true;
+      extraOpts = {
+        # "Save password?", "Save address?", "Save card?"
+        PasswordManagerEnabled = false;
+        PasswordLeakDetectionEnabled = false;
+        AutofillAddressEnabled = false;
+        AutofillCreditCardEnabled = false;
+        PaymentMethodQueryEnabled = false;
+        # "Translate this page?" and spellcheck underlines in text fields
+        TranslateEnabled = false;
+        SpellcheckEnabled = false;
+        # Sign-in, sync, first-run and promo surfaces
+        BrowserSignin = 0;
+        SyncDisabled = true;
+        PromotionalTabsEnabled = false;
+        DefaultBrowserSettingEnabled = false;
+        PrivacySandboxPromptEnabled = false;
+        UserFeedbackAllowed = false;
+        FeedbackSurveysEnabled = false;
+        ShoppingListEnabled = false;
+        GenAiDefaultSettings = 2;
+        # "You are using an unsupported command-line flag" (--ignore-gpu-blocklist)
+        CommandLineFlagSecurityWarningsEnabled = false;
+        SuppressUnsupportedOSWarning = true;
+        # Cast, download, print and memory-saver UI
+        EnableMediaRouter = false;
+        DownloadRestrictions = 3;
+        PrintingEnabled = false;
+        HighEfficiencyModeEnabled = false;
+        BackgroundModeEnabled = false;
+        # Permission prompts: block rather than ask
+        DefaultNotificationsSetting = 2;
+        DefaultGeolocationSetting = 2;
+        DefaultPopupsSetting = 2;
+        DefaultSensorsSetting = 2;
+        DefaultClipboardSetting = 2;
+        DefaultWebBluetoothGuardSetting = 2;
+        DefaultWebUsbGuardSetting = 2;
+        DefaultSerialGuardSetting = 2;
+        DefaultWebHidGuardSetting = 2;
+        DefaultFileSystemReadGuardSetting = 2;
+        DefaultFileSystemWriteGuardSetting = 2;
+        DefaultLocalFontsSetting = 2;
+        DefaultWindowManagementSetting = 2;
+        AudioCaptureAllowed = false;
+        VideoCaptureAllowed = false;
+        AutoplayAllowed = true;
+      };
     };
 
     systemd.services."cage-tty1" = lib.mkIf cfg.kiosk.enable {
