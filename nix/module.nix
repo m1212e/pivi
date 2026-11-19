@@ -468,6 +468,7 @@ in
       // lib.optionalAttrs cfg.kiosk.enable {
         PIVI_JOURNALCTL = "${config.systemd.package}/bin/journalctl";
         PIVI_EGLINFO = "${pkgs.mesa-demos}/bin/eglinfo";
+        PIVI_KIOSK_USER = cfg.kiosk.user;
       }
       // lib.optionalAttrs cfg.wifi.provisioning {
         # Pinned rather than found on PATH: the unit's PATH is minimal, and a

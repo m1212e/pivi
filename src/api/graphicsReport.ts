@@ -7,6 +7,7 @@ const run = promisify(execFile);
 // Pinned by the NixOS module. Unset elsewhere, where the report just says so.
 const JOURNALCTL = process.env.PIVI_JOURNALCTL;
 const EGLINFO = process.env.PIVI_EGLINFO;
+const KIOSK_USER = process.env.PIVI_KIOSK_USER;
 
 // What Chromium and cage (wlroots) say about how they draw.
 const GRAPHICS_LOG =
@@ -55,6 +56,21 @@ async function drmNodes(): Promise<string> {
 	return lines.join('\n') || '(none)';
 }
 
+// cage opens a login session, which moves it and Chromium out of the
+// cage-tty1 unit into a session scope. Their output is only found by user.
+async function kioskUid(): Promise<string | null> {
+	if (!KIOSK_USER) return null;
+	const passwd = await read('/etc/passwd');
+	const entry = passwd.split('\n').find((line) => line.startsWith(`${KIOSK_USER}:`));
+	return entry?.split(':')[2] ?? null;
+}
+
+async function kioskLog(): Promise<string> {
+	const uid = await kioskUid();
+	const match = uid ? ['_UID=' + uid, '+', '_SYSTEMD_UNIT=cage-tty1.service'] : ['-u', 'cage-tty1'];
+	return command(JOURNALCTL, ['-b', ...match, '-o', 'cat', '--no-pager', '-n', '3000']);
+}
+
 /** Plain text describing the device's graphics stack, for diagnosing software rendering on the TV. */
 export async function graphicsReport(): Promise<string> {
 	const [model, kernel, cmdline, meminfo, nodes, egl, log] = await Promise.all([
@@ -64,7 +80,7 @@ export async function graphicsReport(): Promise<string> {
 		read('/proc/meminfo'),
 		drmNodes(),
 		command(EGLINFO, ['-B', '-p', 'gbm']),
-		command(JOURNALCTL, ['-b', '-u', 'cage-tty1', '-o', 'cat', '--no-pager', '-n', '3000'])
+		kioskLog()
 	]);
 	const memory = meminfo
 		.split('\n')
