@@ -10,8 +10,30 @@
 
 	let report = $state<string>(m.graphics_loading());
 
-	onMount(() => {
-		const browser = `## Browser\n${navigator.userAgent}\nWebGL: ${graphics.software ?? 'GPU'}`;
+	// The Widevine CDM arrives after the first boot online (pivi-widevine in
+	// nix/module.nix) and only loads once the kiosk restarts.
+	async function widevine(): Promise<string> {
+		try {
+			const access = await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [
+				{
+					initDataTypes: ['cenc'],
+					videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }]
+				}
+			]);
+			await access.createMediaKeys();
+			return 'available';
+		} catch (err) {
+			return `unavailable (${err})`;
+		}
+	}
+
+	onMount(async () => {
+		const browser = [
+			'## Browser',
+			navigator.userAgent,
+			`WebGL: ${graphics.software ?? 'GPU'}`,
+			`Widevine: ${await widevine()}`
+		].join('\n');
 		fetch('/api/system/graphics')
 			.then((response) => response.text())
 			.then((text) => (report = `${browser}\n\n${text}`))

@@ -81,6 +81,22 @@ let
     url = builtins.toJSON cfg.kiosk.url;
     logo = builtins.readFile ../static/favicon.svg;
   };
+
+  # Widevine, for DRM protected streams. Its license doesn't allow shipping it
+  # in published images, so each device fetches it from Google itself (see
+  # pivi-widevine below), at the version and hash nixpkgs pins.
+  widevineDir = "/var/lib/pivi-widevine";
+  widevineSrc = pkgs.widevine-cdm.src;
+  # Chromium looks for the CDM next to its own binary, this points it at
+  # where the device installs it.
+  widevineOnDevice = pkgs.runCommand "widevine-cdm-on-device" { } ''
+    mkdir -p $out/share/google/chrome
+    ln -s ${widevineDir}/WidevineCdm $out/share/google/chrome/WidevineCdm
+  '';
+  kioskChromium = pkgs.chromium.override {
+    enableWideVine = true;
+    widevine-cdm = widevineOnDevice;
+  };
 in
 {
   options.services.pivi = {
@@ -569,7 +585,14 @@ in
           ] ++ cfg.kiosk.extraChromiumFlags;
         in
         pkgs.writeShellScript "pivi-kiosk" ''
-          exec ${lib.getExe pkgs.chromium} ${lib.escapeShellArgs flags} file://${kioskSplash}
+          board_flags=()
+          # Chromium needs OpenGL ES 3.0 since 152 and these GPUs only do 2.0,
+          # with no Vulkan to fall back to. Left to try, the GPU process fails
+          # and restarts forever, eating the CPU software rendering needs.
+          case "$(${pkgs.coreutils}/bin/tr -d '\0' < /proc/device-tree/model 2>/dev/null)" in
+            "Raspberry Pi 3"* | "Raspberry Pi Zero 2"*) board_flags+=(--disable-gpu) ;;
+          esac
+          exec ${lib.getExe kioskChromium} ${lib.escapeShellArgs flags} "''${board_flags[@]}" file://${kioskSplash}
         '';
     };
 
@@ -626,6 +649,71 @@ in
         VideoCaptureAllowed = false;
         AutoplayAllowed = true;
       };
+    };
+
+    # Installs the Widevine CDM once per pinned version (see widevineOnDevice).
+    # Doesn't hold up the kiosk, since an offline TV still has to reach the
+    # wifi setup. Being offline at boot is normal before that, hence the
+    # endless retries.
+    # enableWideVine marks Chromium unfree, though kioskChromium only holds a
+    # symlink to the CDM.
+    nixpkgs.config = lib.mkIf cfg.kiosk.enable {
+      allowUnfreePredicate =
+        pkg:
+        lib.elem (lib.getName pkg) [
+          "chromium"
+          "chromium-unwrapped"
+        ];
+    };
+
+    systemd.services.pivi-widevine = lib.mkIf cfg.kiosk.enable {
+      description = "Install the Widevine CDM for DRM playback";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ];
+      startLimitIntervalSec = 0;
+      path = [
+        pkgs.curl
+        pkgs.binutils-unwrapped
+        pkgs.gnutar
+        pkgs.xz
+        pkgs.patchelf
+        config.nix.package
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        Restart = "on-failure";
+        RestartSec = "5min";
+      };
+      script = ''
+        want=${lib.escapeShellArg widevineSrc.outputHash}
+        if [ "$(cat ${widevineDir}/hash 2>/dev/null)" = "$want" ]; then exit 0; fi
+
+        mkdir -p ${widevineDir}
+        work=$(mktemp -d -p ${widevineDir})
+        trap 'rm -rf "$work"' EXIT
+        cd "$work"
+        curl --fail --silent --show-error --location --retry 3 -o chrome.deb \
+          ${lib.escapeShellArg (lib.head widevineSrc.urls)}
+        ar x chrome.deb
+        tar xf data.tar.* --no-same-owner --no-same-permissions \
+          --wildcards './opt/google/chrome/WidevineCdm*'
+        # The same check nixpkgs' own fetch makes, before anything is installed.
+        got=$(nix --extra-experimental-features nix-command hash path opt/google/chrome/WidevineCdm)
+        if [ "$got" != "$want" ]; then
+          echo "Widevine CDM hash mismatch: got $got, want $want" >&2
+          exit 1
+        fi
+        # Google builds it for a regular FHS system.
+        find opt/google/chrome/WidevineCdm -name '*.so' \
+          -exec patchelf --set-rpath ${pkgs.glibc}/lib:${pkgs.stdenv.cc.cc.lib}/lib {} \;
+        chmod -R a+rX opt/google/chrome/WidevineCdm
+        rm -rf ${widevineDir}/WidevineCdm
+        mv opt/google/chrome/WidevineCdm ${widevineDir}/WidevineCdm
+        echo "$want" > ${widevineDir}/hash
+        # Chromium only loads a CDM when it starts.
+        systemctl try-restart cage-tty1.service
+      '';
     };
 
     systemd.services."cage-tty1" = lib.mkIf cfg.kiosk.enable {
