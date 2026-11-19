@@ -11,6 +11,7 @@ import { APP_MANAGEMENT_EVENT } from '../apps/events';
 import { appPubSub } from '../apps/pubsub';
 import { suggestedApps, type SuggestedApp } from '../apps/suggested';
 import { defaultAppDeps } from '../apps/deps';
+import { sandboxProblem } from '../apps/sandbox/support';
 
 type Entry = AppsState['apps'][number];
 type Preview = NonNullable<AppsState['preview']>;
@@ -124,6 +125,16 @@ const SuggestedAppRef = schemaBuilder.objectRef<SuggestedApp>('SuggestedApp').im
 	})
 });
 
+// Whether this machine can run apps at all, so /apps can say so before an
+// install fails. An object rather than a bare string, like every other query.
+const SandboxSupportRef = schemaBuilder
+	.objectRef<{ problem: string | null }>('SandboxSupport')
+	.implement({
+		fields: (t) => ({
+			problem: t.exposeString('problem', { nullable: true })
+		})
+	});
+
 // Failures are recorded in the service's shared state, which is where the
 // screen reads them.
 function start(work: () => Promise<void> | void): boolean {
@@ -138,6 +149,10 @@ schemaBuilder.queryFields((t) => ({
 	suggestedApps: t.field({
 		type: [SuggestedAppRef],
 		resolve: () => suggestedApps(defaultAppDeps.registry)
+	}),
+	sandboxSupport: t.field({
+		type: SandboxSupportRef,
+		resolve: async () => ({ problem: await sandboxProblem() })
 	})
 }));
 

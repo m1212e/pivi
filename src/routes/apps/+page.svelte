@@ -133,6 +133,20 @@
 		})
 		.catch(() => {});
 
+	// Said up front, since an install would otherwise only fail at its first start.
+	const SANDBOX_PROBLEMS: Record<string, () => string> = {
+		'no-kvm': m.apps_sandbox_no_kvm,
+		'kvm-denied': m.apps_sandbox_kvm_denied,
+		'no-runtime': m.apps_sandbox_no_runtime
+	};
+	let sandboxProblem = $state<string | null>(null);
+	freshQuery
+		.sandboxSupport({ problem: true })
+		.then((result) => {
+			sandboxProblem = result?.problem ?? null;
+		})
+		.catch(() => {});
+
 	// A mutation can be refused outright (no paired phone connected); anything that
 	// goes wrong while the work runs arrives through the shared state instead.
 	let refusal = $state<string | null>(null);
@@ -186,6 +200,14 @@
 	{#if refusal}
 		<p class="rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200 ring-1 ring-red-400/30">
 			{refusal}
+		</p>
+	{/if}
+
+	{#if sandboxProblem}
+		<p
+			class="max-w-3xl rounded-2xl bg-amber-500/15 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-300/30"
+		>
+			{(SANDBOX_PROBLEMS[sandboxProblem] ?? m.apps_sandbox_no_runtime)()}
 		</p>
 	{/if}
 
