@@ -80,4 +80,18 @@
   # above.
   disabledModules = [ "profiles/base.nix" ];
   hardware.enableAllHardware = lib.mkForce false;
+
+  # The Pi 3's GPU has no MMU, so every texture and buffer Chromium draws with
+  # comes out of CMA. The mainline device tree only reserves 64MB, which a
+  # 1080p screen runs through quickly. Allocations then fail, the GPU process
+  # crashes and Chromium renders in software from then on. 256MB is what
+  # Raspberry Pi OS reserves. CMA stays usable for regular pages while the GPU
+  # doesn't need it, so the Pi 4 and 5 lose nothing. The range keeps it where
+  # every board's display engine can reach it, as their device trees do.
+  boot.kernelParams = [ "cma=256M@0-768M" ];
+
+  # Chromium's default ANGLE backend is desktop OpenGL, which Mesa only offers
+  # as 2.1 on the Pi 3, too old for it. OpenGL ES is what every Pi's driver
+  # does best.
+  services.pivi.kiosk.extraChromiumFlags = [ "--use-angle=gles" ];
 }

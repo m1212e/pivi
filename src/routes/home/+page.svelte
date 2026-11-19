@@ -22,7 +22,8 @@
 	import { getNetworkStatus } from '#lib/state/network.svelte';
 	import { pollEvery } from '#lib/poll';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
-	import { Cable, Music, Settings, VolumeX, Wifi } from '@lucide/svelte';
+	import { lowPower, toggleLowPower } from '#lib/state/lowPower.svelte';
+	import { Cable, Feather, Music, Settings, Sparkles, VolumeX, Wifi } from '@lucide/svelte';
 	import SystemUpdatePrompt from '#lib/components/SystemUpdatePrompt.svelte';
 	import { getSystemUpdate } from '#lib/state/systemUpdate';
 	import { graphQLErrorMessage } from '#lib/api/errors';
@@ -420,6 +421,20 @@
 					<Music class="size-5" />
 				{:else}
 					<VolumeX class="size-5" />
+				{/if}
+			</button>
+			<button
+				type="button"
+				onclick={toggleLowPower}
+				aria-pressed={lowPower.enabled}
+				aria-label={m.low_power_mode()}
+				title={m.low_power_mode()}
+				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+			>
+				{#if lowPower.enabled}
+					<Feather class="size-5" />
+				{:else}
+					<Sparkles class="size-5" />
 				{/if}
 			</button>
 			<a

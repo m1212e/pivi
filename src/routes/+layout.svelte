@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ROUTES, isPlayPath, isRemotePath, loginHref } from '#lib/routes';
-	import { tick, type Snippet } from 'svelte';
+	import { onMount, tick, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import LaunchBackdrop from '#lib/components/LaunchBackdrop.svelte';
 	import { launchBackdrop } from '#lib/state/launchBackdrop.svelte';
@@ -10,7 +10,7 @@
 	import { onNavigate, afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { dev } from '$app/env';
-	import { Toaster } from 'svelte-sonner';
+	import { Toaster, toast } from 'svelte-sonner';
 	import { locales, localizeHref } from '#lib/paraglide/runtime';
 	import RemoteBridge from '#lib/components/RemoteBridge.svelte';
 	import AppWatchdogToasts from '#lib/components/AppWatchdogToasts.svelte';
@@ -27,6 +27,9 @@
 	import { playSound } from '#lib/sounds';
 	import { startAmbient, stopAmbient } from '#lib/ambient';
 	import { ambientMusic } from '#lib/state/ambient.svelte';
+	import { lowPower, suggestLowPower } from '#lib/state/lowPower.svelte';
+	import { softwareRenderer } from '#lib/gpu';
+	import * as m from '#lib/paraglide/messages';
 	import { applyTvScale, clearTvScale } from '#lib/tvScale';
 	import { warmPlaybackSession } from '#lib/playback/warmup';
 	import './layout.css';
@@ -56,6 +59,21 @@
 		if (dev || isRemotePage) return;
 		document.documentElement.dataset.hideCursor = '';
 		return () => delete document.documentElement.dataset.hideCursor;
+	});
+
+	// The phone is never the weak device, so its remote always gets full effects.
+	$effect(() => {
+		document.documentElement.dataset.perf = lowPower.enabled && !isRemotePage ? 'low' : 'full';
+	});
+
+	// Software rendering makes the TV crawl and is otherwise invisible without
+	// a shell on the device, so it's said on screen.
+	onMount(() => {
+		if (isRemotePage) return;
+		const renderer = softwareRenderer();
+		if (!renderer) return;
+		suggestLowPower();
+		toast.warning(m.gpu_software_rendering(), { description: renderer, duration: 15_000 });
 	});
 
 	// The pairing QR overlay (PairingOverlay.svelte) repeats on every screen

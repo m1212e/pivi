@@ -186,6 +186,8 @@
 	"chat_empty": "Warte auf Nachrichten…",
 	"subtitles_auto_generated": "Automatisch generiert — keine echte, von Menschen erstellte Untertitelspur",
 	"background_music": "Hintergrundmusik",
+	"low_power_mode": "Energiesparmodus",
+	"gpu_software_rendering": "Keine Grafikbeschleunigung, das Bild wird in Software berechnet",
 	"osk_label": "Bildschirmtastatur",
 	"osk_search": "Suchen",
 	"osk_go": "Los",

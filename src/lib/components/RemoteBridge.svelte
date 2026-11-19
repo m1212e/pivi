@@ -273,6 +273,8 @@
 			// Inert controls (behind an open Select) refuse focus, but picking one
 			// would still scroll the page toward it.
 			.filter((el) => !el.closest('[inert]'))
+			// Sonner gives every toast tabindex="0", but they're only for a glance.
+			.filter((el) => !el.closest('[data-sonner-toaster]'))
 			.filter((el) => el.offsetParent !== null || el.checkVisibility());
 		// A modal (the pairing prompt) keeps focus to itself, so its buttons are
 		// the only thing a swipe can reach.

@@ -530,6 +530,9 @@ in
             "--enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL"
             "--ignore-gpu-blocklist"
             "--enable-gpu-rasterization"
+            # After a few GPU process crashes Chromium gives up on the GPU
+            # until it restarts, which on a kiosk means until the next reboot.
+            "--disable-gpu-process-crash-limit"
             # No user gesture ever happens on a TV — input arrives over the
             # pairing WebSocket, which the autoplay heuristics don't count.
             "--autoplay-policy=no-user-gesture-required"

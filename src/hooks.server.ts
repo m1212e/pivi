@@ -3,6 +3,7 @@ import { redirect } from '@sveltejs/kit';
 import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { getActiveProfileUser } from '#api/activeProfile';
 import { noteHostLocale } from '#api/apps/hostLocale';
+import { lowPower } from '#api/lowPower';
 import { activeProfileLocale } from '#api/profileLocale';
 import { handlePairing } from '#api/pairingHook';
 import { defineCustomServerStrategy, getTextDirection } from '#lib/paraglide/runtime';
@@ -36,6 +37,8 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 				html
 					.replace('%paraglide.lang%', locale)
 					.replace('%paraglide.dir%', getTextDirection(locale))
+					// The phone remote is never the weak device, only the TV can be.
+					.replace('%pivi.perf%', lowPower && isTvPage(event.url.pathname) ? 'low' : 'full')
 		});
 	});
 

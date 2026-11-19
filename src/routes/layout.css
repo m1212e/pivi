@@ -140,24 +140,26 @@ body {
 	overflow: hidden;
 	pointer-events: none;
 }
+/* A radial gradient instead of `filter: blur()` on a solid circle: looks the
+   same, but a 90px blur over a screen-sized layer is what made weak GPUs drop
+   to a few frames per second. */
 .pivi-aurora span {
 	position: absolute;
 	width: 60vmax;
 	height: 60vmax;
-	border-radius: 50%;
-	filter: blur(90px);
+	background: radial-gradient(closest-side, var(--blob) 40%, transparent);
 	opacity: 0.16;
 	animation: pivi-aurora-drift 18s ease-in-out infinite alternate;
 }
 .pivi-aurora span:nth-child(1) {
 	top: -20%;
 	left: -15%;
-	background: var(--pivi-aurora-1, var(--color-indigo-500));
+	--blob: var(--pivi-aurora-1, var(--color-indigo-500));
 }
 .pivi-aurora span:nth-child(2) {
 	top: 30%;
 	right: -20%;
-	background: var(--pivi-aurora-2, var(--color-fuchsia-500));
+	--blob: var(--pivi-aurora-2, var(--color-fuchsia-500));
 	animation-duration: 23s;
 	animation-delay: -9s;
 	animation-direction: alternate-reverse;
@@ -165,7 +167,7 @@ body {
 .pivi-aurora span:nth-child(3) {
 	bottom: -25%;
 	left: 20%;
-	background: var(--pivi-aurora-3, var(--color-cyan-500));
+	--blob: var(--pivi-aurora-3, var(--color-cyan-500));
 	animation-duration: 29s;
 	animation-delay: -17s;
 }
@@ -479,4 +481,29 @@ html[data-view-transition='zoom-in']::view-transition-new(root) {
 }
 .pivi-indeterminate {
 	animation: pivi-indeterminate 1.4s ease-in-out infinite;
+}
+
+/*
+ * Low power mode, set on weak boards like the Pi 3 (see api/lowPower.ts).
+ * Anything that keeps the GPU busy while nothing happens goes: the drifting
+ * backdrop damages the whole screen every frame, and each glass pane on top
+ * then has to re-blur what's behind it. The glass falls back to its plain
+ * translucent fill.
+ */
+html[data-perf='low'] {
+	& *,
+	& *::before,
+	& *::after {
+		-webkit-backdrop-filter: none !important;
+		backdrop-filter: none !important;
+	}
+	/* The pulsing ring repaints every frame, a steady ring reads just as well. */
+	& .pivi-aurora span,
+	& .pivi-remote-focus:not(.pivi-press) {
+		animation: none;
+	}
+	/* Without its blur the glow would be a hard edged box. */
+	& .pivi-card::before {
+		display: none;
+	}
 }
