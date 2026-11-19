@@ -6,6 +6,7 @@ export const ROUTES = {
 	home: '/home',
 	apps: '/apps',
 	wifi: '/wifi',
+	graphics: '/graphics',
 	register: '/register'
 } as const;
 

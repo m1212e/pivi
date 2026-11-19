@@ -23,7 +23,17 @@
 	import { pollEvery } from '#lib/poll';
 	import { ambientMusic, toggleAmbientMusic } from '#lib/state/ambient.svelte';
 	import { lowPower, toggleLowPower } from '#lib/state/lowPower.svelte';
-	import { Cable, Feather, Music, Settings, Sparkles, VolumeX, Wifi } from '@lucide/svelte';
+	import { graphics } from '#lib/state/graphics.svelte';
+	import {
+		Cable,
+		Feather,
+		Music,
+		Settings,
+		Sparkles,
+		TriangleAlert,
+		VolumeX,
+		Wifi
+	} from '@lucide/svelte';
 	import SystemUpdatePrompt from '#lib/components/SystemUpdatePrompt.svelte';
 	import { getSystemUpdate } from '#lib/state/systemUpdate';
 	import { graphQLErrorMessage } from '#lib/api/errors';
@@ -458,6 +468,16 @@
 				{/if}
 			</a>
 			<LanguagePicker />
+			{#if graphics.software}
+				<a
+					href={resolve(ROUTES.graphics)}
+					aria-label={m.graphics_title()}
+					title={m.graphics_title()}
+					class="flex size-13 items-center justify-center rounded-full bg-amber-500/25 text-amber-200 shadow-lg ring-1 shadow-black/20 ring-amber-300/40 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+				>
+					<TriangleAlert class="size-5" />
+				</a>
+			{/if}
 		</div>
 	</div>
 {/snippet}

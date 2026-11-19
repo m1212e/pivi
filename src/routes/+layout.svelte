@@ -29,6 +29,7 @@
 	import { ambientMusic } from '#lib/state/ambient.svelte';
 	import { lowPower, suggestLowPower } from '#lib/state/lowPower.svelte';
 	import { softwareRenderer } from '#lib/gpu';
+	import { graphics } from '#lib/state/graphics.svelte';
 	import * as m from '#lib/paraglide/messages';
 	import { applyTvScale, clearTvScale } from '#lib/tvScale';
 	import { warmPlaybackSession } from '#lib/playback/warmup';
@@ -72,6 +73,7 @@
 		if (isRemotePage) return;
 		const renderer = softwareRenderer();
 		if (!renderer) return;
+		graphics.software = renderer;
 		suggestLowPower();
 		toast.warning(m.gpu_software_rendering(), { description: renderer, duration: 15_000 });
 	});

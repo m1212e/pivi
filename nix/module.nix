@@ -464,6 +464,11 @@ in
         PIVI_REMOTE_PORT = toString cfg.remote.port;
         PIVI_CONFIG = toString configFile;
       }
+      # For the TV's graphics diagnostics page (src/api/graphicsReport.ts).
+      // lib.optionalAttrs cfg.kiosk.enable {
+        PIVI_JOURNALCTL = "${config.systemd.package}/bin/journalctl";
+        PIVI_EGLINFO = "${pkgs.mesa-demos}/bin/eglinfo";
+      }
       // lib.optionalAttrs cfg.wifi.provisioning {
         # Pinned rather than found on PATH: the unit's PATH is minimal, and a
         # provisioning flow that silently does nothing because nmcli wasn't
@@ -489,6 +494,12 @@ in
         ExecStart = "${cfg.package}/bin/pivi-server";
         User = "pivi";
         Group = "pivi";
+        # The graphics diagnostics read the kiosk's journal and ask Mesa what
+        # the GPU offers, which needs the render node.
+        SupplementaryGroups = lib.optionals cfg.kiosk.enable [
+          "systemd-journal"
+          "render"
+        ];
         WorkingDirectory = cfg.stateDir;
         Restart = "on-failure";
         RestartSec = 2;
