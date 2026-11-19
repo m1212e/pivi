@@ -13,6 +13,9 @@
 	import { stopSubscription } from '#lib/api/subscription';
 	import AppManagerPanel, { type AppActions } from '#lib/components/AppManagerPanel.svelte';
 	import SystemUpdateSection from '#lib/components/SystemUpdateSection.svelte';
+	import PowerOffDialog from '#lib/components/PowerOffDialog.svelte';
+	import Button from '#lib/components/Button.svelte';
+	import { Power } from '@lucide/svelte';
 	import { getSystemUpdate } from '#lib/state/systemUpdate';
 	import { appsStateSchema, type AppsState } from '#lib/apps/management';
 	import type { PermissionKey } from '@pivi/sdk/manifest';
@@ -147,6 +150,15 @@
 		})
 		.catch(() => {});
 
+	let powerOff = $state<{ poweringOff: boolean; error: string | null } | null>(null);
+
+	function confirmPowerOff() {
+		powerOff = { poweringOff: true, error: null };
+		client.mutate.powerOffDevice().catch((err: unknown) => {
+			powerOff = { poweringOff: false, error: graphQLErrorMessage(err, m.power_off_failed()) };
+		});
+	}
+
 	// A mutation can be refused outright (no paired phone connected); anything that
 	// goes wrong while the work runs arrives through the shared state instead.
 	let refusal = $state<string | null>(null);
@@ -195,7 +207,13 @@
 <svelte:head><title>{m.apps_page_title()}</title></svelte:head>
 
 <div class="flex min-h-screen flex-col gap-6 bg-slate-950 px-8 py-10 text-white sm:px-12">
-	<h1 class="text-2xl font-semibold">{m.apps_page_title()}</h1>
+	<div class="flex items-start justify-between gap-4">
+		<h1 class="text-2xl font-semibold">{m.apps_page_title()}</h1>
+		<Button onclick={() => (powerOff = { poweringOff: false, error: null })}>
+			<Power class="size-4" />
+			{m.power_off_open()}
+		</Button>
+	</div>
 
 	{#if refusal}
 		<p class="rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200 ring-1 ring-red-400/30">
@@ -217,3 +235,12 @@
 
 	<AppManagerPanel apps={managed} {actions} {suggested} expand={updateAppId} />
 </div>
+
+{#if powerOff}
+	<PowerOffDialog
+		poweringOff={powerOff.poweringOff}
+		error={powerOff.error}
+		onConfirm={confirmPowerOff}
+		onCancel={() => (powerOff = null)}
+	/>
+{/if}

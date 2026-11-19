@@ -428,26 +428,40 @@ in
 
     networking.networkmanager.enable = lib.mkIf cfg.wifi.provisioning true;
 
-    # The service runs unprivileged, so NetworkManager would refuse it by
-    # default. These are the three actions provisioning actually performs —
-    # scanning, saving a connection profile, and bringing one up or down — and
-    # nothing wider: no general `org.freedesktop.NetworkManager.*` grant, and
-    # no ability to change the system's own settings.
-    security.polkit.extraConfig = lib.mkIf cfg.wifi.provisioning ''
-      polkit.addRule(function(action, subject) {
-        if (subject.user !== "pivi") return undefined;
-        if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
-            action.id === "org.freedesktop.NetworkManager.settings.modify.own" ||
-            action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
-            action.id === "org.freedesktop.NetworkManager.network-control" ||
-            action.id === "org.freedesktop.NetworkManager.enable-disable-wifi" ||
-            action.id === "org.freedesktop.NetworkManager.wifi.share.protected" ||
-            action.id === "org.freedesktop.NetworkManager.wifi.share.open") {
-          return polkit.Result.YES;
-        }
-        return undefined;
-      });
-    '';
+    security.polkit.extraConfig = lib.mkMerge [
+      # The app settings' power off (src/api/power.ts). The multiple sessions
+      # variant is the one asked, since the kiosk's session is always open.
+      ''
+        polkit.addRule(function(action, subject) {
+          if (subject.user === "pivi" &&
+              (action.id === "org.freedesktop.login1.power-off" ||
+               action.id === "org.freedesktop.login1.power-off-multiple-sessions")) {
+            return polkit.Result.YES;
+          }
+          return undefined;
+        });
+      ''
+      # The service runs unprivileged, so NetworkManager would refuse it by
+      # default. These are the three actions provisioning actually performs —
+      # scanning, saving a connection profile, and bringing one up or down — and
+      # nothing wider: no general `org.freedesktop.NetworkManager.*` grant, and
+      # no ability to change the system's own settings.
+      (lib.mkIf cfg.wifi.provisioning ''
+        polkit.addRule(function(action, subject) {
+          if (subject.user !== "pivi") return undefined;
+          if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
+              action.id === "org.freedesktop.NetworkManager.settings.modify.own" ||
+              action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
+              action.id === "org.freedesktop.NetworkManager.network-control" ||
+              action.id === "org.freedesktop.NetworkManager.enable-disable-wifi" ||
+              action.id === "org.freedesktop.NetworkManager.wifi.share.protected" ||
+              action.id === "org.freedesktop.NetworkManager.wifi.share.open") {
+            return polkit.Result.YES;
+          }
+          return undefined;
+        });
+      '')
+    ];
 
     systemd.services.pivi = {
       description = "pivi TV shell and phone-remote server";
@@ -479,6 +493,12 @@ in
         PIVI_PORT = toString cfg.port;
         PIVI_REMOTE_PORT = toString cfg.remote.port;
         PIVI_CONFIG = toString configFile;
+      }
+      # The power off in the app settings and the TV off button on the home
+      # screen (src/api/power.ts). CEC needs the video group, see below.
+      // {
+        PIVI_SYSTEMCTL = "${config.systemd.package}/bin/systemctl";
+        PIVI_CEC_CTL = "${pkgs.v4l-utils}/bin/cec-ctl";
       }
       # For the TV's graphics diagnostics page (src/api/graphicsReport.ts).
       // lib.optionalAttrs cfg.kiosk.enable {

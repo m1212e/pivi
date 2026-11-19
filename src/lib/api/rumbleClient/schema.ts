@@ -2418,6 +2418,14 @@ export const schema = {
 						args: []
 					},
 					{
+						name: 'powerOffDevice',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
 						name: 'previewAppInstall',
 						type: {
 							kind: 'NON_NULL',
@@ -2578,6 +2586,14 @@ export const schema = {
 					},
 					{
 						name: 'signOut',
+						type: {
+							kind: 'NON_NULL',
+							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }
+						},
+						args: []
+					},
+					{
+						name: 'turnOffTv',
 						type: {
 							kind: 'NON_NULL',
 							ofType: { name: 'Boolean', kind: 'SCALAR', ofType: null, __proto__: null }

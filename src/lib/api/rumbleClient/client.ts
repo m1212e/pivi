@@ -382,6 +382,7 @@ export type Mutation = {
 	login: (p: { pin: String; username: String }) => Boolean;
 	openUrlOnPhone: (p: { url: String }) => Boolean;
 	postponeSystemUpdate: Boolean;
+	powerOffDevice: Boolean;
 	previewAppInstall: (p: { image: String; publicKey?: String | null | undefined }) => Boolean;
 	register: (p: { pin: String; username: String }) => Boolean;
 	rejectAppUpdate: (p: { appId: String }) => Boolean;
@@ -391,6 +392,7 @@ export type Mutation = {
 	setAppPermission: (p: { appId: String; granted: Boolean; permission: String }) => Boolean;
 	setProfileLocale: (p: { locale: String }) => Boolean;
 	signOut: Boolean;
+	turnOffTv: Boolean;
 	uninstallApp: (p: { appId: String }) => Boolean;
 };
 

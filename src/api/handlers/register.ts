@@ -17,6 +17,7 @@ import './playback';
 import './network';
 import './wifi';
 import './systemUpdate';
+import './power';
 
 // Background work stays off during build, where the db is mocked and nothing
 // should bind a port.

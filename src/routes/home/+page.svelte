@@ -27,6 +27,7 @@
 	import {
 		Cable,
 		Feather,
+		MonitorOff,
 		Music,
 		Settings,
 		Sparkles,
@@ -37,6 +38,7 @@
 	import SystemUpdatePrompt from '#lib/components/SystemUpdatePrompt.svelte';
 	import { getSystemUpdate } from '#lib/state/systemUpdate';
 	import { graphQLErrorMessage } from '#lib/api/errors';
+	import { toast } from 'svelte-sonner';
 
 	// Every installed app, whatever it implements -- one that only provides
 	// a screen (or nothing but playback) still gets its tile in the apps row.
@@ -381,6 +383,13 @@
 			for (const event of activityEvents) document.removeEventListener(event, scrollToTopWhenIdle);
 		};
 	});
+
+	// Only the television goes off over HDMI-CEC, pivi itself keeps running.
+	function turnOffTv() {
+		client.mutate
+			.turnOffTv()
+			.catch((err: unknown) => toast.error(graphQLErrorMessage(err, m.tv_off_failed())));
+	}
 </script>
 
 <svelte:head><title>{m.app_title()}</title></svelte:head>
@@ -467,6 +476,15 @@
 					<Wifi class="size-5" />
 				{/if}
 			</a>
+			<button
+				type="button"
+				onclick={turnOffTv}
+				aria-label={m.tv_off()}
+				title={m.tv_off()}
+				class="flex size-13 items-center justify-center rounded-full bg-white/12 text-white/90 shadow-lg ring-1 shadow-black/20 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 focus:outline-none"
+			>
+				<MonitorOff class="size-5" />
+			</button>
 			<LanguagePicker />
 			{#if graphics.software}
 				<a
