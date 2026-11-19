@@ -1,6 +1,5 @@
 <script lang="ts">
-	// Asks before the app settings' power off shuts the device down. Most Pis
-	// have no power button, so coming back means replugging, which is said here.
+	// Asks before the app settings' power off shuts the device down.
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { LoaderCircle, Power } from '@lucide/svelte';

@@ -96,7 +96,7 @@
 	"apps_page_title": "Apps",
 	"power_off_open": "Ausschalten",
 	"power_off_title": "pivi ausschalten?",
-	"power_off_description": "Das Gerät fährt komplett herunter. Die meisten Raspberry Pis haben keinen Einschaltknopf. Um es wieder einzuschalten, den Stecker ziehen und wieder einstecken.",
+	"power_off_description": "Das Gerät fährt komplett herunter.",
 	"power_off_cancel": "Abbrechen",
 	"power_off_confirm": "Ausschalten",
 	"power_off_in_progress": "Wird heruntergefahren…",
