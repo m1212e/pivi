@@ -12,6 +12,7 @@ const EGLINFO = process.env.PIVI_EGLINFO;
 const GRAPHICS_LOG =
 	/gpu|egl|gles|angle|drm|gbm|dmabuf|renderer|vulkan|webgl|vc4|v3d|mesa|swiftshader|llvmpipe|pixman/i;
 const LOG_LINES = 40;
+const RAW_LOG_LINES = 10;
 
 async function read(path: string): Promise<string> {
 	try {
@@ -69,11 +70,14 @@ export async function graphicsReport(): Promise<string> {
 		.split('\n')
 		.filter((line) => /^(MemTotal|MemAvailable|CmaTotal|CmaFree)/.test(line))
 		.join('\n');
-	const graphicsLog = log
-		.split('\n')
-		.filter((line) => GRAPHICS_LOG.test(line))
-		.slice(-LOG_LINES)
-		.join('\n');
+	const logLines = log.split('\n');
+	// Without a match, the raw tail still shows whether the journal was readable at all.
+	const graphicsLog =
+		logLines
+			.filter((line) => GRAPHICS_LOG.test(line))
+			.slice(-LOG_LINES)
+			.join('\n') ||
+		`(no graphics related lines, last lines:)\n${logLines.slice(-RAW_LOG_LINES).join('\n')}`;
 
 	return [
 		['Model', model],
@@ -82,7 +86,7 @@ export async function graphicsReport(): Promise<string> {
 		['Memory', memory],
 		['DRM nodes', nodes],
 		['EGL (GBM)', egl],
-		['Kiosk log', graphicsLog || '(no graphics related lines)']
+		['Kiosk log', graphicsLog]
 	]
 		.map(([title, body]) => `## ${title}\n${body}`)
 		.join('\n\n');

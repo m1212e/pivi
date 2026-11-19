@@ -495,10 +495,12 @@ in
         User = "pivi";
         Group = "pivi";
         # The graphics diagnostics read the kiosk's journal and ask Mesa what
-        # the GPU offers, which needs the render node.
+        # the GPU offers. Mesa's GBM opens the display node too, not just the
+        # render node.
         SupplementaryGroups = lib.optionals cfg.kiosk.enable [
           "systemd-journal"
           "render"
+          "video"
         ];
         WorkingDirectory = cfg.stateDir;
         Restart = "on-failure";
@@ -544,6 +546,9 @@ in
             # After a few GPU process crashes Chromium gives up on the GPU
             # until it restarts, which on a kiosk means until the next reboot.
             "--disable-gpu-process-crash-limit"
+            # Why the GPU process failed ends up in the journal, where the TV's
+            # graphics diagnostics page shows it.
+            "--enable-logging=stderr"
             # No user gesture ever happens on a TV — input arrives over the
             # pairing WebSocket, which the autoplay heuristics don't count.
             "--autoplay-policy=no-user-gesture-required"
